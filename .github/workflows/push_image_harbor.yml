@@ -86,6 +86,7 @@ jobs:
 
       - name: Find tar files by PR number
         id: detect
+        shell: bash
         run: |
           set -euo pipefail
           TAR_DIR="${{ steps.config.outputs.tar_dir }}"
