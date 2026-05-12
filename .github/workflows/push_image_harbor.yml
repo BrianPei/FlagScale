@@ -80,7 +80,8 @@ jobs:
             echo "suffix=pr${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::Could not find PR for merge commit ${MERGE_SHA}, falling back to short SHA"
-            echo "suffix=${MERGE_SHA:0:7}" >> "$GITHUB_OUTPUT"
+            SHORT_SHA=$(echo "$MERGE_SHA" | cut -c1-7)
+            echo "suffix=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Find tar files by PR number
