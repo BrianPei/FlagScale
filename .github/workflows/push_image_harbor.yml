@@ -25,7 +25,6 @@ jobs:
   # ---------------------------------------------------------------------------
   prepare:
     name: Detect tar files for ${{ github.sha }}
-    # runs-on: [self-hosted, Linux, X64, nvidia-0, gpus-8]
     runs-on: [flagscale-nvidia-a100-gpu2-32c-128g]
     timeout-minutes: 15
     container:
@@ -118,7 +117,6 @@ jobs:
     name: Push validated images to Harbor
     needs: prepare
     if: needs.prepare.outputs.needs_promotion == 'true'
-    # runs-on: [self-hosted, Linux, X64, nvidia-0, gpus-8]
     runs-on: [flagscale-nvidia-a100-gpu2-32c-128g]
     timeout-minutes: 60
     outputs:
@@ -261,7 +259,6 @@ jobs:
   cleanup:
     name: Clean up build cache
     needs: ['prepare', 'promote']
-    # runs-on: [self-hosted, Linux, X64, nvidia-0, gpus-8]
     runs-on: [flagscale-nvidia-a100-gpu2-32c-128g]
     timeout-minutes: 10
     if: always() && needs.prepare.result == 'success'
