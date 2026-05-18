@@ -136,7 +136,7 @@ jobs:
   build:
     name: Build ${{ matrix.task }}
     needs: prepare
-    runs-on: ${{ inputs.runs_on }}
+    runs-on: ${{ fromJson(inputs.runs_on) || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
@@ -246,7 +246,7 @@ jobs:
   load_images:
     name: Load and push images
     needs: ['build', 'summary']
-    runs-on: ${{ inputs.runs_on }}
+    runs-on: ${{ fromJson(inputs.runs_on) || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
     steps:
       - name: Load train image from tar and push
         run: |
@@ -275,6 +275,6 @@ jobs:
       ci_train_image: ${{ needs.build.outputs.train_tag }}
       ci_inference_image: ${{ needs.build.outputs.inference_tag }}
       runs_on: >-
-        ${{ inputs.runs_on || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
+        ${{ fromJson(inputs.runs_on) || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
       container_volumes: >-
         ${{ inputs.container_volumes || '["/mnt/op/cicd/baai_datasets:/home/gitlab-runner/data", "/mnt/op/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]' }}
