@@ -136,7 +136,7 @@ jobs:
   build:
     name: Build ${{ matrix.task }}
     needs: prepare
-    runs-on: [flagscale-metax-c550-gpu2-8c-256g]
+    runs-on: ${{ inputs.runs_on }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
@@ -246,7 +246,7 @@ jobs:
   load_images:
     name: Load and push images
     needs: ['build', 'summary']
-    runs-on: [flagscale-metax-c550-gpu2-8c-256g]
+    runs-on: ${{ inputs.runs_on }}
     steps:
       - name: Load train image from tar and push
         run: |
