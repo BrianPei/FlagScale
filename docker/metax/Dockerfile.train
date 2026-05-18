@@ -34,6 +34,10 @@ ENV MPI_HOME=/usr/local/mpi
 ENV PATH="${FLAGSCALE_HOME}/venv/bin:${FLAGSCALE_CONDA}/bin:/root/.local/bin:/usr/local/mpi/bin:$PATH"
 ENV LD_LIBRARY_PATH="/usr/local/mpi/lib64:/usr/local/mpi/lib:/usr/local/lib:$LD_LIBRARY_PATH"
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates tar && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY tools/install/metax/env.sh /etc/profile.d/flagscale-env.sh
 
 WORKDIR /workspace
