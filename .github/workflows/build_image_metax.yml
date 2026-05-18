@@ -148,8 +148,25 @@ jobs:
       inference_tar: ${{ steps.export.outputs.inference_tar }}
       all_tar: ${{ steps.export.outputs.all_tar }}
     steps:
+      - name: Diagnose workspace state
+        run: |
+          set -euo pipefail
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          pwd
+          whoami
+          id
+          df -h "$GITHUB_WORKSPACE" || true
+          du -sh "$GITHUB_WORKSPACE" || true
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 2 | head -200 || true
+
       - name: Clean workspace
-        run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
+        run: |
+          set -euo pipefail
+          echo "Cleaning workspace: $GITHUB_WORKSPACE"
+          if [ -d "$GITHUB_WORKSPACE" ]; then
+            sudo find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          fi
+          echo "Workspace cleanup complete"
 
       - name: Checkout code
         uses: actions/checkout@v4
