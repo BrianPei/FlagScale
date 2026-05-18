@@ -72,7 +72,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     chmod +x /workspace/tools/install/metax/*.sh && \
     cd /workspace && \
     FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_CONDA=${FLAGSCALE_CONDA} \
-    ./tools/install/install.sh --platform metax --task train --pkg-mgr ${PKG_MGR} --env-name base --no-system && \
+    ./tools/install/install.sh --platform metax --task train --pkg-mgr ${PKG_MGR} --no-system && \
     rm -rf /workspace
 
 FROM deps AS dev
@@ -113,7 +113,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     chmod +x /workspace/tools/install/metax/*.sh && \
     cd /workspace && \
     FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_CONDA=${FLAGSCALE_CONDA} \
-    ./tools/install/install.sh --platform metax --task train --pkg-mgr ${PKG_MGR} --env-name base --no-system --no-dev && \
+    ./tools/install/install.sh --platform metax --task train --pkg-mgr ${PKG_MGR} --no-system --no-dev && \
     rm -rf /workspace
 
 CMD ["/bin/bash"]
