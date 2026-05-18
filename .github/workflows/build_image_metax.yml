@@ -1,0 +1,280 @@
+name: Build Docker Images - MetaX
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task to build'
+        required: true
+        type: choice
+        options:
+          - train
+          - inference
+          - all
+        default: 'train'
+      target:
+        description: 'Build target stage (dev includes dev tools, release is production)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - release
+        default: 'dev'
+      push:
+        description: 'Push image to registry'
+        type: boolean
+        default: true
+      no_cache:
+        description: 'Build without Docker cache'
+        type: boolean
+        default: false
+      pkg_mgr:
+        description: 'Package manager to use'
+        required: true
+        type: choice
+        options:
+          - conda
+        default: 'conda'
+      build_all_tasks:
+        description: 'Build all tasks (train, inference, all) - overrides task selection'
+        type: boolean
+        default: false
+      tar_dir:
+        description: 'Directory to store image tar files (default: from .github/configs/metax.yml)'
+        type: string
+        default: ''
+      runs_on:
+        required: false
+        type: string
+        description: Override runs_on. Falls back to platform config if not set.
+        default: '["flagscale-metax-c550-gpu2-8c-256g"]'
+      container_volumes:
+        required: false
+        type: string
+        description: Override container_volumes. Falls back to platform config if not set.
+        default: >-
+          ["/mnt/op/cicd/baai_datasets:/home/gitlab-runner/data",
+          "/mnt/op/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]
+
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker/metax/**'
+      - 'docker/build.sh'
+      - 'tools/install/**'
+      - 'requirements/**'
+      - '.github/workflows/build_image_metax.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: localhost:5000
+  PYTHON_VERSION: '3.12'
+  UV_VERSION: '0.7.2'
+  PKG_MGR: ${{ inputs.pkg_mgr || 'conda' }}
+
+jobs:
+  prepare:
+    name: Prepare build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      target: ${{ steps.params.outputs.target }}
+      push: ${{ steps.params.outputs.push }}
+      no_cache: ${{ steps.params.outputs.no_cache }}
+      tar_dir: ${{ steps.config.outputs.tar_dir }}
+      base_image: ${{ steps.config.outputs.base_image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/configs
+
+      - name: Load platform config
+        id: config
+        run: |
+          TAR_DIR=$(grep '^tar_dir:' .github/configs/metax.yml | awk '{print $2}')
+          BASE_IMAGE=$(grep '^ci_train_image:' .github/configs/metax.yml | awk '{print $2}')
+          OVERRIDE="${{ inputs.tar_dir }}"
+          if [ -n "$OVERRIDE" ]; then
+            TAR_DIR="$OVERRIDE"
+          fi
+          echo "tar_dir=${TAR_DIR}" >> $GITHUB_OUTPUT
+          echo "base_image=${BASE_IMAGE}" >> $GITHUB_OUTPUT
+
+      - name: Determine build matrix
+        id: set-matrix
+        run: |
+          EVENT="${{ github.event_name }}"
+
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "${{ inputs.build_all_tasks }}" != "true" ]; then
+            echo 'matrix={"task":["${{ inputs.task }}"]}' >> $GITHUB_OUTPUT
+          else
+            echo 'matrix={"task":["train","inference","all"]}' >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set build parameters
+        id: params
+        run: |
+          EVENT="${{ github.event_name }}"
+
+          if [ "$EVENT" = "pull_request" ]; then
+            echo "target=dev" >> $GITHUB_OUTPUT
+            echo "push=true" >> $GITHUB_OUTPUT
+            echo "no_cache=false" >> $GITHUB_OUTPUT
+          else
+            echo "target=${{ inputs.target || 'dev' }}" >> $GITHUB_OUTPUT
+            echo "push=${{ inputs.push }}" >> $GITHUB_OUTPUT
+            echo "no_cache=${{ inputs.no_cache }}" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    name: Build ${{ matrix.task }}
+    needs: prepare
+    runs-on: [flagscale-metax-c550-gpu2-8c-256g]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    outputs:
+      train_tag: ${{ steps.export.outputs.train_tag }}
+      inference_tag: ${{ steps.export.outputs.inference_tag }}
+      all_tag: ${{ steps.export.outputs.all_tag }}
+      train_tar: ${{ steps.export.outputs.train_tar }}
+      inference_tar: ${{ steps.export.outputs.inference_tar }}
+      all_tar: ${{ steps.export.outputs.all_tar }}
+    steps:
+      - name: Clean workspace
+        run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Compute build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+
+          TASK="${{ matrix.task }}"
+          TARGET="${{ needs.prepare.outputs.target }}"
+          PYTHON_VERSION="${{ env.PYTHON_VERSION }}"
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          IMAGE_NAME="flagscale-${TASK}"
+          TAG="${TARGET}-metax-py${PYTHON_VERSION}-${TIMESTAMP}"
+          BUILD_TAG="${{ env.REGISTRY }}/${IMAGE_NAME}:${TAG}"
+
+          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "build_tag=${BUILD_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Detect proxy from runner environment
+        id: proxy
+        run: |
+          HTTP_PROXY_VAL="${http_proxy:-${HTTP_PROXY:-}}"
+          HTTPS_PROXY_VAL="${https_proxy:-${HTTPS_PROXY:-}}"
+          NO_PROXY_VAL="${no_proxy:-${NO_PROXY:-}}"
+          echo "http_proxy=${HTTP_PROXY_VAL}" >> $GITHUB_OUTPUT
+          echo "https_proxy=${HTTPS_PROXY_VAL}" >> $GITHUB_OUTPUT
+          echo "no_proxy=${NO_PROXY_VAL}" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/metax/Dockerfile.${{ matrix.task }}
+          target: ${{ needs.prepare.outputs.target }}
+          load: true
+          tags: ${{ steps.meta.outputs.build_tag }}
+          build-args: |
+            BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
+            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
+            UV_VERSION=${{ env.UV_VERSION }}
+            PKG_MGR=${{ env.PKG_MGR }}
+            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
+            http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            no_proxy=${{ steps.proxy.outputs.no_proxy }}
+          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
+
+      - name: Save image as tar
+        id: save_tar
+        run: |
+          TAR_DIR="${{ needs.prepare.outputs.tar_dir }}"
+          sudo mkdir -p "$TAR_DIR"
+          IMAGE_TAG="${{ steps.meta.outputs.build_tag }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          if [ -n "$PR_NUMBER" ]; then
+            SUFFIX="pr${PR_NUMBER}"
+          else
+            SHA="${{ github.sha }}"
+            SUFFIX="${SHA:0:7}"
+          fi
+          TAR_NAME=$(echo "$IMAGE_TAG" | tr '/: ' '---')-${SUFFIX}.tar
+          sudo docker save "$IMAGE_TAG" -o "${TAR_DIR}/${TAR_NAME}"
+          echo "tar_path=${TAR_DIR}/${TAR_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Export image tag for config update
+        id: export
+        run: |
+          TASK="${{ matrix.task }}"
+          echo "${TASK}_tag=${{ steps.meta.outputs.build_tag }}" >> $GITHUB_OUTPUT
+          echo "${TASK}_tar=${{ steps.save_tar.outputs.tar_path }}" >> $GITHUB_OUTPUT
+
+  summary:
+    name: Build summary
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify build results
+        run: |
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "::error::One or more image builds failed"
+            exit 1
+          fi
+
+  load_images:
+    name: Load and push images
+    needs: ['build', 'summary']
+    runs-on: [flagscale-metax-c550-gpu2-8c-256g]
+    steps:
+      - name: Load train image from tar and push
+        run: |
+          TAR="${{ needs.build.outputs.train_tar }}"
+          TAG="${{ needs.build.outputs.train_tag }}"
+          if [ -f "$TAR" ]; then
+            sudo docker load -i "$TAR"
+            sudo docker push "$TAG"
+          fi
+
+      - name: Load inference image from tar and push
+        run: |
+          TAR="${{ needs.build.outputs.inference_tar }}"
+          TAG="${{ needs.build.outputs.inference_tag }}"
+          if [ -f "$TAR" ]; then
+            sudo docker load -i "$TAR"
+            sudo docker push "$TAG"
+          fi
+
+  run_metax_tests:
+    name: Run MetaX tests
+    needs: ['prepare', 'build', 'load_images']
+    uses: ./.github/workflows/all_tests_common.yml
+    with:
+      platform: metax
+      ci_train_image: ${{ needs.build.outputs.train_tag }}
+      ci_inference_image: ${{ needs.build.outputs.inference_tag }}
+      runs_on: >-
+        ${{ inputs.runs_on || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
+      container_volumes: >-
+        ${{ inputs.container_volumes || '["/mnt/op/cicd/baai_datasets:/home/gitlab-runner/data", "/mnt/op/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]' }}
