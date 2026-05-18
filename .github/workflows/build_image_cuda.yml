@@ -49,7 +49,7 @@ on:
         required: false
         type: string
         description: Override runs_on. Falls back to platform config if not set.
-        default: '["self-hosted", "Linux", "X64", "nvidia-0", "gpus-8"]'
+        default: '["flagscale-nvidia-a100-gpu2-32c-128g"]'
       container_volumes:
         required: false
         type: string
@@ -151,7 +151,7 @@ jobs:
   build:
     name: Build ${{ matrix.task }}
     needs: prepare
-    runs-on: ${{ inputs.runs_on }}
+    runs-on: ${{ fromJson(inputs.runs_on) || '["flagscale-nvidia-a100-gpu2-32c-128g"]' }}
     env:
       HTTP_PROXY: ${{ vars.HTTP_PROXY }}
       HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
@@ -316,7 +316,7 @@ jobs:
   load_images:
     name: Load and push images
     needs: ['build', 'summary']
-    runs-on: ${{ inputs.runs_on }}
+    runs-on: ${{ fromJson(inputs.runs_on) || '["flagscale-nvidia-a100-gpu2-32c-128g"]' }}
     steps:
       - name: Load train image from tar and push
         run: |
@@ -354,8 +354,7 @@ jobs:
       ci_train_image: ${{ needs.build.outputs.train_tag }}
       ci_inference_image: ${{ needs.build.outputs.inference_tag }}
       runs_on: >-
-        ${{ inputs.runs_on ||
-        '["self-hosted", "Linux", "X64", "nvidia-0", "gpus-8"]' }}
+        ${{ fromJson(inputs.runs_on) || '["flagscale-nvidia-a100-gpu2-32c-128g"]' }}
       container_volumes: >-
         ${{ inputs.container_volumes ||
         '["/home/flagscale_cicd/docker/docker_build/docker_data:/home/gitlab-runner/data",
