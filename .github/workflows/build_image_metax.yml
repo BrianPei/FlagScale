@@ -162,10 +162,13 @@ jobs:
       - name: Clean workspace
         run: |
           set -euo pipefail
+          date '+%F %T before clean'
           echo "Cleaning workspace: $GITHUB_WORKSPACE"
-          if [ -d "$GITHUB_WORKSPACE" ]; then
-            sudo find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          if ! find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; then
+            echo "Normal cleanup failed, retry with sudo"
+            sudo -n find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
           fi
+          date '+%F %T after clean'
           echo "Workspace cleanup complete"
 
       - name: Checkout code
