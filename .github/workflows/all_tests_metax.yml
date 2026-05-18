@@ -6,20 +6,24 @@ on:
     paths-ignore:
       - 'docs/**'
       - 'docker/cuda/**'
+      - 'docker/metax/**'
       - 'docker/build.sh'
       - 'tools/install/**'
       - 'requirements/**'
       - '.github/workflows/build_image_cuda.yml'
+      - '.github/workflows/build_image_metax.yml'
       - '.github/workflows/push_image_harbor.yml'
   pull_request:
     branches: ["main"]
     paths-ignore:
       - 'docs/**'
       - 'docker/cuda/**'
+      - 'docker/metax/**'
       - 'docker/build.sh'
       - 'tools/install/**'
       - 'requirements/**'
       - '.github/workflows/build_image_cuda.yml'
+      - '.github/workflows/build_image_metax.yml'
       - '.github/workflows/push_image_harbor.yml'
 
 concurrency:
