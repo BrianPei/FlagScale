@@ -151,7 +151,7 @@ jobs:
   build:
     name: Build ${{ matrix.task }}
     needs: prepare
-    runs-on: [self-hosted, Linux, X64, nvidia-0, gpus-8]
+    runs-on: ${{ inputs.runs_on }}
     env:
       HTTP_PROXY: ${{ vars.HTTP_PROXY }}
       HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
@@ -316,7 +316,7 @@ jobs:
   load_images:
     name: Load and push images
     needs: ['build', 'summary']
-    runs-on: [self-hosted, Linux, X64, nvidia-0, gpus-8]
+    runs-on: ${{ inputs.runs_on }}
     steps:
       - name: Load train image from tar and push
         run: |
