@@ -250,20 +250,24 @@ jobs:
     steps:
       - name: Load train image from tar and push
         run: |
-          TAR="${{ needs.build.outputs.train_tar }}"
-          TAG="${{ needs.build.outputs.train_tag }}"
+          TAR="${{ needs.build.outputs.train_tar || needs.build.outputs.all_tar }}"
+          TAG="${{ needs.build.outputs.train_tag || needs.build.outputs.all_tag }}"
           if [ -f "$TAR" ]; then
             sudo docker load -i "$TAR"
             sudo docker push "$TAG"
+          else
+            echo "::warning::Train image tar not found: $TAR, skipping load"
           fi
 
       - name: Load inference image from tar and push
         run: |
-          TAR="${{ needs.build.outputs.inference_tar }}"
-          TAG="${{ needs.build.outputs.inference_tag }}"
+          TAR="${{ needs.build.outputs.inference_tar || needs.build.outputs.all_tar }}"
+          TAG="${{ needs.build.outputs.inference_tag || needs.build.outputs.all_tag }}"
           if [ -f "$TAR" ]; then
             sudo docker load -i "$TAR"
             sudo docker push "$TAG"
+          else
+            echo "::warning::Inference image tar not found: $TAR, skipping load"
           fi
 
   run_metax_tests:
@@ -272,8 +276,8 @@ jobs:
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: metax
-      ci_train_image: ${{ needs.build.outputs.train_tag }}
-      ci_inference_image: ${{ needs.build.outputs.inference_tag }}
+      ci_train_image: ${{ needs.build.outputs.train_tag || needs.build.outputs.all_tag }}
+      ci_inference_image: ${{ needs.build.outputs.inference_tag || needs.build.outputs.all_tag }}
       runs_on: >-
         ${{ fromJson(inputs.runs_on) || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
       container_volumes: >-
