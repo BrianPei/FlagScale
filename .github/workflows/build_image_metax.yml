@@ -279,6 +279,6 @@ jobs:
       ci_train_image: ${{ needs.build.outputs.train_tag || needs.build.outputs.all_tag }}
       ci_inference_image: ${{ needs.build.outputs.inference_tag || needs.build.outputs.all_tag }}
       runs_on: >-
-        ${{ fromJson(inputs.runs_on) || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
+        ${{ inputs.runs_on || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
       container_volumes: >-
         ${{ inputs.container_volumes || '["/mnt/op/cicd/baai_datasets:/home/gitlab-runner/data", "/mnt/op/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]' }}
