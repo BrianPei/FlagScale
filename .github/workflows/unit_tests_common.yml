@@ -178,7 +178,7 @@ jobs:
           mkdir -p /opt/data
           cp -r /home/gitlab-runner/data/Megatron-LM/* /opt/data/ || true
           cp -r /home/gitlab-runner/tokenizers/Megatron-LM/* /opt/data/ || true
-        timeout-minutes: 60
+        timeout-minutes: 120
 
       - name: Run unit tests
         id: unit_test
