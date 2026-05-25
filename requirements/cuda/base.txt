@@ -18,3 +18,4 @@ flask_cors==6.0.2
 multi-storage-client==0.42.0
 qwen_vl_utils==0.0.14
 webdataset==1.0.2
+xxhash==3.7.0
