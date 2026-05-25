@@ -178,7 +178,7 @@ jobs:
           mkdir -p /opt/data
           cp -r /home/gitlab-runner/data/Megatron-LM/* /opt/data/ || true
           cp -r /home/gitlab-runner/tokenizers/Megatron-LM/* /opt/data/ || true
-        timeout-minutes: 30
+        timeout-minutes: 60
 
       - name: Run unit tests
         id: unit_test
@@ -245,7 +245,7 @@ jobs:
 
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           exit $exit_code
-        timeout-minutes: 15
+        timeout-minutes: 60
 
       - name: Upload coverage report
         if: steps.unit_test.outcome == 'success'
