@@ -197,9 +197,7 @@ def test_monitor_loop_runs_collection_diagnostic_and_stops_on_completed(
     diagnostic = mocker.patch.object(service, "_generate_diagnostics")
     hang = mocker.patch.object(service, "_check_and_report_hang")
     mocker.patch("flagscale.runner.elastic.monitor_service.time.sleep")
-    mocker.patch(
-        "flagscale.runner.elastic.monitor_service.time.time", side_effect=[0, 0, 1, 1]
-    )
+    mocker.patch("flagscale.runner.elastic.monitor_service.time.time", return_value=0)
 
     service._monitor_loop()
 

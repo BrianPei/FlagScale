@@ -245,9 +245,13 @@ class FSTrainArguments:
                 current_process_mesh_idx += 1
         # DeepSeek-V4 Temporary
         if self.args.enable_hyper_connections:
-            assert not self.args.overlap_moe_expert_parallel_comm, "Hyper-connection is not supported with overlap_moe_expert_parallel_comm yet!"
+            assert (
+                not self.args.overlap_moe_expert_parallel_comm
+            ), "Hyper-connection is not supported with overlap_moe_expert_parallel_comm yet!"
         if self.args.experimental_attention_variant == "dsv4_hybrid":
-            assert self.args.context_parallel_size == 1, "Context parallelism is not supported with dsv4_hybrid attention variant yet!"
+            assert (
+                self.args.context_parallel_size == 1
+            ), "Context parallelism is not supported with dsv4_hybrid attention variant yet!"
 
     def post_validate_args(self):
         """Post-validate the arguments after Megatron function `validate_args`."""
@@ -388,8 +392,8 @@ class FSTrainArguments:
                     " This absence of gradient tensors violates the assumptions of both overlap_grad_reduce and overlap_param_gather, precipitating an assertion failure within DDP."
                 )
                 assert (
-                    args.transformer_impl == 'transformer_engine'
-                ), 'delay_wgrad_compute is only supported with transformer_engine implementation'
+                    args.transformer_impl == "transformer_engine"
+                ), "delay_wgrad_compute is only supported with transformer_engine implementation"
 
             assert (
                 args.untie_embeddings_and_output_weights is True
@@ -400,15 +404,15 @@ class FSTrainArguments:
 
         if args.peft_type is not None:
             assert (
-                args.transformer_impl == 'transformer_engine'
-            ), 'PEFT is only supported with transformer_engine implementation'
+                args.transformer_impl == "transformer_engine"
+            ), "PEFT is only supported with transformer_engine implementation"
             if (
                 args.num_experts is not None
                 and args.moe_shared_expert_intermediate_size is not None
             ):
                 assert (
                     not args.moe_shared_expert_overlap
-                ), 'PEFT is incompatible with moe_shared_expert_overlap'
+                ), "PEFT is incompatible with moe_shared_expert_overlap"
             assert args.num_experts is None, "PEFT is not tested with MoE currently"
             assert (
                 args.recompute_method is None
@@ -416,7 +420,7 @@ class FSTrainArguments:
                 and args.recompute_num_layers is None
             ), "PEFT will raise comfilcts with recompute currently"
             assert (
-                args.ckpt_format == 'torch'
+                args.ckpt_format == "torch"
             ), "PEFT is only tested with torch format checkpoint"
 
         # Engram related.
@@ -613,282 +617,282 @@ def _add_peft_args(parser):
 
 
 def _add_network_size_args(parser):
-    group = parser.add_argument_group(title='flagscale network size')
+    group = parser.add_argument_group(title="flagscale network size")
 
     group.add_argument(
-        '--norm-init-weight',
+        "--norm-init-weight",
         type=float,
         default=None,
         help="Norm weight initialization.",
     )
     group.add_argument(
-        '--multiple-of',
+        "--multiple-of",
         type=int,
         default=None,
-        help='Multiplier for setting Feed-Forward Network hidden size when swiglu.',
+        help="Multiplier for setting Feed-Forward Network hidden size when swiglu.",
     )
     group.add_argument(
-        '--hidden-dim-multiplier',
+        "--hidden-dim-multiplier",
         type=float,
         default=None,
-        help='Custom Multiplier for setting Feed-Forward Network hidden dim when swiglu.',
+        help="Custom Multiplier for setting Feed-Forward Network hidden dim when swiglu.",
     )
     return parser
 
 
 def _add_logging_args(parser):
-    group = parser.add_argument_group(title='flagscale logging')
+    group = parser.add_argument_group(title="flagscale logging")
 
     group.add_argument(
-        '--wandb-mode',
+        "--wandb-mode",
         type=str,
-        choices=['online', 'offline', 'disabled'],
-        default='offline',
+        choices=["online", "offline", "disabled"],
+        default="offline",
         help='Can be "online", "offline" or "disabled". Defaults to "offline".',
     )
     group.add_argument(
-        '--wandb-api-key',
+        "--wandb-api-key",
         type=str,
-        default='',
-        help='The wandb API keys and must be provided if using online mode.',
+        default="",
+        help="The wandb API keys and must be provided if using online mode.",
     )
     group.add_argument(
-        '--wandb-log-model', action='store_true', help='If set, write model to wandb.'
+        "--wandb-log-model", action="store_true", help="If set, write model to wandb."
     )
     group.add_argument(
-        '--wandb-log-model-interval',
+        "--wandb-log-model-interval",
         type=int,
         default=1000,
-        help='The interval to save the model to wandb.',
+        help="The interval to save the model to wandb.",
     )
     return parser
 
 
 def _add_training_args(parser):
-    group = parser.add_argument_group(title='flagscale training')
+    group = parser.add_argument_group(title="flagscale training")
 
     group.add_argument(
-        '--recompute-granularity-per-stage-micro-batch',
-        nargs='*',
+        "--recompute-granularity-per-stage-micro-batch",
+        nargs="*",
         type=str,
         default=None,
-        help='used with recompute-granularity=full, setting recompute granularity'
-        'of each stage and each micro-batch. This argument must be a two-dimension list, '
-        'the sum of the first item of all the sub-lists should be equal to pipeline-model-parallel-size.'
-        'Every sub-list is in the form: n0, flag0, n1, flag1,... except the first item, which is the stage number.'
-        'The sum of n0, n1, ... should be equal to nums-micro-batch.'
-        'granularity flag: 0 means turning off full recompute, 1 means turning on',
+        help="used with recompute-granularity=full, setting recompute granularity"
+        "of each stage and each micro-batch. This argument must be a two-dimension list, "
+        "the sum of the first item of all the sub-lists should be equal to pipeline-model-parallel-size."
+        "Every sub-list is in the form: n0, flag0, n1, flag1,... except the first item, which is the stage number."
+        "The sum of n0, n1, ... should be equal to nums-micro-batch."
+        "granularity flag: 0 means turning off full recompute, 1 means turning on",
     )
     group.add_argument(
-        '--recompute-method-per-stage-micro-batch',
-        nargs='*',
+        "--recompute-method-per-stage-micro-batch",
+        nargs="*",
         type=str,
         default=None,
-        help='used with recompute-granularity=full, setting recompute method '
-        'of each stage and each micro-batch. This argument must be a two-dimension list, '
-        'the sum of the first item of all the sub-lists should be equal to pipeline-model-parallel-size.'
-        'Every sub-list is in the form: n0, flag0, n1, flag1,... except the first item, which is the stage number.'
-        'The sum of n0, n1, ... should be equal to nums-micro-batch.'
-        'method: 0 means uniform, 1 means block',
+        help="used with recompute-granularity=full, setting recompute method "
+        "of each stage and each micro-batch. This argument must be a two-dimension list, "
+        "the sum of the first item of all the sub-lists should be equal to pipeline-model-parallel-size."
+        "Every sub-list is in the form: n0, flag0, n1, flag1,... except the first item, which is the stage number."
+        "The sum of n0, n1, ... should be equal to nums-micro-batch."
+        "method: 0 means uniform, 1 means block",
     )
     group.add_argument(
-        '--recompute-num-layers-per-stage-micro-batch',
-        nargs='*',
+        "--recompute-num-layers-per-stage-micro-batch",
+        nargs="*",
         type=str,
         default=None,
-        help='used with recompute-granularity=full, setting recompute num layers '
-        'of each stage and each micro-batch. This argument must be a two-dimension list, '
-        'Every sub-list is in the form: n0, num_laryers0, n1, num_laryers1,... except the first item, which is the stage number.'
-        'The sum of n0, n1, ... should be equal to nums-micro-batch. ',
+        help="used with recompute-granularity=full, setting recompute num layers "
+        "of each stage and each micro-batch. This argument must be a two-dimension list, "
+        "Every sub-list is in the form: n0, num_laryers0, n1, num_laryers1,... except the first item, which is the stage number."
+        "The sum of n0, n1, ... should be equal to nums-micro-batch. ",
     )
     group.add_argument(
-        '--skip-samples-range',
-        nargs='+',
+        "--skip-samples-range",
+        nargs="+",
         type=int,
         default=None,
-        help='Range of samples to skip during training.',
+        help="Range of samples to skip during training.",
     )
     group.add_argument(
-        '--skip-iters-range',
-        nargs='+',
+        "--skip-iters-range",
+        nargs="+",
         type=int,
         default=None,
-        help='Range of iterations to skip during training.',
+        help="Range of iterations to skip during training.",
     )
     group.add_argument(
-        '--use-dualpipev',
-        action='store_true',
-        help='Use DualPipeV pipeline schedule method',
+        "--use-dualpipev",
+        action="store_true",
+        help="Use DualPipeV pipeline schedule method",
     )
     group.add_argument(
-        '--moe-fb-overlap',
-        action='store_true',
-        help='DualPipeV overlapping of moe a2a communication and forward/backward computation',
+        "--moe-fb-overlap",
+        action="store_true",
+        help="DualPipeV overlapping of moe a2a communication and forward/backward computation",
     )
     return parser
 
 
 def _add_learning_rate_args(parser):
-    group = parser.add_argument_group(title='flagscale learning rate')
+    group = parser.add_argument_group(title="flagscale learning rate")
 
     ## stablelm2-scheduler consists of multiple stages
     group.add_argument(
-        '--lr-decay-stablelm2-cosine-samples',
+        "--lr-decay-stablelm2-cosine-samples",
         type=int,
         default=0,
-        help='Samples number of cosine scheduler including warmup samples, used in stablelm2 scheduler.',
+        help="Samples number of cosine scheduler including warmup samples, used in stablelm2 scheduler.",
     )
     group.add_argument(
-        '--lr-decay-stablelm2-cosine-max-lr',
+        "--lr-decay-stablelm2-cosine-max-lr",
         type=float,
         default=None,
-        help='Maximum lr of cosine scheduler, used in stablelm2 scheduler.',
+        help="Maximum lr of cosine scheduler, used in stablelm2 scheduler.",
     )
     group.add_argument(
-        '--lr-decay-stablelm2-cosine-period-samples',
+        "--lr-decay-stablelm2-cosine-period-samples",
         type=int,
         default=0,
-        help='Period of cosine scheduler, used in stablelm2 scheduler.',
+        help="Period of cosine scheduler, used in stablelm2 scheduler.",
     )
     group.add_argument(
-        '--lr-decay-stablelm2-rsqrt-samples',
+        "--lr-decay-stablelm2-rsqrt-samples",
         type=int,
         default=0,
-        help='Samples number of rsqrt scheduler used in stablelm2 scheduler.',
+        help="Samples number of rsqrt scheduler used in stablelm2 scheduler.",
     )
     group.add_argument(
-        '--lr-decay-stablelm2-decay-samples',
+        "--lr-decay-stablelm2-decay-samples",
         type=int,
         default=0,
-        help='Samples number of decay scheduler used in stablelm2 scheduler.',
+        help="Samples number of decay scheduler used in stablelm2 scheduler.",
     )
     group.add_argument(
-        '--lr-decay-stablelm2-alpha',
+        "--lr-decay-stablelm2-alpha",
         type=float,
         default=1.0,
-        help='Numerator used in stablelm2 scheduler.',
+        help="Numerator used in stablelm2 scheduler.",
     )
     group.add_argument(
-        '--lr-decay-stablelm2-beta',
+        "--lr-decay-stablelm2-beta",
         type=float,
         default=0.0,
-        help='Denominator used in stablelm2 scheduler.',
+        help="Denominator used in stablelm2 scheduler.",
     )
     return parser
 
 
 def _add_checkpointing_args(parser):
-    group = parser.add_argument_group(title='flagscale checkpointing')
+    group = parser.add_argument_group(title="flagscale checkpointing")
 
     group.add_argument(
-        '--rampup-save-interval',
+        "--rampup-save-interval",
         type=int,
         default=None,
-        help='Number of iterations between checkpoint saves.in the ramup phase.',
+        help="Number of iterations between checkpoint saves.in the ramup phase.",
     )
     group.add_argument(
-        '--save-when-num-microbatches-change',
-        action='store_true',
-        help='Save param name to index maps only',
+        "--save-when-num-microbatches-change",
+        action="store_true",
+        help="Save param name to index maps only",
     )
     return parser
 
 
 def _add_distributed_args(parser):
-    group = parser.add_argument_group(title='flagscale distributed')
+    group = parser.add_argument_group(title="flagscale distributed")
 
     group.add_argument(
-        '--standalone-embedding-stage',
-        action='store_true',
+        "--standalone-embedding-stage",
+        action="store_true",
         default=False,
-        help='If set, *input* embedding layer '
-        'is placed on its own pipeline stage, without any '
-        'transformer layers. (For T5, this flag currently only '
-        'affects the encoder embedding.)',
+        help="If set, *input* embedding layer "
+        "is placed on its own pipeline stage, without any "
+        "transformer layers. (For T5, this flag currently only "
+        "affects the encoder embedding.)",
     )
     group.add_argument(
-        '--use-partial-reduce-for-shared-embedding',
-        action='store_true',
-        help='Use partial reduce for shared word embedding.',
+        "--use-partial-reduce-for-shared-embedding",
+        action="store_true",
+        help="Use partial reduce for shared word embedding.",
     )
     group.add_argument(
-        '--no-shared-fs',
-        action='store_true',
-        help='Indicate whether not running on a shared file system.',
+        "--no-shared-fs",
+        action="store_true",
+        help="Indicate whether not running on a shared file system.",
     )
     group.add_argument(
-        '--use-padded-layerwise-optimizer',
-        action='store_true',
-        help='Enable pad when use layer-wise optimizer.'
+        "--use-padded-layerwise-optimizer",
+        action="store_true",
+        help="Enable pad when use layer-wise optimizer.",
     )
     return parser
 
 
 def _add_validation_args(parser):
-    group = parser.add_argument_group(title='flagscale validation')
+    group = parser.add_argument_group(title="flagscale validation")
 
     group.add_argument(
-        '--extra-eval-interval',
+        "--extra-eval-interval",
         type=int,
         default=None,
-        help='Interval between running evaluation on ' 'extra validation sets.',
+        help="Interval between running evaluation on " "extra validation sets.",
     )
     return parser
 
 
 def _add_tokenizer_args(parser):
-    group = parser.add_argument_group(title='flagscale tokenizer')
+    group = parser.add_argument_group(title="flagscale tokenizer")
 
     group.add_argument(
-        '--special-tokens-file',
+        "--special-tokens-file",
         type=str,
         default=None,
-        help='Path to the BPE special tokens file.',
+        help="Path to the BPE special tokens file.",
     )
     group.add_argument(
-        '--tokenizer-path',
+        "--tokenizer-path",
         type=str,
         default=None,
-        help='Path to the huggingface tokenizer.',
+        help="Path to the huggingface tokenizer.",
     )
     return parser
 
 
 def _add_data_args(parser):
-    group = parser.add_argument_group(title='flagscale data')
+    group = parser.add_argument_group(title="flagscale data")
 
     group.add_argument(
-        '--extra-valid-data-path',
-        nargs='*',
+        "--extra-valid-data-path",
+        nargs="*",
         default=None,
-        help='The weight, prefix list for an independent extra validation dataset. '
-        'The accepted format is a list of weight, prefix and tag, '
-        'e.g. weight1 prefix1 tag1 weight2 prefix2 tag2. '
-        'The weight1 means the number of tokens in the prefix1 dataset. ',
+        help="The weight, prefix list for an independent extra validation dataset. "
+        "The accepted format is a list of weight, prefix and tag, "
+        "e.g. weight1 prefix1 tag1 weight2 prefix2 tag2. "
+        "The weight1 means the number of tokens in the prefix1 dataset. ",
     )
     group.add_argument(
-        '--finetune-dataset-type',
+        "--finetune-dataset-type",
         type=str,
         default=None,
-        choices=['CPT', None],
-        help='datasets type during finetunning.',
+        choices=["CPT", None],
+        help="datasets type during finetunning.",
     )
     group.add_argument(
-        '--apply-sft-dataset-separated-loss-mask-if-existed',
-        action='store_true',
-        help='If set, use sft dataset with separated loss mask files, '
-        'if _loss_mask_document.bin and _loss_mask_document.idx existed.',
+        "--apply-sft-dataset-separated-loss-mask-if-existed",
+        action="store_true",
+        help="If set, use sft dataset with separated loss mask files, "
+        "if _loss_mask_document.bin and _loss_mask_document.idx existed.",
     )
     return parser
 
 
 def _add_vision_args(parser):
-    group = parser.add_argument_group(title='flagscale vision')
+    group = parser.add_argument_group(title="flagscale vision")
 
     group.add_argument(
-        '--qk-layernorm-hidden-dim',
-        action='store_true',
-        help='Whether to layer normalize the q and k attention embeddings on hidden dimension rather than head dimension',
+        "--qk-layernorm-hidden-dim",
+        action="store_true",
+        help="Whether to layer normalize the q and k attention embeddings on hidden dimension rather than head dimension",
     )
     return parser
 
@@ -896,62 +900,140 @@ def _add_vision_args(parser):
 def _add_flagos_args(parser):
     group = parser.add_argument_group(title="flagscale fl")
     group.add_argument(
-        '--mg-fl-prefer',
+        "--mg-fl-prefer",
         type=str,
-        choices=['cuda', 'musa', 'txda'],
-        default='',
-        help='Backend selection for megatron fl.',
+        choices=["cuda", "musa", "txda"],
+        default="",
+        help="Backend selection for megatron fl.",
     )
     group.add_argument(
-        '--te-fl-prefer',
+        "--te-fl-prefer",
         type=str,
-        choices=['flagos', 'vendor', 'reference'],
-        default='vendor',
-        help='Backend selection for transformer engine fl.',
+        choices=["flagos", "vendor", "reference"],
+        default="vendor",
+        help="Backend selection for transformer engine fl.",
     )
     group.add_argument(
-        '--te-fl-per-op',
-        type=str,
-        default=None,
-        help='Backend selection for custom ops.',
-    )
-    group.add_argument(
-        '--te-fl-allow-vendors',
+        "--te-fl-per-op",
         type=str,
         default=None,
-        help='Allow vendors for transformer engine fl.',
+        help="Backend selection for custom ops.",
     )
     group.add_argument(
-        '--te-fl-deny-vendors',
+        "--te-fl-allow-vendors",
         type=str,
         default=None,
-        help='Deny vendors for transformer engine fl.',
+        help="Allow vendors for transformer engine fl.",
     )
     group.add_argument(
-        '--enable-flag-gems',
-        action='store_true',
-        help='Enable flag gems to replace torch ops for distributed training.',
+        "--te-fl-deny-vendors",
+        type=str,
+        default=None,
+        help="Deny vendors for transformer engine fl.",
     )
     group.add_argument(
-        '--flag-gems-log-path', type=str, default=None, help='Path of flag gems logging'
+        "--enable-flag-gems",
+        action="store_true",
+        help="Enable flag gems to replace torch ops for distributed training.",
     )
     group.add_argument(
-        '--flag-gems-unused', nargs='*', default=None, help='Flag Gems unused ops list'
+        "--flag-gems-log-path", type=str, default=None, help="Path of flag gems logging"
+    )
+    group.add_argument(
+        "--flag-gems-unused", nargs="*", default=None, help="Flag Gems unused ops list"
+    )
+    return parser
+
+
+def _add_engram_args(parser):
+    if "--use-engram" in parser._option_string_actions:
+        return parser
+
+    group = parser.add_argument_group(title="flagscale engram")
+    group.add_argument("--use-engram", action="store_true", help="Use Engram module.")
+    group.add_argument(
+        "--engram-tokenizer-name-or-path",
+        type=str,
+        default=None,
+        help="Tokenizer name or path used by Engram",
+    )
+    group.add_argument(
+        "--engram-vocab-size",
+        nargs="*",
+        type=int,
+        default=None,
+        help="Engram vocab size per layer (list of ints)",
+    )
+    group.add_argument(
+        "--max-ngram-size", type=int, default=1, help="Maximum n-gram size for Engram"
+    )
+    group.add_argument(
+        "--n-embed-per-ngram",
+        type=int,
+        default=None,
+        help="Embedding dimension per n-gram",
+    )
+    group.add_argument(
+        "--n-head-per-ngram", type=int, default=1, help="Number of heads per n-gram"
+    )
+    group.add_argument(
+        "--engram-layer-ids",
+        nargs="*",
+        type=int,
+        default=None,
+        help="Layer ids where Engram is applied",
+    )
+    group.add_argument(
+        "--engram-pad-id", type=int, default=0, help="Pad token id for Engram hashing"
+    )
+    group.add_argument(
+        "--engram-seed", type=int, default=0, help="Random seed for Engram hashing"
+    )
+    group.add_argument(
+        "--engram-kernel-size",
+        type=int,
+        default=1,
+        help="Kernel size for Engram short convolution",
+    )
+    group.add_argument(
+        "--engram-hc-mult",
+        type=int,
+        default=1,
+        help="Hyper-connection multiplicity for Engram",
+    )
+    group.add_argument(
+        "--engram-embedding-parallel-size",
+        type=int,
+        default=1,
+        help="Parallel size for Engram embedding",
+    )
+    group.add_argument(
+        "--engram-embedding-parallel-method",
+        type=str,
+        default="alltoall",
+        choices=["alltoall", "allreduce"],
+        help="Parallel method for Engram embedding across embedding parallel(alltoall) / tensor parallel(allreduce) groups",
+    )
+    group.add_argument(
+        "--engram-offload-embedding-optimizer-states",
+        action="store_true",
+        help="Whether to offload Engram embedding optimizer states to CPU when using alltoall for Engram embedding parallelism. "
+        "This is typically used to save GPU memory when Engram embedding is large while accelerators are limited.",
     )
     return parser
 
 
 def _add_flagscale_specific_args(parser):
     """Add FlagScale-specific arguments that don't fit in other categories."""
-    group = parser.add_argument_group(title='flagscale specific')
+    group = parser.add_argument_group(title="flagscale specific")
 
     # Inference args (not in any upstream dataclass config)
     group.add_argument(
-        '--inference-wandb-logging-step-interval',
+        "--inference-wandb-logging-step-interval",
         type=int,
         default=0,
-        help='Step interval for logging inference metrics to wandb. '
-        'Default to 0 to disable inference wandb logging.',
+        help="Step interval for logging inference metrics to wandb. "
+        "Default to 0 to disable inference wandb logging.",
     )
 
     return parser
