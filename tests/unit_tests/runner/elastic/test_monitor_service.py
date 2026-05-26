@@ -1,6 +1,7 @@
 import os
 import subprocess
 
+import pytest
 from omegaconf import OmegaConf
 
 from flagscale.runner.elastic.monitor_service import MonitorService
@@ -209,3 +210,284 @@ def test_monitor_loop_runs_collection_diagnostic_and_stops_on_completed(
     diagnostic.assert_called_once()
     hang.assert_called_once()
     assert service.is_running is False
+
+
+def test_signal_handler_stops_service_and_exits(tmp_path, mocker):
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    stop = mocker.patch.object(service, "stop")
+
+    with pytest.raises(SystemExit) as exc:
+        service._signal_handler(15, None)
+
+    assert exc.value.code == 0
+    stop.assert_called_once()
+
+
+def test_detect_abnormal_termination_local_and_multi_node(tmp_path, mocker):
+    local_service = MonitorService(
+        make_monitor_config(tmp_path), FakeRunner(), interval=1
+    )
+    local_check = mocker.patch.object(
+        local_service, "_check_pid_file_anomaly", return_value=True
+    )
+
+    assert local_service._detect_abnormal_termination() is True
+    local_check.assert_called_once_with("localhost", 0)
+
+    multi_service = MonitorService(
+        make_monitor_config(tmp_path),
+        FakeRunner({"worker0": {}, "worker1": {}}),
+        interval=1,
+    )
+    multi_check = mocker.patch.object(
+        multi_service, "_check_pid_file_anomaly", side_effect=[False, True]
+    )
+
+    assert multi_service._detect_abnormal_termination() is True
+    assert [call.args for call in multi_check.call_args_list] == [
+        ("worker0", 0),
+        ("worker1", 1),
+    ]
+
+
+def test_detect_abnormal_termination_handles_exception(tmp_path, mocker):
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    mocker.patch.object(
+        service, "_check_pid_file_anomaly", side_effect=RuntimeError("bad")
+    )
+    logger = mocker.patch("flagscale.runner.elastic.monitor_service.logger")
+
+    assert service._detect_abnormal_termination() is False
+    logger.error.assert_called_once()
+
+
+def test_check_pid_file_anomaly_alive_missing_and_invalid_pid(tmp_path, mocker):
+    config = make_monitor_config(tmp_path)
+    service = MonitorService(config, FakeRunner(), interval=1)
+    pid_dir = tmp_path / "logs" / "pids"
+    pid_dir.mkdir(parents=True)
+
+    assert service._check_pid_file_anomaly("localhost", 0) is False
+
+    pid_file = pid_dir / "host_0_localhost.pid"
+    pid_file.write_text("12345")
+    mocker.patch(
+        "flagscale.runner.elastic.monitor_service.subprocess.run",
+        return_value=subprocess.CompletedProcess(["ps"], 0),
+    )
+    assert service._check_pid_file_anomaly("localhost", 0) is False
+
+    pid_file.write_text("not-a-pid")
+    assert service._check_pid_file_anomaly("localhost", 0) is False
+
+
+def test_check_pid_file_anomaly_treats_ps_exception_as_abnormal(tmp_path, mocker):
+    config = make_monitor_config(tmp_path)
+    service = MonitorService(config, FakeRunner(), interval=1)
+    pid_dir = tmp_path / "logs" / "pids"
+    pid_dir.mkdir(parents=True)
+    (pid_dir / "host_0_localhost.pid").write_text("12345")
+    mocker.patch(
+        "flagscale.runner.elastic.monitor_service.subprocess.run",
+        side_effect=RuntimeError("ps failed"),
+    )
+
+    assert service._check_pid_file_anomaly("localhost", 0) is True
+
+
+def test_write_manual_kill_diagnostic_routes_single_local_and_multi(tmp_path, mocker):
+    single_service = MonitorService(
+        make_monitor_config(tmp_path),
+        FakeRunner(),
+        interval=1,
+        host="worker0",
+        node_rank=2,
+    )
+    single_write = mocker.patch.object(single_service, "_write_diagnostic_entry")
+    single_service._write_manual_kill_diagnostic()
+    assert single_write.call_args.args[:2] == ("worker0", 2)
+    assert "MANUAL KILL DETECTED" in single_write.call_args.args[2]
+
+    local_service = MonitorService(
+        make_monitor_config(tmp_path), FakeRunner(), interval=1
+    )
+    local_write = mocker.patch.object(local_service, "_write_diagnostic_entry")
+    local_service._write_manual_kill_diagnostic()
+    assert local_write.call_args.args[:2] == ("localhost", 0)
+
+    multi_service = MonitorService(
+        make_monitor_config(tmp_path),
+        FakeRunner({"worker0": {}, "worker1": {}}),
+        interval=1,
+    )
+    multi_write = mocker.patch.object(multi_service, "_write_diagnostic_entry")
+    multi_service._write_manual_kill_diagnostic()
+    assert [call.args[:2] for call in multi_write.call_args_list] == [
+        ("worker0", 0),
+        ("worker1", 1),
+    ]
+
+
+def test_write_diagnostic_entry_creates_header_and_appends(tmp_path):
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+
+    service._write_diagnostic_entry("localhost", 0, "manual kill")
+    service._write_diagnostic_entry("localhost", 0, "second entry")
+
+    diagnostic_file = os.path.join(
+        service.monitor_log_dir, "host_0_localhost_diagnostic.txt"
+    )
+    content = open(diagnostic_file, encoding="utf-8").read()
+    assert "Diagnostic Report for localhost (node 0)" in content
+    assert "manual kill" in content
+    assert "second entry" in content
+
+
+def test_write_diagnostic_entry_logs_write_error(tmp_path, mocker):
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    logger = mocker.patch("flagscale.runner.elastic.monitor_service.logger")
+    mocker.patch("builtins.open", side_effect=PermissionError("readonly"))
+
+    service._write_diagnostic_entry("localhost", 0, "entry")
+
+    logger.error.assert_called_once()
+
+
+def test_collect_logs_for_host_logs_success_and_exception(tmp_path, mocker):
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    logger = mocker.patch("flagscale.runner.elastic.monitor_service.logger")
+    collect = mocker.patch(
+        "flagscale.runner.elastic.monitor_service.collect_logs",
+        return_value="current.log",
+    )
+
+    service._collect_logs_for_host("localhost", 0)
+
+    collect.assert_called_once_with(
+        service.config, "localhost", 0, service.monitor_log_dir, dryrun=False
+    )
+    logger.debug.assert_called_once()
+
+    collect.side_effect = RuntimeError("collect failed")
+    service._collect_logs_for_host("localhost", 0)
+    logger.error.assert_called_once()
+
+
+def test_generate_diagnostic_for_host_uses_current_log(tmp_path, mocker):
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    current_log = os.path.join(service.monitor_log_dir, "host_0_localhost_current.log")
+    with open(current_log, "w", encoding="utf-8") as f:
+        f.write("cuda error")
+    generate = mocker.patch(
+        "flagscale.runner.elastic.monitor_service.generate_diagnostic_report",
+        return_value="diagnostic.txt",
+    )
+
+    service._generate_diagnostic_for_host("localhost", 0)
+
+    generate.assert_called_once_with(
+        service.config, "localhost", 0, current_log, return_content=False
+    )
+
+
+def test_generate_diagnostic_for_host_uses_source_log_and_no_shared_fs(
+    tmp_path, mocker
+):
+    config = make_monitor_config(tmp_path, no_shared_fs=True)
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(exist_ok=True)
+    source_log = log_dir / "host.output"
+    source_log.write_text("fatal error")
+    service = MonitorService(config, FakeRunner(), interval=1)
+    generate = mocker.patch(
+        "flagscale.runner.elastic.monitor_service.generate_diagnostic_report",
+        return_value="diagnostic.txt",
+    )
+
+    service._generate_diagnostic_for_host("worker0", 0)
+
+    generate.assert_called_once_with(
+        service.config, "worker0", 0, str(source_log), return_content=False
+    )
+
+
+def test_generate_diagnostic_for_host_logs_no_file_and_exception(tmp_path, mocker):
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    logger = mocker.patch("flagscale.runner.elastic.monitor_service.logger")
+
+    service._generate_diagnostic_for_host("localhost", 0)
+    logger.debug.assert_called()
+
+    current_log = os.path.join(service.monitor_log_dir, "host_0_localhost_current.log")
+    with open(current_log, "w", encoding="utf-8") as f:
+        f.write("cuda error")
+    mocker.patch(
+        "flagscale.runner.elastic.monitor_service.generate_diagnostic_report",
+        side_effect=RuntimeError("diagnostic failed"),
+    )
+    service._generate_diagnostic_for_host("localhost", 0)
+    logger.error.assert_called_once()
+
+
+def test_generate_hang_diagnostic_creates_file_for_local_and_no_shared_fs(tmp_path):
+    service = MonitorService(
+        make_monitor_config(tmp_path, timeout=120), FakeRunner(), interval=1
+    )
+    service._generate_hang_diagnostic("localhost", 0)
+
+    diagnostic_file = os.path.join(
+        service.monitor_log_dir, "host_0_localhost_diagnostic.txt"
+    )
+    content = open(diagnostic_file, encoding="utf-8").read()
+    assert "HangError" in content
+    assert "host_0_localhost.output" in content
+    assert "2 minutes" in content
+
+    no_shared_service = MonitorService(
+        make_monitor_config(tmp_path, no_shared_fs=True, timeout=60),
+        FakeRunner(),
+        interval=1,
+    )
+    no_shared_service._generate_hang_diagnostic("worker0", 1)
+    no_shared_file = os.path.join(
+        no_shared_service.monitor_log_dir, "host_1_worker0_diagnostic.txt"
+    )
+    assert "host.output" in open(no_shared_file, encoding="utf-8").read()
+
+
+def test_generate_hang_diagnostic_logs_error_on_write_failure(tmp_path, mocker):
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    logger = mocker.patch("flagscale.runner.elastic.monitor_service.logger")
+    mocker.patch("builtins.open", side_effect=PermissionError("readonly"))
+
+    service._generate_hang_diagnostic("localhost", 0)
+
+    logger.error.assert_called_once()
+
+
+def test_check_and_report_hang_single_and_local_modes(tmp_path, mocker):
+    single_service = MonitorService(
+        make_monitor_config(tmp_path),
+        FakeRunner(),
+        interval=1,
+        host="worker0",
+        node_rank=1,
+    )
+    single_check = mocker.patch.object(
+        single_service, "_check_log_hang", return_value=True
+    )
+    single_generate = mocker.patch.object(single_service, "_generate_hang_diagnostic")
+    single_service._check_and_report_hang()
+    single_check.assert_called_once_with("worker0", 1)
+    single_generate.assert_called_once_with("worker0", 1)
+
+    local_service = MonitorService(
+        make_monitor_config(tmp_path), FakeRunner(), interval=1
+    )
+    local_check = mocker.patch.object(
+        local_service, "_check_log_hang", return_value=True
+    )
+    local_generate = mocker.patch.object(local_service, "_generate_hang_diagnostic")
+    local_service._check_and_report_hang()
+    local_check.assert_called_once_with("localhost", 0)
+    local_generate.assert_called_once_with("localhost", 0)
