@@ -25,6 +25,7 @@ on:
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/build_image_metax.yml'
       - '.github/workflows/push_image_harbor.yml'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.actor }}
