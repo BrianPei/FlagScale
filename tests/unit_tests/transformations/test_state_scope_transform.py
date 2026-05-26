@@ -1,5 +1,6 @@
 import unittest
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import torch
 from torch import nn
@@ -22,10 +23,17 @@ class DummyHook(ModelHook):
     def __init__(self) -> None:
         super().__init__()
 
-    def pre_forward(self, module: nn.Module, *args, **kwargs) -> tuple[tuple[Any], dict[str, Any]]:
+    def pre_forward(
+        self, module: nn.Module, *args, **kwargs
+    ) -> tuple[tuple[Any], dict[str, Any]]:
         if self._stateful:
             self._stateful[0].get_or_create_state()
         return args, kwargs
+
+
+class ResettableState:
+    def reset(self):
+        pass
 
 
 class TestStateScopeTransform(unittest.TestCase):
@@ -45,7 +53,7 @@ class TestStateScopeTransform(unittest.TestCase):
         backbone = pipeline.unet
 
         reg = ModuleHookRegistry.get_or_create_registry(backbone)
-        store = StateStore(dict)
+        store = StateStore(ResettableState)
 
         # To make it work, we need to register the dummy hook first
         hook = DummyHook()
@@ -60,5 +68,37 @@ class TestStateScopeTransform(unittest.TestCase):
         ctx.state_scope_provider = lambda: "ctxA"
         with ctx.session():
             _ = backbone(x)
+            self.assertIn("ctxA", store._state_by_scope)
 
-        self.assertIn("ctxA", store._state_by_scope)
+        self.assertEqual(store._state_by_scope, {})
+
+    def test_hook_warns_when_context_has_no_state_scope(self):
+        pipeline = DummyPipeline()
+        backbone = pipeline.unet
+        StateScopeTransformation().apply(backbone)
+
+        x = torch.zeros(1, 2)
+        ctx = RuntimeContext()
+        with patch(
+            "flagscale.transformations.state_scope_transformation.logger"
+        ) as logger:
+            with ctx.session():
+                _ = backbone(x)
+
+        logger.warning.assert_called_once()
+
+    def test_cleanup_callback_is_registered_once_per_session_and_resets_on_exit(self):
+        pipeline = DummyPipeline()
+        backbone = pipeline.unet
+        reg = ModuleHookRegistry.get_or_create_registry(backbone)
+        StateScopeTransformation().apply(backbone)
+        reset = MagicMock()
+
+        x = torch.zeros(1, 2)
+        ctx = RuntimeContext(["ctxA"])
+        with patch.object(reg, "reset_stateful_hooks", reset):
+            with ctx.session():
+                _ = backbone(x)
+                _ = backbone(x)
+
+        reset.assert_called_once_with(recursive=True)
