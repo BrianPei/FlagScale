@@ -53,8 +53,8 @@ on:
         type: string
         description: Override container_volumes. Falls back to platform config if not set.
         default: >-
-          ["/mnt/op/cicd/baai_datasets:/home/gitlab-runner/data",
-          "/mnt/op/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]
+          ["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data",
+          "/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]
 
   pull_request:
     branches: [main]
@@ -281,4 +281,4 @@ jobs:
       runs_on: >-
         ${{ inputs.runs_on || '["flagscale-metax-c550-gpu2-8c-256g"]' }}
       container_volumes: >-
-        ${{ inputs.container_volumes || '["/mnt/op/cicd/baai_datasets:/home/gitlab-runner/data", "/mnt/op/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]' }}
+        ${{ inputs.container_volumes || '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data", "/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]' }}
