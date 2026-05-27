@@ -128,9 +128,7 @@ def find_latest_stdout_log(start_path):
     try:
         rank_dirs = os.listdir(latest_attempt)
         # Sort numerically if possible
-        rank_dirs.sort(
-            key=lambda x: int(x) if x.isdigit() else float("inf"), reverse=True
-        )
+        rank_dirs.sort(key=lambda x: int(x) if x.isdigit() else float("inf"), reverse=True)
 
         for rank_dir in rank_dirs:
             log_path = os.path.join(latest_attempt, rank_dir, "stdout.log")
@@ -157,9 +155,7 @@ def test_train_equal(path, task, model, case):
     # Find the latest stdout.log
     result_path, attempt_path = find_latest_stdout_log(start_path)
 
-    assert (
-        attempt_path is not None
-    ), f"Failed to find any 'attempt_*' directory in {start_path}"
+    assert attempt_path is not None, f"Failed to find any 'attempt_*' directory in {start_path}"
     assert result_path is not None, f"Failed to find 'stdout.log' in {attempt_path}"
 
     print(f"result_path: {result_path}")
@@ -169,9 +165,7 @@ def test_train_equal(path, task, model, case):
 
     # Load gold values first to determine which metrics to extract
     gold_value_path = os.path.join(path, task, model, "gold_values", case + ".json")
-    assert os.path.exists(
-        gold_value_path
-    ), f"Failed to find gold result JSON at {gold_value_path}"
+    assert os.path.exists(gold_value_path), f"Failed to find gold result JSON at {gold_value_path}"
 
     with open(gold_value_path, "r") as f:
         gold_result_json = json.load(f)
@@ -218,22 +212,12 @@ def test_train_equal(path, task, model, case):
             min_len = min(len(result_values), len(gold_values))
             if min_len > 0:
                 gold_entry = gold_result_json.get(key, {})
-                rtol = (
-                    gold_entry.get("rtol", 1e-5)
-                    if isinstance(gold_entry, dict)
-                    else 1e-5
-                )
-                atol = (
-                    gold_entry.get("atol", 1e-8)
-                    if isinstance(gold_entry, dict)
-                    else 1e-8
-                )
+                rtol = gold_entry.get("rtol", 1e-5) if isinstance(gold_entry, dict) else 1e-5
+                atol = gold_entry.get("atol", 1e-8) if isinstance(gold_entry, dict) else 1e-8
                 is_close = np.allclose(
                     gold_values[:min_len], result_values[:min_len], rtol=rtol, atol=atol
                 )
-                diff = np.abs(
-                    np.array(gold_values[:min_len]) - np.array(result_values[:min_len])
-                )
+                diff = np.abs(np.array(gold_values[:min_len]) - np.array(result_values[:min_len]))
                 print(f"\nPartial comparison (first {min_len} values):")
                 print(f"  Status: {'✅ PASS' if is_close else '❌ FAIL'}")
                 print(f"  Max diff: {np.max(diff):.6e}")
@@ -259,9 +243,7 @@ def test_train_equal(path, task, model, case):
             all_passed = False
 
     print(f"\n{'=' * 70}")
-    print(
-        f"Overall result: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}"
-    )
+    print(f"Overall result: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}")
     print(f"{'=' * 70}\n")
 
     assert all_passed, "One or more metrics did not match gold values"
@@ -294,16 +276,12 @@ def test_inference_equal(path, task, model, case):
     # Construct test result path: concatenate base path, task, model, test result directory and case name
     test_result_path = os.path.join(path, task, model, "test_results", case)
     # Locate the inference output log file (host_0_localhost.output)
-    result_path = os.path.join(
-        test_result_path, "inference_logs/host_0_localhost.output"
-    )
+    result_path = os.path.join(test_result_path, "inference_logs/host_0_localhost.output")
 
     print("result_path:", result_path)
 
     # Assertion check: ensure the inference output file exists
-    assert os.path.exists(
-        result_path
-    ), f"Failed to find 'host_0_localhost.output' at {result_path}"
+    assert os.path.exists(result_path), f"Failed to find 'host_0_localhost.output' at {result_path}"
 
     with open(result_path, "r", errors="replace") as file:
         lines = file.readlines()
@@ -313,28 +291,20 @@ def test_inference_equal(path, task, model, case):
     output = False  # Flag to indicate whether to start collecting output content
     for line in lines:
         # Assertion check: ensure no 'flag_gems' import failure errors exist
-        assert (
-            "Failed to import 'flag_gems'" not in line
-        ), "Failed to import 'flag_gems''"
+        assert "Failed to import 'flag_gems'" not in line, "Failed to import 'flag_gems''"
 
-        if line.rstrip("\n").endswith(
-            "**************************************************"
-        ):
+        if line.rstrip("\n").endswith("**************************************************"):
             output = True
             result_lines.append("**************************************************\n")
             continue
-        if line.rstrip("\n").endswith(
-            "##################################################"
-        ):
+        if line.rstrip("\n").endswith("##################################################"):
             output = False
         if output:
             result_lines.append(line)
 
     # Construct the path to the golden reference result file
     gold_value_path = os.path.join(path, task, model, "results_gold", case)
-    assert os.path.exists(
-        gold_value_path
-    ), f"Failed to find gold result at {gold_value_path}"
+    assert os.path.exists(gold_value_path), f"Failed to find gold result at {gold_value_path}"
 
     with open(gold_value_path, "r") as file:
         gold_value_lines = file.readlines()
@@ -482,9 +452,9 @@ def test_serve_equal(path, task, model, case):
                 "stream": False,
             }
             response = requests.post(url, headers=headers, data=json.dumps(data))
-            assert (
-                response.status_code == 200
-            ), "Request failed with status code: {}".format(response.status_code)
+            assert response.status_code == 200, "Request failed with status code: {}".format(
+                response.status_code
+            )
             result_json = response.json()
             print("[Serve] result ", result_json)
 
@@ -521,18 +491,14 @@ def test_benchmark_equal(path, task, model, case, platform, device):
 
     print(f"result_path: {result_path}")
 
-    assert os.path.exists(
-        result_path
-    ), f"Failed to find 'host_0_localhost.output' at {result_path}"
+    assert os.path.exists(result_path), f"Failed to find 'host_0_localhost.output' at {result_path}"
 
     with open(result_path, "r", errors="replace") as file:
         lines = file.readlines()
 
     # Load gold values (performance baselines)
     gold_value_path = os.path.join(path, task, model, "gold_values", case + ".json")
-    assert os.path.exists(
-        gold_value_path
-    ), f"Failed to find gold result JSON at {gold_value_path}"
+    assert os.path.exists(gold_value_path), f"Failed to find gold result JSON at {gold_value_path}"
 
     with open(gold_value_path, "r") as f:
         gold_result_json = json.load(f)
@@ -546,24 +512,24 @@ def test_benchmark_equal(path, task, model, case, platform, device):
     if top_keys and not _is_metric_keys(top_keys):
         # Top level is platform classification
         p = platform if platform and platform != "none" else None
-        assert (
-            p
-        ), f"Gold values are platform-classified ({top_keys}) but no --platform was specified"
-        assert (
-            p in gold_result_json
-        ), f"Platform '{p}' not found in gold values. Available: {top_keys}"
+        assert p, (
+            f"Gold values are platform-classified ({top_keys}) but no --platform was specified"
+        )
+        assert p in gold_result_json, (
+            f"Platform '{p}' not found in gold values. Available: {top_keys}"
+        )
         gold_result_json = gold_result_json[p]
 
         # Second level is device classification
         device_keys = list(gold_result_json.keys())
         if device_keys and not _is_metric_keys(device_keys):
             d = device if device and device != "none" else None
-            assert (
-                d
-            ), f"Gold values are device-classified ({device_keys}) but no --device was specified"
-            assert (
-                d in gold_result_json
-            ), f"Device '{d}' not found in gold values. Available: {device_keys}"
+            assert d, (
+                f"Gold values are device-classified ({device_keys}) but no --device was specified"
+            )
+            assert d in gold_result_json, (
+                f"Device '{d}' not found in gold values. Available: {device_keys}"
+            )
             gold_result_json = gold_result_json[d]
 
     metric_keys = list(gold_result_json.keys())
@@ -604,13 +570,9 @@ def test_benchmark_equal(path, task, model, case, platform, device):
 
         # If no gold values, this is the first run - just report
         if len(gold_values) == 0:
-            stable_values = (
-                result_values[5:] if len(result_values) > 5 else result_values
-            )
+            stable_values = result_values[5:] if len(result_values) > 5 else result_values
             avg_value = np.mean(stable_values)
-            print(
-                f"No baseline set. Current average (excluding warmup): {avg_value:.4f}"
-            )
+            print(f"No baseline set. Current average (excluding warmup): {avg_value:.4f}")
             print(f"ACTUAL VALUES ({len(result_values)} values): {result_values}")
             print("Please update gold_values with baseline data from this run")
             continue
@@ -619,13 +581,9 @@ def test_benchmark_equal(path, task, model, case, platform, device):
         # Skip warmup iterations for comparison
         skip_warmup = min(5, len(gold_values))
         result_stable = (
-            result_values[skip_warmup:]
-            if len(result_values) > skip_warmup
-            else result_values
+            result_values[skip_warmup:] if len(result_values) > skip_warmup else result_values
         )
-        gold_stable = (
-            gold_values[skip_warmup:] if len(gold_values) > skip_warmup else gold_values
-        )
+        gold_stable = gold_values[skip_warmup:] if len(gold_values) > skip_warmup else gold_values
 
         if len(result_stable) == 0 or len(gold_stable) == 0:
             print("WARNING: Not enough values after skipping warmup")
@@ -666,9 +624,9 @@ def test_benchmark_equal(path, task, model, case, platform, device):
     )
     print(f"{'=' * 70}\n")
 
-    assert (
-        all_passed
-    ), "Performance regression detected - one or more metrics exceeded tolerance thresholds"
+    assert all_passed, (
+        "Performance regression detected - one or more metrics exceeded tolerance thresholds"
+    )
 
 
 @pytest.mark.usefixtures("path", "task", "model", "case")
@@ -701,9 +659,7 @@ def test_rl_equal(path, task, model, case):
     result_path = os.path.join(test_result_path, "logs/host_0_localhost.output")
     print("result_path:", result_path)
 
-    assert os.path.exists(
-        result_path
-    ), f"Failed to find 'host_0_localhost.output' at {result_path}"
+    assert os.path.exists(result_path), f"Failed to find 'host_0_localhost.output' at {result_path}"
 
     # 2. Read log file content
     with open(result_path, "r", errors="replace") as file:
@@ -720,15 +676,11 @@ def test_rl_equal(path, task, model, case):
             for key_value in line_split:
                 if key_value.startswith("val-core/openai/gsm8k/reward/mean"):
                     value = key_value.split(":")[-1]
-                    result_json["val-core/openai/gsm8k/reward/mean@1"].append(
-                        float(value)
-                    )
+                    result_json["val-core/openai/gsm8k/reward/mean@1"].append(float(value))
 
     # 5. Load golden reference metric data
     gold_value_path = os.path.join(path, task, model, "results_gold", case + ".json")
-    assert os.path.exists(
-        gold_value_path
-    ), f"Failed to find gold result JSON at {gold_value_path}"
+    assert os.path.exists(gold_value_path), f"Failed to find gold result JSON at {gold_value_path}"
     with open(gold_value_path, "r") as f:
         gold_result_json = json.load(f)
 
