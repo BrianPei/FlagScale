@@ -11,7 +11,7 @@ ci_train_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
 ci_inference_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
 
 # Directory to store image tar files (shared between build and test workflows)
-tar_dir: /mnt/op/cicd/image_tar
+tar_dir: /mnt/airs-business/cicd/image_tar
 
 # Runner labels for MetaX C550 hardware
 runner_labels: ['flagscale-metax-c550-gpu2-8c-256g']
