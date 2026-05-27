@@ -677,3 +677,399 @@ class TestGPUHealthCheck:
 
         output = "\n".join(str(call.args[0]) for call in mock_print.call_args_list)
         assert "ALL CHECKS" in output
+
+    def test_log_and_safe_execution_cover_success_skip_and_non_rank0(self):
+        """Cover success execution, skipped logging and non-rank-0 silent branch."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        with patch.object(health_check, "log_check_result") as mock_log:
+            assert (
+                health_check.safe_check_execution(lambda: None, "gpu_hardware") is True
+            )
+            mock_log.assert_not_called()
+
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.get_rank", return_value=0),
+            patch("builtins.print") as mock_print,
+        ):
+            health_check.log_check_result("gpu_hardware", "passed")
+            health_check.log_check_result("gpu_computation", "skipped", "disabled")
+
+        output = "\n".join(str(call.args[0]) for call in mock_print.call_args_list)
+        assert "PASSED" in output
+        assert "SKIPPED" in output
+
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.get_rank", return_value=1),
+            patch("builtins.print") as mock_print,
+        ):
+            health_check.log_check_result("gpu_hardware", "failed", "bad")
+        mock_print.assert_not_called()
+
+    def test_control_barrier_uninitialized_world_and_custom_group(self):
+        """Cover early return, world fallback and explicit group barrier branches."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        with patch("torch.distributed.is_initialized", return_value=False):
+            health_check.control_barrier()
+
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.monitored_barrier") as mock_barrier,
+        ):
+            health_check._PARALLEL_STATE["gloo_world"] = None
+            health_check.control_barrier(timeout_s=7)
+            health_check.control_barrier(group="custom", timeout_s=9)
+
+        assert mock_barrier.call_count == 2
+        assert mock_barrier.call_args_list[1].kwargs["group"] == "custom"
+
+    def test_initialize_distributed_existing_initialized_and_new_group_fallback(self):
+        """Cover distributed init when already initialized and new GLOO group fails."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        args = types.SimpleNamespace(
+            rank=0,
+            world_size=1,
+            local_rank=0,
+            distributed_backend="nccl",
+            distributed_timeout_minutes=3,
+            tensor_model_parallel_size=1,
+            pipeline_model_parallel_size=1,
+        )
+        health_check._GLOBAL_ARGS = args
+
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.get_rank", return_value=2),
+            patch("torch.distributed.get_world_size", return_value=4),
+            patch("torch.distributed.new_group", side_effect=RuntimeError("gloo fail")),
+            patch("torch.distributed.init_process_group") as mock_init,
+        ):
+            health_check.initialize_distributed(rank=0, world_size=4)
+
+        assert args.rank == 2
+        assert args.world_size == 4
+        assert health_check._PARALLEL_STATE["gloo_world"] is None
+        mock_init.assert_not_called()
+
+        args.rank = 0
+        args.world_size = 2
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.set_device") as mock_set_device,
+            patch("torch.distributed.is_initialized", return_value=False),
+            patch("torch.distributed.init_process_group") as mock_init,
+            patch("torch.distributed.new_group", return_value="gloo-world"),
+            patch.object(
+                health_check, "initialize_model_parallel"
+            ) as mock_model_parallel,
+        ):
+            health_check.initialize_distributed(rank=0, world_size=2)
+
+        mock_set_device.assert_called_once_with(0)
+        mock_init.assert_called_once()
+        assert health_check._PARALLEL_STATE["gloo_world"] == "gloo-world"
+        mock_model_parallel.assert_called_once_with(
+            tensor_model_parallel_size=1, pipeline_model_parallel_size=1
+        )
+
+    def test_parallel_group_checks_cover_skip_success_and_failures(self):
+        """Cover TP/DP/PP communication skip, success and validation failure paths."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        class FakeTensor:
+            def __init__(self, value=0):
+                self.value = value
+
+            def item(self):
+                return self.value
+
+        health_check._GLOBAL_ARGS = types.SimpleNamespace(
+            local_rank=0,
+            tensor_model_parallel_size=2,
+            pipeline_model_parallel_size=2,
+        )
+        health_check._PARALLEL_STATE["tensor"].update(
+            {"global_ranks": [0, 1], "nccl": "tp-nccl", "gloo": "tp-gloo"}
+        )
+        health_check._PARALLEL_STATE["data"].update(
+            {"global_ranks": [0, 2], "nccl": "dp-nccl", "gloo": "dp-gloo"}
+        )
+        health_check._PARALLEL_STATE["pipeline"].update(
+            {"global_ranks": [0, 1], "nccl": "pp-nccl", "gloo": "pp-gloo"}
+        )
+
+        with (
+            patch("torch.distributed.get_rank", return_value=0),
+            patch("torch.distributed.get_world_size", return_value=8),
+            patch.object(health_check, "control_barrier") as mock_barrier,
+            patch("torch.device", side_effect=lambda value: value),
+            patch("torch.tensor", return_value=FakeTensor(1)),
+            patch("torch.zeros", return_value=FakeTensor(0)),
+            patch("torch.distributed.all_reduce") as mock_all_reduce,
+            patch("torch.distributed.batch_isend_irecv", return_value=[]),
+            patch("torch.distributed.P2POp", side_effect=lambda *args, **kwargs: args),
+            patch("torch.cuda.synchronize") as mock_sync,
+            patch("torch.allclose", return_value=True),
+        ):
+            health_check.check_tensor_parallel_group()
+            health_check.check_data_parallel_group()
+            health_check.check_pipeline_parallel_group()
+
+        assert mock_all_reduce.call_count == 2
+        assert mock_barrier.called
+        assert mock_sync.called
+
+        with (
+            patch("torch.distributed.get_rank", return_value=0),
+            patch("torch.device", side_effect=lambda value: value),
+            patch("torch.tensor", return_value=FakeTensor(99)),
+            patch("torch.distributed.all_reduce"),
+            patch("torch.allclose", return_value=False),
+        ):
+            with pytest.raises(AssertionError, match="TP all_reduce wrong"):
+                health_check.check_tensor_parallel_group()
+
+        health_check._GLOBAL_ARGS.tensor_model_parallel_size = 1
+        health_check._GLOBAL_ARGS.pipeline_model_parallel_size = 1
+        health_check._PARALLEL_STATE["tensor"].update(
+            {"global_ranks": [0], "nccl": None, "gloo": None}
+        )
+        health_check._PARALLEL_STATE["data"].update(
+            {"global_ranks": [0], "nccl": None, "gloo": None}
+        )
+        health_check._PARALLEL_STATE["pipeline"].update(
+            {"global_ranks": [0], "nccl": None, "gloo": None}
+        )
+        with (
+            patch("torch.distributed.get_rank", return_value=0),
+            patch("torch.distributed.get_world_size", return_value=1),
+            patch.object(health_check, "control_barrier"),
+        ):
+            health_check.check_tensor_parallel_group()
+            health_check.check_data_parallel_group()
+            health_check.check_pipeline_parallel_group()
+
+        health_check._GLOBAL_ARGS.pipeline_model_parallel_size = 2
+        health_check._PARALLEL_STATE["pipeline"].update(
+            {"global_ranks": [1, 2], "nccl": "pp-nccl", "gloo": "pp-gloo"}
+        )
+        with (
+            patch("torch.distributed.get_rank", return_value=0),
+            patch.object(health_check, "control_barrier"),
+        ):
+            with pytest.raises(RuntimeError, match="not found"):
+                health_check.check_pipeline_parallel_group()
+
+    def test_computation_endurance_success_and_nan_failure(self):
+        """Cover endurance loop success and NaN failure branch without waiting."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        health_check._GLOBAL_ARGS = MagicMock(local_rank=0)
+        tensor = MagicMock()
+        tensor.to.return_value = tensor
+
+        with (
+            patch("time.time", side_effect=[0, 1, 61]),
+            patch("torch.randn", return_value=tensor),
+            patch("torch.matmul", return_value="matmul"),
+            patch("torch.inverse", return_value="inverse"),
+            patch("torch.isnan", return_value="nan"),
+            patch("torch.any", return_value=False),
+        ):
+            assert health_check.check_computation_endurance() is True
+
+        with (
+            patch("time.time", side_effect=[0, 1]),
+            patch("torch.randn", return_value=tensor),
+            patch("torch.matmul", return_value="matmul"),
+            patch("torch.inverse", return_value="inverse"),
+            patch("torch.isnan", return_value="nan"),
+            patch("torch.any", side_effect=[True, False]),
+        ):
+            assert health_check.check_computation_endurance() is False
+
+    def test_ecc_error_detects_nan_inf_and_non_gpu_runtime_error(self):
+        """Cover ECC NaN, Inf and non-GPU runtime error branches."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        health_check._GLOBAL_ARGS = MagicMock(local_rank=0)
+        tensor = MagicMock()
+
+        with (
+            patch("torch.distributed.get_rank", return_value=0),
+            patch("torch.randn", return_value=tensor),
+            patch("torch.matmul", return_value="result"),
+            patch("torch.isnan", return_value="nan"),
+            patch("torch.isinf", return_value="inf"),
+            patch("torch.any", side_effect=[True]),
+        ):
+            assert health_check.check_ecc_error() is False
+
+        with (
+            patch("torch.distributed.get_rank", return_value=0),
+            patch("torch.randn", return_value=tensor),
+            patch("torch.matmul", return_value="result"),
+            patch("torch.isnan", return_value="nan"),
+            patch("torch.isinf", return_value="inf"),
+            patch("torch.any", side_effect=[False, True]),
+        ):
+            assert health_check.check_ecc_error() is False
+
+        with patch("torch.randn", side_effect=RuntimeError("cpu failure")):
+            assert health_check.check_ecc_error() is False
+
+    def test_check_computation_failure_and_gather_barrier_warning_paths(self):
+        """Cover distributed computation failed aggregation and warning branches."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        class FakeResultTensor:
+            def __init__(self):
+                self.values = {}
+
+            def to(self, device):
+                return self
+
+            def __setitem__(self, key, value):
+                self.values[key] = value
+
+        health_check._GLOBAL_ARGS = MagicMock(local_rank=0, rank=0, world_size=2)
+        result_tensor = FakeResultTensor()
+        expected_tensor = FakeResultTensor()
+
+        with (
+            patch("torch.distributed.get_rank", return_value=0),
+            patch.object(
+                health_check,
+                "check_computation_for_different_dtype",
+                side_effect=[False, True, True],
+            ),
+            patch.object(
+                health_check, "check_computation_endurance", return_value=True
+            ),
+            patch.object(health_check, "check_ecc_error", return_value=True),
+            patch("torch.zeros", return_value=result_tensor),
+            patch("torch.ones_like", return_value=expected_tensor),
+            patch(
+                "torch.distributed.all_reduce", side_effect=RuntimeError("reduce fail")
+            ),
+            patch(
+                "torch.distributed.barrier", side_effect=RuntimeError("barrier fail")
+            ),
+            patch.object(health_check, "log_check_result") as mock_log,
+            patch("builtins.print") as mock_print,
+        ):
+            health_check.check_computation()
+
+        mock_log.assert_called_with(
+            "gpu_computation", "failed", "Failed checks: Float computation"
+        )
+        output = "\n".join(str(call.args[0]) for call in mock_print.call_args_list)
+        assert "Failed to gather" in output
+        assert "barrier failed" in output
+
+    def test_print_summary_pending_success_and_critical_branches(self):
+        """Cover remaining summary messages for pending, all-pass and all-failed states."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        health_check._GLOBAL_ARGS = MagicMock(world_size=2)
+        scenarios = [
+            (
+                "pending",
+                ["pending", "passed", "passed", "passed", "passed"],
+                "some checks pending",
+            ),
+            ("success", ["passed"] * 5, "All GPU health checks PASSED"),
+            ("critical", ["failed"] * 5, "Critical: All checks FAILED"),
+        ]
+        for _, statuses, expected in scenarios:
+            for key, status in zip(health_check._CHECK_RESULTS, statuses, strict=False):
+                health_check._CHECK_RESULTS[key] = {"status": status, "error": None}
+            with (
+                patch("torch.distributed.is_initialized", return_value=True),
+                patch("torch.distributed.get_rank", return_value=0),
+                patch("builtins.print") as mock_print,
+            ):
+                health_check.print_check_summary()
+            output = "\n".join(str(call.args[0]) for call in mock_print.call_args_list)
+            assert expected in output
+
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.get_rank", return_value=1),
+            patch("builtins.print") as mock_print,
+        ):
+            health_check.print_check_summary()
+        mock_print.assert_not_called()
+
+    def test_main_single_and_multi_failure_exit_paths(self):
+        """Cover single-process and distributed failure exit paths."""
+        from flagscale.runner.elastic import gpu_health_check as health_check
+
+        single_args = MagicMock(
+            tensor_model_parallel_size=1,
+            pipeline_model_parallel_size=1,
+            rank=0,
+            world_size=1,
+            local_rank=0,
+            distributed_backend="nccl",
+            distributed_timeout_minutes=10,
+        )
+
+        def single_safe_execution(check_func, check_name, timeout_seconds=120):
+            if check_name == "gpu_hardware":
+                health_check._CHECK_RESULTS[check_name]["status"] = "failed"
+                return False
+            health_check._CHECK_RESULTS[check_name]["status"] = "passed"
+            return True
+
+        with (
+            patch.object(health_check, "parse_args", return_value=single_args),
+            patch.object(
+                health_check, "safe_check_execution", side_effect=single_safe_execution
+            ),
+            patch.object(health_check, "print_check_summary"),
+            patch("sys.exit", side_effect=SystemExit(1)) as mock_exit,
+        ):
+            with pytest.raises(SystemExit):
+                health_check.main()
+        mock_exit.assert_called_once_with(1)
+
+        multi_args = MagicMock(
+            tensor_model_parallel_size=1,
+            pipeline_model_parallel_size=1,
+            rank=0,
+            world_size=2,
+            local_rank=0,
+            distributed_backend="nccl",
+            distributed_timeout_minutes=10,
+        )
+        health_check._CHECK_RESULTS["tensor_parallel"] = {
+            "status": "failed",
+            "error": "bad",
+        }
+        with (
+            patch.object(health_check, "parse_args", return_value=multi_args),
+            patch.object(
+                health_check, "initialize_distributed", side_effect=RuntimeError("boom")
+            ),
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch(
+                "torch.distributed.destroy_process_group",
+                side_effect=RuntimeError("destroy fail"),
+            ),
+            patch.object(health_check, "print_check_summary"),
+            patch("builtins.print") as mock_print,
+            patch("sys.exit", side_effect=SystemExit(1)) as mock_exit,
+        ):
+            with pytest.raises(SystemExit):
+                health_check.main()
+
+        output = "\n".join(str(call.args[0]) for call in mock_print.call_args_list)
+        assert "Critical error" in output
+        assert "Cleanup failed" in output
+        mock_exit.assert_called_with(1)
