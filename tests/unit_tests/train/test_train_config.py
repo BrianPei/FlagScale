@@ -1,9 +1,12 @@
+import json
 import unittest
 
 from omegaconf import OmegaConf
 from pydantic import ValidationError
 
+from flagscale.models.utils.constants import PRETRAINED_MODEL_DIR
 from flagscale.train.train_config import (
+    TRAIN_CONFIG_NAME,
     CheckpointConfig,
     DataConfig,
     FreezeConfig,
@@ -82,6 +85,9 @@ class TestOptimizerConfig(unittest.TestCase):
 
         with self.assertRaises(ValidationError):
             OptimizerConfig(betas=[0.9, 0.95, 0.99])
+
+        with self.assertRaises(ValidationError):
+            OptimizerConfig(betas=(0.9, 0.95, 0.99))
 
 
 class TestSchedulerConfig(unittest.TestCase):
@@ -169,6 +175,12 @@ class TestSystemConfig(unittest.TestCase):
         with self.assertRaises(AttributeError):
             _ = config.nonexistent_field
 
+    def test_private_attr_does_not_fallback_to_raw(self):
+        raw = OmegaConf.create({"_hidden": "value"})
+        config = SystemConfig(checkpoint=CheckpointConfig(output_directory="/tmp"), raw=raw)
+        with self.assertRaises(AttributeError):
+            _ = config._hidden
+
 
 class TestDataConfig(unittest.TestCase):
     """Test DataConfig with rename_map"""
@@ -194,6 +206,14 @@ class TestDataConfig(unittest.TestCase):
         config = DataConfig(data_path="/data", raw=raw)
         self.assertEqual(config.vla_data.image_features, ["img1"])
 
+    def test_extra_field_and_missing_attr_paths(self):
+        config = DataConfig(data_path="/data", extra_data_field=42)
+        self.assertEqual(config.extra_data_field, 42)
+        with self.assertRaises(AttributeError):
+            _ = config.missing_data_field
+        with self.assertRaises(AttributeError):
+            _ = config._private
+
 
 class TestModelConfig(unittest.TestCase):
     """Test flexible ModelConfig that accepts extra fields"""
@@ -218,8 +238,23 @@ class TestModelConfig(unittest.TestCase):
         self.assertEqual(model_dict["action_steps"], 50)
 
     def test_qwen_gr00t_model_name(self):
-        config = ModelConfig(model_name="pi0", checkpoint_dir="/path")
-        self.assertEqual(config.model_name, "pi0")
+        config = ModelConfig(model_name="qwen_gr00t", checkpoint_dir="/path")
+        self.assertEqual(config.model_name, "qwen_gr00t")
+
+    def test_extra_and_raw_attr_paths(self):
+        raw = OmegaConf.create({"legacy_model_field": "raw-value"})
+        config = ModelConfig(
+            model_name="gr00t_n1_5",
+            checkpoint_dir=None,
+            raw=raw,
+            extra_model_field="extra-value",
+        )
+        self.assertEqual(config.legacy_model_field, "raw-value")
+        self.assertEqual(config.extra_model_field, "extra-value")
+        with self.assertRaises(AttributeError):
+            _ = config.missing_model_field
+        with self.assertRaises(AttributeError):
+            _ = config._private
 
     def test_invalid_model_name(self):
         with self.assertRaisesRegex(ValidationError, "Invalid model_name"):
@@ -329,6 +364,21 @@ class TestTrainConfig(unittest.TestCase):
         self.assertEqual(config.system.custom_sys_field, "hello")
         self.assertEqual(config.data.vla_data.key, "val")
 
+    def test_to_omegaconf_reconstructs_raw_config(self):
+        hydra_dict = {
+            "train": {
+                "system": {"checkpoint": {"output_directory": "/out"}, "extra": 1},
+                "model": {"model_name": "pi0", "checkpoint_dir": "/ckpt", "hidden": 2},
+                "data": {"data_path": "/dataset", "extra": 3},
+            }
+        }
+        config = TrainConfig.from_hydra_config(OmegaConf.create(hydra_dict))
+        restored = config.to_omegaconf()
+
+        self.assertEqual(restored.system.extra, 1)
+        self.assertEqual(restored.model.hidden, 2)
+        self.assertEqual(restored.data.extra, 3)
+
     def test_type_validation_error(self):
         config_dict = {
             "system": {
@@ -382,3 +432,52 @@ class TestConfigSerialization(unittest.TestCase):
         self.assertEqual(config_restored.system.batch_size, config.system.batch_size)
         self.assertEqual(config_restored.model.model_name, config.model.model_name)
         self.assertEqual(config_restored.data.data_path, config.data.data_path)
+
+    def test_save_and_load_from_root_or_pretrained_model_subdir(self):
+        config = TrainConfig(
+            system=SystemConfig(
+                batch_size=16,
+                checkpoint=CheckpointConfig(output_directory="/tmp/out"),
+            ),
+            model=ModelConfig(
+                model_name="pi0",
+                checkpoint_dir="/model",
+                action_steps=50,
+                optimizer=OptimizerConfig(param_groups={"vision": {"lr": 1e-5}}),
+            ),
+            data=DataConfig(data_path="/data", rename_map={"old": "new"}),
+        )
+
+        with self.subTest("direct root"):
+            from tempfile import TemporaryDirectory
+
+            with TemporaryDirectory() as tmp:
+                config._save_pretrained(tmp)
+                loaded = TrainConfig.from_pretrained(tmp)
+                self.assertEqual(loaded.system.batch_size, 16)
+                self.assertEqual(loaded.model.optimizer.param_groups, {"vision": {"lr": 1e-5}})
+
+        with self.subTest("checkpoint root resolves pretrained_model"):
+            from tempfile import TemporaryDirectory
+
+            with TemporaryDirectory() as tmp:
+                from pathlib import Path
+
+                root = Path(tmp)
+                pretrained = root / PRETRAINED_MODEL_DIR
+                pretrained.mkdir()
+                (pretrained / TRAIN_CONFIG_NAME).write_text(
+                    json.dumps(config.model_dump()), encoding="utf-8"
+                )
+
+                loaded = TrainConfig.from_pretrained(root)
+                self.assertEqual(loaded.data.rename_map, {"old": "new"})
+
+    def test_from_pretrained_missing_file_raises(self):
+        from tempfile import TemporaryDirectory
+
+        with (
+            TemporaryDirectory() as tmp,
+            self.assertRaisesRegex(FileNotFoundError, TRAIN_CONFIG_NAME),
+        ):
+            TrainConfig.from_pretrained(tmp)
