@@ -53,9 +53,7 @@ def runner_factory(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "flagscale.runner.backend", backend_module)
     monkeypatch.setitem(sys.modules, "flagscale.runner.launcher", launcher_module)
-    previous_factory_module = sys.modules.pop(
-        "flagscale.runner.runner_factory", _MISSING
-    )
+    previous_factory_module = sys.modules.pop("flagscale.runner.runner_factory", _MISSING)
 
     module = importlib.import_module("flagscale.runner.runner_factory")
     factory = module.RunnerFactory

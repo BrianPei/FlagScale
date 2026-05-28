@@ -61,9 +61,7 @@ class TestLogCollector:
                 "flagscale.runner.elastic.log_collector.run_local_command"
             ) as mock_run_local_command,
         ):
-            result = collect_logs(
-                mock_config, "localhost", 0, "/tmp/dest", dryrun=False
-            )
+            result = collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
 
             # Should call run_local_command for localhost
             mock_run_local_command.assert_called()
@@ -122,9 +120,7 @@ class TestLogCollector:
                 "flagscale.runner.elastic.log_collector.run_local_command"
             ) as mock_run_local_command,
         ):
-            collect_logs(
-                mock_config_no_shared_fs, "localhost", 0, "/tmp/dest", dryrun=False
-            )
+            collect_logs(mock_config_no_shared_fs, "localhost", 0, "/tmp/dest", dryrun=False)
 
             mock_run_local_command.assert_called()
 
@@ -141,9 +137,7 @@ class TestLogCollector:
             patch("flagscale.runner.elastic.log_collector.run_local_command"),
             patch("flagscale.runner.elastic.log_collector.logger") as mock_logger,
         ):
-            result = collect_logs(
-                mock_config, "localhost", 0, "/tmp/dest", dryrun=False
-            )
+            result = collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
 
             assert result is None
             mock_logger.debug.assert_called()
@@ -162,9 +156,7 @@ class TestLogCollector:
             patch("flagscale.runner.elastic.log_collector.run_local_command"),
             patch("flagscale.runner.elastic.log_collector.logger") as mock_logger,
         ):
-            result = collect_logs(
-                mock_config, "localhost", 0, "/tmp/dest", dryrun=False
-            )
+            result = collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
 
             assert result is None
             mock_logger.debug.assert_called()
@@ -190,12 +182,10 @@ class TestLogCollector:
             mock_run_local_command.assert_called()
             call_args = mock_run_local_command.call_args
             # Check that dryrun=True was passed (as second positional argument)
-            assert (
-                len(call_args[0]) >= 2
-            ), "run_local_command should be called with command and dryrun arguments"
-            assert (
-                call_args[0][1] is True
-            ), "dryrun=True should be passed as second argument"
+            assert len(call_args[0]) >= 2, (
+                "run_local_command should be called with command and dryrun arguments"
+            )
+            assert call_args[0][1] is True, "dryrun=True should be passed as second argument"
 
     def test_collect_logs_exception_handling(self, mock_config):
         """Test that collect logs with exception handling"""
@@ -214,9 +204,7 @@ class TestLogCollector:
             ),
             patch("flagscale.runner.elastic.log_collector.logger") as mock_logger,
         ):
-            result = collect_logs(
-                mock_config, "localhost", 0, "/tmp/dest", dryrun=False
-            )
+            result = collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
 
             assert result is None
             mock_logger.error.assert_called()
@@ -259,9 +247,7 @@ class TestLogCollector:
             # Mock that dest file exists
             mock_exists.side_effect = lambda path: path == dest_file
 
-            result = collect_logs(
-                mock_config, "localhost", 0, "/tmp/dest", dryrun=False
-            )
+            result = collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
 
             assert result is None
 
@@ -294,13 +280,11 @@ class TestLogCollector:
         assert find_actual_log_file(str(tmp_path), 0, "worker0") == str(
             tmp_path / "host_0_worker0.output"
         )
-        assert find_actual_log_file(
-            str(tmp_path), 0, "worker0", no_shared_fs=True
-        ) == str(tmp_path / "host.output")
+        assert find_actual_log_file(str(tmp_path), 0, "worker0", no_shared_fs=True) == str(
+            tmp_path / "host.output"
+        )
 
-    def test_collect_logs_remote_uses_ssh_tail_command_and_updates_offset(
-        self, mock_config
-    ):
+    def test_collect_logs_remote_uses_ssh_tail_command_and_updates_offset(self, mock_config):
         src_log = "/tmp/test_logs/host_0_worker0.output"
         dest_log = "/tmp/dest/host_0_worker0_current.log"
 
@@ -319,9 +303,7 @@ class TestLogCollector:
                 "flagscale.runner.elastic.log_collector.get_remote_file_size",
                 return_value=100,
             ),
-            patch(
-                "flagscale.runner.elastic.log_collector.run_local_command"
-            ) as run_local,
+            patch("flagscale.runner.elastic.log_collector.run_local_command") as run_local,
         ):
             result = collect_logs(mock_config, "worker0", 0, "/tmp/dest", dryrun=False)
 
@@ -332,9 +314,7 @@ class TestLogCollector:
         assert src_log in command
         assert _log_offsets["worker0_0"] == 100
 
-    def test_collect_logs_removes_empty_destination_after_command_success(
-        self, mock_config
-    ):
+    def test_collect_logs_removes_empty_destination_after_command_success(self, mock_config):
         src_log = "/tmp/test_logs/host_0_localhost.output"
         dest_log = "/tmp/dest/host_0_localhost_current.log"
 
@@ -355,9 +335,7 @@ class TestLogCollector:
             patch("flagscale.runner.elastic.log_collector.run_local_command"),
             patch("os.remove") as remove,
         ):
-            result = collect_logs(
-                mock_config, "localhost", 0, "/tmp/dest", dryrun=False
-            )
+            result = collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
 
         assert result is None
         remove.assert_called_once_with(dest_log)
@@ -368,16 +346,12 @@ class TestLogCollector:
                 "flagscale.runner.elastic.log_collector.find_actual_log_file",
                 return_value="/tmp/test_logs/host_0_localhost.output",
             ),
-            patch(
-                "os.makedirs", side_effect=PermissionError("cannot create destination")
-            ),
+            patch("os.makedirs", side_effect=PermissionError("cannot create destination")),
+            pytest.raises(PermissionError),
         ):
-            with pytest.raises(PermissionError):
-                collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
+            collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
 
-    def test_collect_logs_remote_source_has_no_content_removes_destination(
-        self, mock_config
-    ):
+    def test_collect_logs_remote_source_has_no_content_removes_destination(self, mock_config):
         src_log = "/tmp/test_logs/host_0_worker0.output"
         dest_log = "/tmp/dest/host_0_worker0_current.log"
 
@@ -418,10 +392,7 @@ class TestLogCollector:
             patch("os.makedirs"),
             patch("flagscale.runner.elastic.log_collector.run_local_command"),
         ):
-            assert (
-                collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
-                is None
-            )
+            assert collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False) is None
             assert _log_offsets["localhost_0"] == 100
 
     def test_collect_logs_exception_removes_existing_destination(self, mock_config):
@@ -444,9 +415,6 @@ class TestLogCollector:
             ),
             patch("os.remove") as remove,
         ):
-            assert (
-                collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False)
-                is None
-            )
+            assert collect_logs(mock_config, "localhost", 0, "/tmp/dest", dryrun=False) is None
 
         remove.assert_called_once_with(dest_log)

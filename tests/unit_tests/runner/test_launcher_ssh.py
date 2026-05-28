@@ -15,9 +15,7 @@ class FakeBackend:
         self.user_args = ["--use-cache", "--hetero-current-device-type", "old"]
         self.user_envs = {"CUDA_VISIBLE_DEVICES": "0,1"}
         self.user_script = "train.py"
-        self.device_type_specific = {
-            "A100": {"build_dir": str(tmp_path), "new_flag": "true"}
-        }
+        self.device_type_specific = {"A100": {"build_dir": str(tmp_path), "new_flag": "true"}}
         self.node_specific = {"localhost": {"use_cache": "false"}}
         self.generated = []
 
@@ -103,9 +101,7 @@ def test_get_runner_cmd_train_filters_launcher_and_profiling_options(tmp_path):
     config.experiment.runner.enable_gpu_health_check = True
     config.experiment.runner.deploy = {"ignored": True}
 
-    cmd = launcher_ssh._get_runner_cmd_train(
-        "worker0", "10.0.0.1", 29500, 2, 1, 4, config
-    )
+    cmd = launcher_ssh._get_runner_cmd_train("worker0", "10.0.0.1", 29500, 2, 1, 4, config)
 
     joined = " ".join(cmd)
     assert cmd[0] == "torchrun"
@@ -119,9 +115,7 @@ def test_get_runner_cmd_train_filters_launcher_and_profiling_options(tmp_path):
     assert "--deploy" not in cmd
 
 
-def test_run_each_train_generates_local_script_with_env_and_node_specific_updates(
-    tmp_path, mocker
-):
+def test_run_each_train_generates_local_script_with_env_and_node_specific_updates(tmp_path, mocker):
     config = make_train_config(tmp_path)
     backend = FakeBackend(tmp_path)
     launcher = SshLauncher(config, backend)
@@ -143,10 +137,7 @@ def test_run_each_train_generates_local_script_with_env_and_node_specific_update
 
     assert (
         backend.user_args[-2:] == ["--hetero-current-device-type", "A100"]
-        or backend.user_args[
-            backend.user_args.index("--hetero-current-device-type") + 1
-        ]
-        == "A100"
+        or backend.user_args[backend.user_args.index("--hetero-current-device-type") + 1] == "A100"
     )
     generated = backend.generated[-1]
     cmd = generated["cmd"]
@@ -159,9 +150,7 @@ def test_run_each_train_generates_local_script_with_env_and_node_specific_update
     assert generated["kwargs"]["background"] is False
     assert generated["kwargs"]["pkg_dir"] == str(tmp_path)
     assert generated["kwargs"]["enable_monitoring"] is True
-    run_local.assert_called_once_with(
-        "bash /tmp/host_0_localhost_run.sh", True, stream_output=True
-    )
+    run_local.assert_called_once_with("bash /tmp/host_0_localhost_run.sh", True, stream_output=True)
 
 
 def test_run_each_remote_copies_script_when_no_shared_fs(tmp_path, mocker):
@@ -226,9 +215,7 @@ def test_query_each_returns_stdout_for_local_command(tmp_path, mocker):
     config = make_train_config(tmp_path)
     backend = FakeBackend(tmp_path)
     launcher = SshLauncher(config, backend)
-    mocker.patch.object(
-        launcher, "_generate_query_script", return_value="/tmp/query.sh"
-    )
+    mocker.patch.object(launcher, "_generate_query_script", return_value="/tmp/query.sh")
     mocker.patch(
         "flagscale.runner.launcher.launcher_ssh.run_local_command",
         return_value=subprocess.CompletedProcess("cmd", 0, stdout="R\n", stderr=""),
@@ -272,9 +259,7 @@ def test_run_uses_multiprocessing_pool_for_multinode_train(tmp_path, mocker):
             self.calls.append((func, tasks))
 
     mocker.patch("flagscale.runner.launcher.launcher_ssh._MAX_CPU_COUNT", 16)
-    mocker.patch(
-        "flagscale.runner.launcher.launcher_ssh.multiprocessing.Pool", FakePool
-    )
+    mocker.patch("flagscale.runner.launcher.launcher_ssh.multiprocessing.Pool", FakePool)
 
     launcher.run(background=True, dryrun=True, enable_monitoring=True)
 
@@ -309,9 +294,7 @@ def test_start_monitoring_service_starts_and_returns_service(tmp_path, mocker):
         def start_monitoring(self):
             self.started = True
 
-    mocker.patch(
-        "flagscale.runner.launcher.launcher_ssh.MonitorService", FakeMonitorService
-    )
+    mocker.patch("flagscale.runner.launcher.launcher_ssh.MonitorService", FakeMonitorService)
 
     service = launcher.start_monitoring_service(interval=3)
 
@@ -331,9 +314,7 @@ def test_run_gpu_health_check_on_node_local_single_process(tmp_path, mocker):
         return_value=subprocess.CompletedProcess("cmd", 0),
     )
 
-    assert launcher._run_gpu_health_check_on_node(
-        "localhost", 0, "localhost", 29500, 1, 1
-    )
+    assert launcher._run_gpu_health_check_on_node("localhost", 0, "localhost", 29500, 1, 1)
 
     cmd = run.call_args.args[0]
     assert cmd[:2] == ["python", launcher.gpu_health_check_path]
@@ -366,9 +347,7 @@ def test_run_gpu_health_check_on_node_remote_distributed_uses_ssh(tmp_path, mock
 
 def test_run_gpu_health_check_returns_false_when_script_missing(tmp_path, mocker):
     launcher = SshLauncher(make_train_config(tmp_path), FakeBackend(tmp_path))
-    mocker.patch(
-        "flagscale.runner.launcher.launcher_ssh.os.path.exists", return_value=False
-    )
+    mocker.patch("flagscale.runner.launcher.launcher_ssh.os.path.exists", return_value=False)
 
     assert launcher._run_gpu_health_check() is False
 
@@ -379,12 +358,8 @@ def test_run_gpu_health_check_single_node_uses_visible_device_count(tmp_path, mo
     backend = FakeBackend(tmp_path)
     backend.user_envs = {"CUDA_VISIBLE_DEVICES": "0,1"}
     launcher = SshLauncher(config, backend)
-    mocker.patch(
-        "flagscale.runner.launcher.launcher_ssh.os.path.exists", return_value=True
-    )
-    run_node = mocker.patch.object(
-        launcher, "_run_gpu_health_check_on_node", return_value=True
-    )
+    mocker.patch("flagscale.runner.launcher.launcher_ssh.os.path.exists", return_value=True)
+    run_node = mocker.patch.object(launcher, "_run_gpu_health_check_on_node", return_value=True)
 
     assert launcher._run_gpu_health_check() is True
 
@@ -401,9 +376,7 @@ def test_run_gpu_health_check_multinode_aggregates_thread_results(tmp_path, mock
     backend = FakeBackend(tmp_path)
     launcher = SshLauncher(config, backend)
     launcher.resources = resources
-    mocker.patch(
-        "flagscale.runner.launcher.launcher_ssh.os.path.exists", return_value=True
-    )
+    mocker.patch("flagscale.runner.launcher.launcher_ssh.os.path.exists", return_value=True)
     run_node = mocker.patch.object(
         launcher, "_run_gpu_health_check_on_node", side_effect=[True, False]
     )
@@ -418,9 +391,7 @@ def test_run_aborts_when_gpu_health_check_fails(tmp_path, mocker):
     config = make_train_config(tmp_path)
     backend = FakeBackend(tmp_path)
     launcher = SshLauncher(config, backend)
-    health_check = mocker.patch.object(
-        launcher, "_run_gpu_health_check", return_value=False
-    )
+    health_check = mocker.patch.object(launcher, "_run_gpu_health_check", return_value=False)
     run_each = mocker.patch.object(launcher, "_run_each")
 
     assert launcher.run(dryrun=True, enable_gpu_health_check=True) is None
@@ -439,9 +410,7 @@ def test_profile_serve_uses_tokenizer_dummy_inputs_and_benchmark(monkeypatch, mo
         "vllm.transformers_utils",
         types.ModuleType("vllm.transformers_utils"),
     )
-    monkeypatch.setitem(
-        sys.modules, "vllm.transformers_utils.tokenizer", tokenizer_module
-    )
+    monkeypatch.setitem(sys.modules, "vllm.transformers_utils.tokenizer", tokenizer_module)
 
     dummy_inputs = [("prompt", 1, 2)]
     dummy_random_input = mocker.patch(

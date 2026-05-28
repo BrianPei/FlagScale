@@ -95,9 +95,11 @@ def test_inference_parse_config_loads_yaml_and_validates_required_sections(tmp_p
 
     bad_file = tmp_path / "bad.yaml"
     bad_file.write_text("llm:\n  model: qwen\n", encoding="utf-8")
-    with patch("sys.argv", ["prog", "--config-path", str(bad_file)]):
-        with pytest.raises(AssertionError):
-            arguments.parse_config()
+    with (
+        patch("sys.argv", ["prog", "--config-path", str(bad_file)]),
+        pytest.raises(AssertionError),
+    ):
+        arguments.parse_config()
 
 
 def test_serve_parse_config_reads_yaml_and_ignores_log_dir_argument(tmp_path):
@@ -106,9 +108,7 @@ def test_serve_parse_config_reads_yaml_and_ignores_log_dir_argument(tmp_path):
     config_file = tmp_path / "serve.yaml"
     config_file.write_text("model:\n  path: qwen\n", encoding="utf-8")
 
-    with patch(
-        "sys.argv", ["prog", "--config-path", str(config_file), "--log-dir", "logs"]
-    ):
+    with patch("sys.argv", ["prog", "--config-path", str(config_file), "--log-dir", "logs"]):
         config = arguments.parse_config()
 
     assert config.model.path == "qwen"
@@ -160,9 +160,7 @@ def test_serve_check_and_get_port_returns_requested_or_free_port(monkeypatch):
         def getsockname(self):
             return ("0.0.0.0", 45678)
 
-    monkeypatch.setattr(
-        dag_utils.socket, "socket", lambda *args, **kwargs: FakeSocket()
-    )
+    monkeypatch.setattr(dag_utils.socket, "socket", lambda *args, **kwargs: FakeSocket())
 
     assert dag_utils.check_and_get_port(12345) == 12345
     FakeSocket.next_fail = True
@@ -248,9 +246,7 @@ def test_inference_parse_torch_dtype_supports_aliases_and_invalid_values(monkeyp
     fake_torch.float64 = FakeDType()
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
 
-    inference_utils = importlib.reload(
-        importlib.import_module("flagscale.inference.utils")
-    )
+    inference_utils = importlib.reload(importlib.import_module("flagscale.inference.utils"))
 
     assert inference_utils.parse_torch_dtype(None) is None
     assert inference_utils.parse_torch_dtype(fake_torch.float16) is fake_torch.float16

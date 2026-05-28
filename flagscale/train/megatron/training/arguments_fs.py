@@ -37,18 +37,15 @@ class FSTrainArguments:
 
         device_count = cur_platform.device_count()
         if torch.distributed.is_initialized():
-
             if args.rank == 0:
                 print(
-                    "torch distributed is already initialized, "
-                    "skipping initialization ...",
+                    "torch distributed is already initialized, skipping initialization ...",
                     flush=True,
                 )
             args.rank = torch.distributed.get_rank()
             args.world_size = torch.distributed.get_world_size()
 
         else:
-
             if args.rank == 0:
                 print("> initializing torch distributed ...", flush=True)
             # Manually set the device ids.
@@ -86,9 +83,9 @@ class FSTrainArguments:
             self._build_rank_mapper()
 
         if self.args.hetero_process_meshes is not None:
-            assert (
-                len(self.args.hetero_process_meshes) % 5 == 0
-            ), f"length of hetero_process_meshes {self.args.hetero_process_meshes} should be divisible by 5, the format should be tp0, cp0, dp0, pp0, tp1, cp1, dp1, pp1, ..."
+            assert len(self.args.hetero_process_meshes) % 5 == 0, (
+                f"length of hetero_process_meshes {self.args.hetero_process_meshes} should be divisible by 5, the format should be tp0, cp0, dp0, pp0, tp1, cp1, dp1, pp1, ..."
+            )
             hetero_process_meshes_tp = self.args.hetero_process_meshes[0::5]
             hetero_process_meshes_cp = self.args.hetero_process_meshes[1::5]
             hetero_process_meshes_ep = self.args.hetero_process_meshes[2::5]
@@ -98,53 +95,54 @@ class FSTrainArguments:
             # Check if tensor parallel sizes are inconsistent across meshes
             # NOTE: If TP degrees differ, sequence parallelism must be enabled
             if len(set(hetero_process_meshes_tp)) > 1:
-                assert (
-                    self.args.sequence_parallel
-                ), f"Sequence parallelism must be enabled (`sequence_parallel=True`) when tensor parallelism degrees differ across heterogeneous meshes. Found TP degrees: {hetero_process_meshes_tp}"
+                assert self.args.sequence_parallel, (
+                    f"Sequence parallelism must be enabled (`sequence_parallel=True`) when tensor parallelism degrees differ across heterogeneous meshes. Found TP degrees: {hetero_process_meshes_tp}"
+                )
             # Expert tensor parallel size
             if self.expert_tensor_parallel_size_per_process_mesh is not None:
                 assert len(self.expert_tensor_parallel_size_per_process_mesh) == len(
                     hetero_process_meshes_tp
-                ), f"length of expert_tensor_parallel_size_per_process_mesh {len(self.expert_tensor_parallel_size_per_process_mesh)} should be equal to length of hetero_process_meshes_tp {len(hetero_process_meshes_tp)}"
+                ), (
+                    f"length of expert_tensor_parallel_size_per_process_mesh {len(self.expert_tensor_parallel_size_per_process_mesh)} should be equal to length of hetero_process_meshes_tp {len(hetero_process_meshes_tp)}"
+                )
             # Data parallel size
             # NOTE: Use the first data parallel size as the global data parallel size to loader data
             self.args.data_parallel_size = hetero_process_meshes_dp[0]
             assert all(
-                self.args.data_parallel_size * self.args.micro_batch_size % hetero_dp
-                == 0
+                self.args.data_parallel_size * self.args.micro_batch_size % hetero_dp == 0
                 for hetero_dp in hetero_process_meshes_dp
-            ), f"data_parallel_size * micro_batch_size {self.args.data_parallel_size * self.args.micro_batch_size} should be divisible by all hetero_process_meshes_dp {hetero_process_meshes_dp}!"
+            ), (
+                f"data_parallel_size * micro_batch_size {self.args.data_parallel_size * self.args.micro_batch_size} should be divisible by all hetero_process_meshes_dp {hetero_process_meshes_dp}!"
+            )
 
             # NOTE: Only support cp and ep size to be the same
             assert all(
-                hetero_cp == hetero_process_meshes_cp[0]
-                for hetero_cp in hetero_process_meshes_cp
+                hetero_cp == hetero_process_meshes_cp[0] for hetero_cp in hetero_process_meshes_cp
             ), f"all hetero_process_meshes_cp {hetero_process_meshes_cp} should be the same!"
 
             # Note: Ep size should all be 1 or all be not 1
             assert all(1 == hetero_ep for hetero_ep in hetero_process_meshes_ep) or any(
                 1 != hetero_ep for hetero_ep in hetero_process_meshes_ep
-            ), f"all hetero_process_meshes_ep {hetero_process_meshes_ep} should be the 1 or none of hetero_process_meshes_ep is not 1!"
+            ), (
+                f"all hetero_process_meshes_ep {hetero_process_meshes_ep} should be the 1 or none of hetero_process_meshes_ep is not 1!"
+            )
 
             # Pipeline model parallel size
-            assert self.args.pipeline_model_parallel_size == sum(
-                hetero_process_meshes_pp
-            ), f"origin pipeline_model_parallel_size {self.args.pipeline_model_parallel_size} should match sum of hetero_process_meshes_pp {hetero_process_meshes_pp}!"
-            assert (
-                self.args.standalone_embedding_stage == False
-            ), "standalone not supported with process_meshes set!"
+            assert self.args.pipeline_model_parallel_size == sum(hetero_process_meshes_pp), (
+                f"origin pipeline_model_parallel_size {self.args.pipeline_model_parallel_size} should match sum of hetero_process_meshes_pp {hetero_process_meshes_pp}!"
+            )
+            assert self.args.standalone_embedding_stage == False, (
+                "standalone not supported with process_meshes set!"
+            )
             self.args.transformer_pipeline_model_parallel_size = (
                 self.args.pipeline_model_parallel_size
             )
 
             # if untie_embeddings_and_output_weights is False, the first and last stage should have the same tp degree
-            if (
-                self.args.untie_embeddings_and_output_weights == False
-                or self.args.mtp_num_layers
-            ):
-                assert (
-                    hetero_process_meshes_tp[0] == hetero_process_meshes_tp[-1]
-                ), f"if untie_embeddings_and_output_weights is False or mtp_num_layers is not 0, the first and last stage should have the same tp degree!"
+            if self.args.untie_embeddings_and_output_weights == False or self.args.mtp_num_layers:
+                assert hetero_process_meshes_tp[0] == hetero_process_meshes_tp[-1], (
+                    f"if untie_embeddings_and_output_weights is False or mtp_num_layers is not 0, the first and last stage should have the same tp degree!"
+                )
 
                 if (
                     hetero_process_meshes_dp[0] != hetero_process_meshes_dp[-1]
@@ -152,8 +150,7 @@ class FSTrainArguments:
                 ):
                     assert (
                         hetero_process_meshes_dp[0] % hetero_process_meshes_dp[-1] == 0
-                        or hetero_process_meshes_dp[-1] % hetero_process_meshes_dp[0]
-                        == 0
+                        or hetero_process_meshes_dp[-1] % hetero_process_meshes_dp[0] == 0
                     ), (
                         f"if untie_embeddings_and_output_weights is False and  hetero_process_meshes_dp[0] and hetero_process_meshes_dp[-1] are different, "
                         "the hetero_process_meshes_dp[0] should be divisible by hetero_process_meshes_dp[-1] or hetero_process_meshes_dp[-1] should be divisible by hetero_process_meshes_dp[0] currently!"
@@ -165,26 +162,27 @@ class FSTrainArguments:
 
             # Virtual parallel size.
             if self.args.enable_hetero:
-                assert (
-                    self.args.num_layers_per_virtual_pipeline_stage == None
-                ), "virtual pipeline not support now!"
+                assert self.args.num_layers_per_virtual_pipeline_stage == None, (
+                    "virtual pipeline not support now!"
+                )
 
             # Model layer splits
             if self.args.hetero_pipeline_layer_split is None:
                 num_layers_per_pipeline_stage = (
-                    self.args.num_layers
-                    // self.args.transformer_pipeline_model_parallel_size
+                    self.args.num_layers // self.args.transformer_pipeline_model_parallel_size
                 )
                 self.args.hetero_pipeline_layer_split = [
                     num_layers_per_pipeline_stage
                 ] * self.args.pipeline_model_parallel_size
             else:
-                assert (
-                    sum(self.args.hetero_pipeline_layer_split) == self.args.num_layers
-                ), f"sum of hetero_pipeline_layer_split {self.args.hetero_pipeline_layer_split} should be equal to num_layers {self.args.num_layers}"
+                assert sum(self.args.hetero_pipeline_layer_split) == self.args.num_layers, (
+                    f"sum of hetero_pipeline_layer_split {self.args.hetero_pipeline_layer_split} should be equal to num_layers {self.args.num_layers}"
+                )
                 assert self.args.pipeline_model_parallel_size == len(
                     self.args.hetero_pipeline_layer_split
-                ), f"pipeline_model_parallel_size {self.args.pipeline_model_parallel_size} should be equal to the length of hetero_pipeline_layer_split {self.args.hetero_pipeline_layer_split}"
+                ), (
+                    f"pipeline_model_parallel_size {self.args.pipeline_model_parallel_size} should be equal to the length of hetero_pipeline_layer_split {self.args.hetero_pipeline_layer_split}"
+                )
             setattr(
                 self.args,
                 "all_pipeline_model_parallel_size",
@@ -197,12 +195,12 @@ class FSTrainArguments:
             self.args.hetero_process_meshes = hetero_process_meshes
 
             # Device types
-            assert len(hetero_process_meshes) == len(
-                self.args.hetero_device_types
-            ), f"length of hetero_process_meshes {len(hetero_process_meshes)} should match length of hetero_device_types {len(self.args.hetero_device_types)}"
-            assert (
-                self.args.hetero_current_device_type in self.args.hetero_device_types
-            ), f"hetero_current_device_type {self.args.hetero_current_device_type} should be in hetero_device_types {self.args.hetero_device_types}"
+            assert len(hetero_process_meshes) == len(self.args.hetero_device_types), (
+                f"length of hetero_process_meshes {len(hetero_process_meshes)} should match length of hetero_device_types {len(self.args.hetero_device_types)}"
+            )
+            assert self.args.hetero_current_device_type in self.args.hetero_device_types, (
+                f"hetero_current_device_type {self.args.hetero_current_device_type} should be in hetero_device_types {self.args.hetero_device_types}"
+            )
 
             current_process_mesh_idx = 0
             accumulated_world_size = 0
@@ -225,10 +223,7 @@ class FSTrainArguments:
                     self.args.expert_model_parallel_size = ep
                     self.args.data_parallel_size = dp
                     self.args.pipeline_model_parallel_size = pp
-                    if (
-                        self.args.expert_tensor_parallel_size_per_process_mesh
-                        is not None
-                    ):
+                    if self.args.expert_tensor_parallel_size_per_process_mesh is not None:
                         self.args.expert_tensor_parallel_size = (
                             self.args.expert_tensor_parallel_size_per_process_mesh[
                                 current_process_mesh_idx
@@ -245,13 +240,13 @@ class FSTrainArguments:
                 current_process_mesh_idx += 1
         # DeepSeek-V4 Temporary
         if self.args.enable_hyper_connections:
-            assert (
-                not self.args.overlap_moe_expert_parallel_comm
-            ), "Hyper-connection is not supported with overlap_moe_expert_parallel_comm yet!"
+            assert not self.args.overlap_moe_expert_parallel_comm, (
+                "Hyper-connection is not supported with overlap_moe_expert_parallel_comm yet!"
+            )
         if self.args.experimental_attention_variant == "dsv4_hybrid":
-            assert (
-                self.args.context_parallel_size == 1
-            ), "Context parallelism is not supported with dsv4_hybrid attention variant yet!"
+            assert self.args.context_parallel_size == 1, (
+                "Context parallelism is not supported with dsv4_hybrid attention variant yet!"
+            )
 
     def post_validate_args(self):
         """Post-validate the arguments after Megatron function `validate_args`."""
@@ -263,9 +258,9 @@ class FSTrainArguments:
                 """Parse refined recompute configuration."""
                 if recom_config is None:
                     return None
-                assert isinstance(
-                    recom_config, list
-                ), f"[{recom_config_name}] recompute configuration, is not list."
+                assert isinstance(recom_config, list), (
+                    f"[{recom_config_name}] recompute configuration, is not list."
+                )
                 recom_config = [ast.literal_eval(item) for item in recom_config]
                 parsed_pp_size = 0
                 parsed_pp_chunk_config = []
@@ -286,24 +281,23 @@ class FSTrainArguments:
                             f"for [{recom_config_name}] refined recompute "
                             f"configuration, the sum [{len(cur_pp_stage_per_mc)}] of n0, n1, ... of sub-list should be equal to nums_micro_batch [{args.global_batch_size // (args.micro_batch_size * args.data_parallel_size)}]."
                         )
-                        if (
-                            "method" in recom_config_name
-                            or "granularity" in recom_config_name
-                        ):
-                            assert all(
-                                val == 0 or val == 1 for val in cur_pp_stage_per_mc
-                            ), f"the config-flag of {recom_config_name} must be 0 or 1"
+                        if "method" in recom_config_name or "granularity" in recom_config_name:
+                            assert all(val == 0 or val == 1 for val in cur_pp_stage_per_mc), (
+                                f"the config-flag of {recom_config_name} must be 0 or 1"
+                            )
                         parsed_pp_chunk_config.append(cur_pp_stage_per_mc)
                 if args.virtual_pipeline_model_parallel_size != None:
                     assert (
                         parsed_pp_size
                         == args.all_pipeline_model_parallel_size
                         * args.virtual_pipeline_model_parallel_size
-                    ), "for refined recompute configuration, the sum of axis 0 should be equal to pipeline-model-parallel-size * args.virtual_pipeline_model_parallel_size."
+                    ), (
+                        "for refined recompute configuration, the sum of axis 0 should be equal to pipeline-model-parallel-size * args.virtual_pipeline_model_parallel_size."
+                    )
                 else:
-                    assert (
-                        parsed_pp_size == args.all_pipeline_model_parallel_size
-                    ), "for refined recompute configuration, the sum of axis 0 should be equal to pipeline-model-parallel-size."
+                    assert parsed_pp_size == args.all_pipeline_model_parallel_size, (
+                        "for refined recompute configuration, the sum of axis 0 should be equal to pipeline-model-parallel-size."
+                    )
                 return parsed_pp_chunk_config
 
             if args.recompute_granularity_per_stage_micro_batch != None:
@@ -316,23 +310,17 @@ class FSTrainArguments:
                     "need to use a recompute method "
                 )
 
-            args.recompute_granularity_per_stage_micro_batch = (
-                _parse_recompute_refined_config(
-                    args.recompute_granularity_per_stage_micro_batch,
-                    "recompute_granularity_per_stage_micro_batch",
-                )
+            args.recompute_granularity_per_stage_micro_batch = _parse_recompute_refined_config(
+                args.recompute_granularity_per_stage_micro_batch,
+                "recompute_granularity_per_stage_micro_batch",
             )
-            args.recompute_method_per_stage_micro_batch = (
-                _parse_recompute_refined_config(
-                    args.recompute_method_per_stage_micro_batch,
-                    "recompute_method_per_stage_micro_batch",
-                )
+            args.recompute_method_per_stage_micro_batch = _parse_recompute_refined_config(
+                args.recompute_method_per_stage_micro_batch,
+                "recompute_method_per_stage_micro_batch",
             )
-            args.recompute_num_layers_per_stage_micro_batch = (
-                _parse_recompute_refined_config(
-                    args.recompute_num_layers_per_stage_micro_batch,
-                    "recompute_num_layers_per_stage_micro_batch",
-                )
+            args.recompute_num_layers_per_stage_micro_batch = _parse_recompute_refined_config(
+                args.recompute_num_layers_per_stage_micro_batch,
+                "recompute_num_layers_per_stage_micro_batch",
             )
 
         # DualPipeV related
@@ -349,18 +337,14 @@ class FSTrainArguments:
             middle_stage_layers = args.num_layers
             num_middle_stages = args.pipeline_model_parallel_size
             if args.decoder_first_pipeline_num_layers is not None:
-                middle_stage_layers = (
-                    middle_stage_layers - args.decoder_first_pipeline_num_layers
-                )
+                middle_stage_layers = middle_stage_layers - args.decoder_first_pipeline_num_layers
                 num_middle_stages = num_middle_stages - 1
                 assert args.decoder_first_pipeline_num_layers % 2 == 0, (
                     "The first pipeline stage must contain an even number of Transformer layers, "
                     "so that DualPipeV can split it into two model chunks."
                 )
             if args.decoder_last_pipeline_num_layers is not None:
-                middle_stage_layers = (
-                    middle_stage_layers - args.decoder_last_pipeline_num_layers
-                )
+                middle_stage_layers = middle_stage_layers - args.decoder_last_pipeline_num_layers
                 num_middle_stages = num_middle_stages - 1
                 assert args.decoder_last_pipeline_num_layers % 2 == 0, (
                     "The last pipeline stage must contain an even number of Transformer layers, "
@@ -368,60 +352,53 @@ class FSTrainArguments:
                 )
             if num_middle_stages > 0:
                 assert middle_stage_layers > 0, "Layers can not be empty"
-                assert (
-                    middle_stage_layers % num_middle_stages == 0
-                ), "Layers must be even split"
+                assert middle_stage_layers % num_middle_stages == 0, "Layers must be even split"
                 num_layers_in_middle_stages = middle_stage_layers // num_middle_stages
                 assert num_layers_in_middle_stages % 2 == 0, (
                     "The middle pipeline stage must contain an even number of Transformer layers, "
                     "so that DualPipeV can split it into two model chunks."
                 )
 
-            assert (
-                args.moe_shared_expert_overlap is False
-            ), " DualPipeV does not support simultaneous use with moe_shared_expert_overlap currently."
+            assert args.moe_shared_expert_overlap is False, (
+                " DualPipeV does not support simultaneous use with moe_shared_expert_overlap currently."
+            )
 
             if args.moe_fb_overlap:
-                assert (
-                    args.overlap_grad_reduce is False
-                    and args.overlap_param_gather is False
-                ), (
+                assert args.overlap_grad_reduce is False and args.overlap_param_gather is False, (
                     " DualPipeV configured with moe_fb_overlap is incompatible with either overlap_grad_reduce or overlap_param_gather. "
                     " When moe_fb_overlap is enabled, DualPipeV activates the DW-split mechanism provided by Transformer Engine, "
                     " which causes all param.grad attributes to be None during the backward-for-inputs phase. "
                     " This absence of gradient tensors violates the assumptions of both overlap_grad_reduce and overlap_param_gather, precipitating an assertion failure within DDP."
                 )
-                assert (
-                    args.transformer_impl == "transformer_engine"
-                ), "delay_wgrad_compute is only supported with transformer_engine implementation"
+                assert args.transformer_impl == "transformer_engine", (
+                    "delay_wgrad_compute is only supported with transformer_engine implementation"
+                )
 
-            assert (
-                args.untie_embeddings_and_output_weights is True
-            ), " DualPipeV is not supported with shared embedding and lm head"
-            assert (
-                args.mtp_num_layers is None
-            ), "DualPipeV is not supported with multi-token-predictor currently"
+            assert args.untie_embeddings_and_output_weights is True, (
+                " DualPipeV is not supported with shared embedding and lm head"
+            )
+            assert args.mtp_num_layers is None, (
+                "DualPipeV is not supported with multi-token-predictor currently"
+            )
 
         if args.peft_type is not None:
-            assert (
-                args.transformer_impl == "transformer_engine"
-            ), "PEFT is only supported with transformer_engine implementation"
+            assert args.transformer_impl == "transformer_engine", (
+                "PEFT is only supported with transformer_engine implementation"
+            )
             if (
                 args.num_experts is not None
                 and args.moe_shared_expert_intermediate_size is not None
             ):
-                assert (
-                    not args.moe_shared_expert_overlap
-                ), "PEFT is incompatible with moe_shared_expert_overlap"
+                assert not args.moe_shared_expert_overlap, (
+                    "PEFT is incompatible with moe_shared_expert_overlap"
+                )
             assert args.num_experts is None, "PEFT is not tested with MoE currently"
             assert (
                 args.recompute_method is None
                 and args.recompute_granularity is None
                 and args.recompute_num_layers is None
             ), "PEFT will raise comfilcts with recompute currently"
-            assert (
-                args.ckpt_format == "torch"
-            ), "PEFT is only tested with torch format checkpoint"
+            assert args.ckpt_format == "torch", "PEFT is only tested with torch format checkpoint"
 
         # Engram related.
         if self.args.use_engram:
@@ -439,39 +416,40 @@ class FSTrainArguments:
                     )
                     self.args.engram_embedding_parallel_size = None
             elif self.args.engram_embedding_parallel_method == "alltoall":
-                assert (
-                    self.args.engram_embedding_parallel_size is not None
-                ), "embedding parallel size should be specified when using alltoall"
+                assert self.args.engram_embedding_parallel_size is not None, (
+                    "embedding parallel size should be specified when using alltoall"
+                )
             else:
                 raise ValueError(
                     f"Invalid embedding parallel method: {self.args.engram_embedding_parallel_method}"
                 )
             if self.args.engram_offload_embedding_optimizer_states:
-                assert (
-                    self.args.engram_embedding_parallel_method == "alltoall"
-                ), f"Offloading embedding optimizer states is only supported when using alltoall for engram embedding parallelism, now is {self.args.engram_embedding_parallel_method}."
-                assert (
-                    self.args.optimizer_cpu_offload
-                ), "Offloading embedding optimizer states requires optimizer_cpu_offload to be enabled."
+                assert self.args.engram_embedding_parallel_method == "alltoall", (
+                    f"Offloading embedding optimizer states is only supported when using alltoall for engram embedding parallelism, now is {self.args.engram_embedding_parallel_method}."
+                )
+                assert self.args.optimizer_cpu_offload, (
+                    "Offloading embedding optimizer states requires optimizer_cpu_offload to be enabled."
+                )
                 warnings.warn(
                     "Offloading embedding optimizer states will offload all embedding optimizer states to CPU, which may cause slowdown. "
                     "Please make sure this is what you want. This is typically used to save GPU memory when Engram embedding is large while accelerators are limited."
                     "If you do not want to offload all embedding optimizer states to CPU, please disable this and set the --optimizer-offload-fraction to a value less than 1 to offload part of the optimizer states to CPU."
                     "Of course you can set the --optimizer-offload-fraction to offload other params meanwhile enable this to offload all embedding optimizer states to CPU."
                 )
-            assert (
-                not self.args.use_megatron_fsdp
-            ), "Megatron FSDP is not supported yet; support is planned for a later version."
-            assert (
-                not self.args.init_model_with_meta_device
-            ), "Init_model_with_meta_device is not supported yet; support is planned for a later version."
-            assert (
-                self.args.use_distributed_optimizer
-            ), "When use engram, distributed_optimizer must be enabled, because there is a bug caused by allreduce grad norm in model parallel group when do not use distributed_optimizer. We have not found a pretty solution yet, so disable it temporarily."
+            assert not self.args.use_megatron_fsdp, (
+                "Megatron FSDP is not supported yet; support is planned for a later version."
+            )
+            assert not self.args.init_model_with_meta_device, (
+                "Init_model_with_meta_device is not supported yet; support is planned for a later version."
+            )
+            assert self.args.use_distributed_optimizer, (
+                "When use engram, distributed_optimizer must be enabled, because there is a bug caused by allreduce grad norm in model parallel group when do not use distributed_optimizer. We have not found a pretty solution yet, so disable it temporarily."
+            )
         assert not (
-            args.pipeline_model_parallel_size == 1
-            and args.overlap_moe_expert_parallel_comm
-        ), "When no pipeline and enable overlap_moe_expert_parallel_comm, a bug will occur, it will be fixed in a later version."
+            args.pipeline_model_parallel_size == 1 and args.overlap_moe_expert_parallel_comm
+        ), (
+            "When no pipeline and enable overlap_moe_expert_parallel_comm, a bug will occur, it will be fixed in a later version."
+        )
 
 
 def _add_hetero_args(parser):
@@ -835,7 +813,7 @@ def _add_validation_args(parser):
         "--extra-eval-interval",
         type=int,
         default=None,
-        help="Interval between running evaluation on " "extra validation sets.",
+        help="Interval between running evaluation on extra validation sets.",
     )
     return parser
 
@@ -973,9 +951,7 @@ def _add_engram_args(parser):
         default=None,
         help="Embedding dimension per n-gram",
     )
-    group.add_argument(
-        "--n-head-per-ngram", type=int, default=1, help="Number of heads per n-gram"
-    )
+    group.add_argument("--n-head-per-ngram", type=int, default=1, help="Number of heads per n-gram")
     group.add_argument(
         "--engram-layer-ids",
         nargs="*",
@@ -986,9 +962,7 @@ def _add_engram_args(parser):
     group.add_argument(
         "--engram-pad-id", type=int, default=0, help="Pad token id for Engram hashing"
     )
-    group.add_argument(
-        "--engram-seed", type=int, default=0, help="Random seed for Engram hashing"
-    )
+    group.add_argument("--engram-seed", type=int, default=0, help="Random seed for Engram hashing")
     group.add_argument(
         "--engram-kernel-size",
         type=int,

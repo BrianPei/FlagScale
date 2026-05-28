@@ -23,9 +23,7 @@ class TestDiagnostic:
     @pytest.fixture
     def mock_config(self, tmp_path):
         """Mock config object"""
-        return OmegaConf.create(
-            {"train": {"system": {"logging": {"log_dir": str(tmp_path)}}}}
-        )
+        return OmegaConf.create({"train": {"system": {"logging": {"log_dir": str(tmp_path)}}}})
 
     @pytest.fixture
     def sample_log_content(self):
@@ -74,9 +72,7 @@ class TestDiagnostic:
         finally:
             os.unlink(temp_path)
 
-    def test_generate_diagnostic_report_with_errors(
-        self, mock_config, sample_log_content
-    ):
+    def test_generate_diagnostic_report_with_errors(self, mock_config, sample_log_content):
         """Test that diagnostic report is generated"""
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             f.write(sample_log_content)
@@ -122,9 +118,7 @@ class TestDiagnostic:
         finally:
             os.unlink(temp_path)
 
-    def test_generate_diagnostic_report_file_output(
-        self, mock_config, sample_log_content
-    ):
+    def test_generate_diagnostic_report_file_output(self, mock_config, sample_log_content):
         """Test that generate diagnostic report file"""
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             f.write(sample_log_content)
@@ -166,12 +160,8 @@ class TestDiagnostic:
         assert format_line_range([3]) == "3"
         assert format_line_range([2, 5, 4]) == "2-5"
 
-    def test_generate_diagnostic_report_writes_header_and_errors_incrementally(
-        self, tmp_path
-    ):
-        config = OmegaConf.create(
-            {"train": {"system": {"logging": {"log_dir": str(tmp_path)}}}}
-        )
+    def test_generate_diagnostic_report_writes_header_and_errors_incrementally(self, tmp_path):
+        config = OmegaConf.create({"train": {"system": {"logging": {"log_dir": str(tmp_path)}}}})
         log_file = tmp_path / "host_0_localhost.output"
         log_file.write_text("start\nCUDA error happened\n", encoding="utf-8")
 
@@ -186,9 +176,7 @@ class TestDiagnostic:
         assert _diagnostic_offsets["localhost_0"] == 2
 
         assert (
-            generate_diagnostic_report(
-                config, "localhost", 0, str(log_file), return_content=True
-            )
+            generate_diagnostic_report(config, "localhost", 0, str(log_file), return_content=True)
             == ""
         )
 
@@ -203,17 +191,13 @@ class TestDiagnostic:
         assert "CUDAError" not in incremental
 
     def test_generate_diagnostic_report_handles_write_error(self, tmp_path):
-        config = OmegaConf.create(
-            {"train": {"system": {"logging": {"log_dir": str(tmp_path)}}}}
-        )
+        config = OmegaConf.create({"train": {"system": {"logging": {"log_dir": str(tmp_path)}}}})
         log_file = tmp_path / "host_0_localhost.output"
         log_file.write_text("fatal error\n", encoding="utf-8")
         read_handle = MagicMock()
         read_handle.__enter__.return_value.readlines.return_value = ["fatal error\n"]
 
-        with patch(
-            "builtins.open", side_effect=[read_handle, PermissionError("readonly")]
-        ):
+        with patch("builtins.open", side_effect=[read_handle, PermissionError("readonly")]):
             report = generate_diagnostic_report(
                 config, "localhost", 0, str(log_file), return_content=True
             )

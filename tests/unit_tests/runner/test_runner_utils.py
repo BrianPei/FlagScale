@@ -171,9 +171,7 @@ def test_find_latest_stdout_log_uses_latest_attempt_and_highest_rank(tmp_path):
         path.mkdir(parents=True)
         (path / "stdout.log").write_text(str(path))
 
-    assert utils.find_latest_stdout_log(str(root)) == str(
-        latest_high_rank / "stdout.log"
-    )
+    assert utils.find_latest_stdout_log(str(root)) == str(latest_high_rank / "stdout.log")
 
 
 def test_find_latest_stdout_log_returns_none_for_missing_path(tmp_path):
@@ -184,17 +182,13 @@ def test_get_node0_log_file_handles_shared_and_non_shared_fs():
     logging_config = OmegaConf.create({"log_dir": "/tmp/logs"})
     resources = collections.OrderedDict([("worker0", {"slots": 8})])
 
-    assert (
-        utils.get_node0_log_file(logging_config, True, resources)
-        == "/tmp/logs/host.output"
-    )
+    assert utils.get_node0_log_file(logging_config, True, resources) == "/tmp/logs/host.output"
     assert (
         utils.get_node0_log_file(logging_config, False, resources)
         == "/tmp/logs/host_0_worker0.output"
     )
     assert (
-        utils.get_node0_log_file(logging_config, False, None)
-        == "/tmp/logs/host_0_localhost.output"
+        utils.get_node0_log_file(logging_config, False, None) == "/tmp/logs/host_0_localhost.output"
     )
 
 

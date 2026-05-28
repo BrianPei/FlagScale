@@ -74,9 +74,7 @@ def runner_base_module(monkeypatch):
         sys.modules["flagscale.runner.runner_base"] = previous_module
 
 
-def make_config(
-    task_type="train", backend="native", runner=None, task_extra=None, extra=None
-):
+def make_config(task_type="train", backend="native", runner=None, task_extra=None, extra=None):
     task = {"type": task_type}
     if backend is not _MISSING:
         task["backend"] = backend

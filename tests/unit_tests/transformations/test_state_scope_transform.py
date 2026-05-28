@@ -23,9 +23,7 @@ class DummyHook(ModelHook):
     def __init__(self) -> None:
         super().__init__()
 
-    def pre_forward(
-        self, module: nn.Module, *args, **kwargs
-    ) -> tuple[tuple[Any], dict[str, Any]]:
+    def pre_forward(self, module: nn.Module, *args, **kwargs) -> tuple[tuple[Any], dict[str, Any]]:
         if self._stateful:
             self._stateful[0].get_or_create_state()
         return args, kwargs
@@ -79,11 +77,11 @@ class TestStateScopeTransform(unittest.TestCase):
 
         x = torch.zeros(1, 2)
         ctx = RuntimeContext()
-        with patch(
-            "flagscale.transformations.state_scope_transformation.logger"
-        ) as logger:
-            with ctx.session():
-                _ = backbone(x)
+        with (
+            patch("flagscale.transformations.state_scope_transformation.logger") as logger,
+            ctx.session(),
+        ):
+            _ = backbone(x)
 
         logger.warning.assert_called_once()
 
@@ -96,9 +94,8 @@ class TestStateScopeTransform(unittest.TestCase):
 
         x = torch.zeros(1, 2)
         ctx = RuntimeContext(["ctxA"])
-        with patch.object(reg, "reset_stateful_hooks", reset):
-            with ctx.session():
-                _ = backbone(x)
-                _ = backbone(x)
+        with patch.object(reg, "reset_stateful_hooks", reset), ctx.session():
+            _ = backbone(x)
+            _ = backbone(x)
 
         reset.assert_called_once_with(recursive=True)

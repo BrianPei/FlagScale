@@ -11,9 +11,7 @@ from flagscale.transformations.hook import ModelHook, ModuleHookRegistry
 
 
 class DummyBlock(torch.nn.Module):
-    def __init__(
-        self, in_features: int, hidden_features: int, out_features: int
-    ) -> None:
+    def __init__(self, in_features: int, hidden_features: int, out_features: int) -> None:
         super().__init__()
 
         self.proj_in = torch.nn.Linear(in_features, hidden_features)
@@ -227,9 +225,7 @@ class HookTests(unittest.TestCase):
 
         _ = self.model(torch.zeros(1, 4))
 
-        self.assertEqual(
-            events, ["pre:second", "pre:first", "post:first", "post:second"]
-        )
+        self.assertEqual(events, ["pre:second", "pre:first", "post:first", "post:second"])
 
     def test_base_custom_forward_delegates_to_current_module_forward(self):
         hook = ModelHook()

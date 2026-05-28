@@ -78,12 +78,8 @@ def test_update_config_train_sets_default_dirs_and_resolves_tokenizer_files(tmp_
     assert config.train.system.checkpoint.save == os.path.join(exp_dir, "checkpoints")
     assert config.train.system.checkpoint.load == os.path.join(exp_dir, "checkpoints")
     assert config.train.system.logging.log_dir == os.path.join(exp_dir, "logs")
-    assert config.train.system.logging.details_dir == os.path.join(
-        exp_dir, "logs", "details"
-    )
-    assert config.train.system.logging.tensorboard_dir == os.path.join(
-        exp_dir, "tensorboard"
-    )
+    assert config.train.system.logging.details_dir == os.path.join(exp_dir, "logs", "details")
+    assert config.train.system.logging.tensorboard_dir == os.path.join(exp_dir, "tensorboard")
     assert config.train.system.logging.wandb_save_dir == os.path.join(exp_dir, "wandb")
     assert config.train.data.tokenizer.vocab_file == str(vocab.resolve())
     assert config.train.data.tokenizer.merge_file == str(merge.resolve())
@@ -95,9 +91,7 @@ def test_get_runner_cmd_train_filters_launcher_only_options_and_sets_distributed
     config = make_train_config(tmp_path, runner_extra={"rdzv_id": "run-1"})
     config.train.system.logging.details_dir = str(tmp_path / "details")
 
-    cmd = runner_train._get_runner_cmd_train(
-        "worker0", "10.0.0.1", 29500, 2, 1, 4, config
-    )
+    cmd = runner_train._get_runner_cmd_train("worker0", "10.0.0.1", 29500, 2, 1, 4, config)
 
     joined = " ".join(cmd)
     assert cmd[0] == "torchrun"
@@ -116,9 +110,7 @@ def test_get_runner_cmd_train_per_node_task_overrides_topology(tmp_path):
     config = make_train_config(tmp_path, runner_extra={"per_node_task": True})
     config.train.system.logging.details_dir = str(tmp_path / "details")
 
-    cmd = runner_train._get_runner_cmd_train(
-        "worker0", "10.0.0.1", 29500, 8, 7, 4, config
-    )
+    cmd = runner_train._get_runner_cmd_train("worker0", "10.0.0.1", 29500, 8, 7, 4, config)
     joined = " ".join(cmd)
 
     assert "--nnodes 1" in joined
@@ -153,9 +145,7 @@ def test_update_config_inference_sets_log_dirs(tmp_path):
     assert config.inference.logging.scripts_dir == os.path.join(
         exp_dir, "inference_logs", "scripts"
     )
-    assert config.inference.logging.pids_dir == os.path.join(
-        exp_dir, "inference_logs", "pids"
-    )
+    assert config.inference.logging.pids_dir == os.path.join(exp_dir, "inference_logs", "pids")
     assert os.path.isdir(config.inference.logging.scripts_dir)
 
 

@@ -11,9 +11,7 @@ def _ensure_torch_module():
         importlib.import_module("torch")
     except ModuleNotFoundError:
         fake_torch = types.ModuleType("torch")
-        fake_torch.device = MagicMock(
-            side_effect=lambda kind, index=None: (kind, index)
-        )
+        fake_torch.device = MagicMock(side_effect=lambda kind, index=None: (kind, index))
         fake_torch.cuda = types.SimpleNamespace(
             is_available=MagicMock(return_value=False),
             device_count=MagicMock(return_value=0),
@@ -263,15 +261,9 @@ def test_register_platforms_registers_only_available_platforms(monkeypatch):
         platform_register,
     )
 
-    monkeypatch.setattr(
-        platform_cuda, "PlatformCUDA", lambda: DummyPlatform("cuda", True)
-    )
-    monkeypatch.setattr(
-        platform_npu, "PlatformNPU", lambda: DummyPlatform("npu", False)
-    )
-    monkeypatch.setattr(
-        platform_musa, "PlatformMUSA", lambda: DummyPlatform("musa", True)
-    )
+    monkeypatch.setattr(platform_cuda, "PlatformCUDA", lambda: DummyPlatform("cuda", True))
+    monkeypatch.setattr(platform_npu, "PlatformNPU", lambda: DummyPlatform("npu", False))
+    monkeypatch.setattr(platform_musa, "PlatformMUSA", lambda: DummyPlatform("musa", True))
 
     platform_register.register_platforms()
 
@@ -288,15 +280,9 @@ def test_register_platforms_is_idempotent_for_repeated_registration(monkeypatch)
         platform_register,
     )
 
-    monkeypatch.setattr(
-        platform_cuda, "PlatformCUDA", lambda: DummyPlatform("cuda", True)
-    )
-    monkeypatch.setattr(
-        platform_npu, "PlatformNPU", lambda: DummyPlatform("npu", False)
-    )
-    monkeypatch.setattr(
-        platform_musa, "PlatformMUSA", lambda: DummyPlatform("musa", False)
-    )
+    monkeypatch.setattr(platform_cuda, "PlatformCUDA", lambda: DummyPlatform("cuda", True))
+    monkeypatch.setattr(platform_npu, "PlatformNPU", lambda: DummyPlatform("npu", False))
+    monkeypatch.setattr(platform_musa, "PlatformMUSA", lambda: DummyPlatform("musa", False))
 
     platform_register.register_platforms()
     first_cuda = platform_register.PLATFORMS["cuda"]
@@ -316,15 +302,9 @@ def test_register_platforms_keeps_registry_empty_when_all_platforms_unavailable(
         platform_register,
     )
 
-    monkeypatch.setattr(
-        platform_cuda, "PlatformCUDA", lambda: DummyPlatform("cuda", False)
-    )
-    monkeypatch.setattr(
-        platform_npu, "PlatformNPU", lambda: DummyPlatform("npu", False)
-    )
-    monkeypatch.setattr(
-        platform_musa, "PlatformMUSA", lambda: DummyPlatform("musa", False)
-    )
+    monkeypatch.setattr(platform_cuda, "PlatformCUDA", lambda: DummyPlatform("cuda", False))
+    monkeypatch.setattr(platform_npu, "PlatformNPU", lambda: DummyPlatform("npu", False))
+    monkeypatch.setattr(platform_musa, "PlatformMUSA", lambda: DummyPlatform("musa", False))
 
     platform_register.register_platforms()
 
@@ -359,9 +339,7 @@ def test_get_platform_auto_detects_priority_and_reports_no_available_platform(
 ):
     from flagscale.platforms import platform_manager, platform_register
 
-    platform_register.PLATFORMS.update(
-        {"musa": DummyPlatform("musa"), "npu": DummyPlatform("npu")}
-    )
+    platform_register.PLATFORMS.update({"musa": DummyPlatform("musa"), "npu": DummyPlatform("npu")})
     assert platform_manager.get_platform().name() == "npu"
 
     platform_manager._current_platform = None

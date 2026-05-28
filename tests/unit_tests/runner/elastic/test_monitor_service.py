@@ -121,9 +121,7 @@ def test_check_pid_file_anomaly_detects_dead_process(tmp_path, mocker):
 
 def test_collect_logs_and_diagnostics_route_to_each_resource(tmp_path, mocker):
     resources = {"worker0": {}, "worker1": {}}
-    service = MonitorService(
-        make_monitor_config(tmp_path), FakeRunner(resources), interval=1
-    )
+    service = MonitorService(make_monitor_config(tmp_path), FakeRunner(resources), interval=1)
     collect = mocker.patch.object(service, "_collect_logs_for_host")
     diagnostic = mocker.patch.object(service, "_generate_diagnostic_for_host")
 
@@ -143,9 +141,7 @@ def test_check_log_hang_detects_stale_local_log(tmp_path, mocker):
     log_file = log_dir / "host_0_localhost.output"
     log_file.write_text("old log")
     service = MonitorService(config, FakeRunner(), interval=1)
-    mocker.patch(
-        "flagscale.runner.elastic.monitor_service.os.path.getmtime", return_value=100
-    )
+    mocker.patch("flagscale.runner.elastic.monitor_service.os.path.getmtime", return_value=100)
     mocker.patch("flagscale.runner.elastic.monitor_service.time.time", return_value=131)
 
     assert service._check_log_hang("localhost", 0) is True
@@ -184,9 +180,7 @@ def test_check_and_report_hang_generates_diagnostic_for_hanging_nodes(tmp_path, 
     generate.assert_called_once_with("worker0", 0)
 
 
-def test_monitor_loop_runs_collection_diagnostic_and_stops_on_completed(
-    tmp_path, mocker
-):
+def test_monitor_loop_runs_collection_diagnostic_and_stops_on_completed(tmp_path, mocker):
     service = MonitorService(
         make_monitor_config(tmp_path),
         FakeRunner(statuses=[JobStatus.RUNNING, JobStatus.COMPLETED_OR_IDLE]),
@@ -224,12 +218,8 @@ def test_signal_handler_stops_service_and_exits(tmp_path, mocker):
 
 
 def test_detect_abnormal_termination_local_and_multi_node(tmp_path, mocker):
-    local_service = MonitorService(
-        make_monitor_config(tmp_path), FakeRunner(), interval=1
-    )
-    local_check = mocker.patch.object(
-        local_service, "_check_pid_file_anomaly", return_value=True
-    )
+    local_service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    local_check = mocker.patch.object(local_service, "_check_pid_file_anomaly", return_value=True)
 
     assert local_service._detect_abnormal_termination() is True
     local_check.assert_called_once_with("localhost", 0)
@@ -252,9 +242,7 @@ def test_detect_abnormal_termination_local_and_multi_node(tmp_path, mocker):
 
 def test_detect_abnormal_termination_handles_exception(tmp_path, mocker):
     service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
-    mocker.patch.object(
-        service, "_check_pid_file_anomaly", side_effect=RuntimeError("bad")
-    )
+    mocker.patch.object(service, "_check_pid_file_anomaly", side_effect=RuntimeError("bad"))
     logger = mocker.patch("flagscale.runner.elastic.monitor_service.logger")
 
     assert service._detect_abnormal_termination() is False
@@ -308,9 +296,7 @@ def test_write_manual_kill_diagnostic_routes_single_local_and_multi(tmp_path, mo
     assert single_write.call_args.args[:2] == ("worker0", 2)
     assert "MANUAL KILL DETECTED" in single_write.call_args.args[2]
 
-    local_service = MonitorService(
-        make_monitor_config(tmp_path), FakeRunner(), interval=1
-    )
+    local_service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
     local_write = mocker.patch.object(local_service, "_write_diagnostic_entry")
     local_service._write_manual_kill_diagnostic()
     assert local_write.call_args.args[:2] == ("localhost", 0)
@@ -334,9 +320,7 @@ def test_write_diagnostic_entry_creates_header_and_appends(tmp_path):
     service._write_diagnostic_entry("localhost", 0, "manual kill")
     service._write_diagnostic_entry("localhost", 0, "second entry")
 
-    diagnostic_file = os.path.join(
-        service.monitor_log_dir, "host_0_localhost_diagnostic.txt"
-    )
+    diagnostic_file = os.path.join(service.monitor_log_dir, "host_0_localhost_diagnostic.txt")
     content = open(diagnostic_file, encoding="utf-8").read()
     assert "Diagnostic Report for localhost (node 0)" in content
     assert "manual kill" in content
@@ -390,9 +374,7 @@ def test_generate_diagnostic_for_host_uses_current_log(tmp_path, mocker):
     )
 
 
-def test_generate_diagnostic_for_host_uses_source_log_and_no_shared_fs(
-    tmp_path, mocker
-):
+def test_generate_diagnostic_for_host_uses_source_log_and_no_shared_fs(tmp_path, mocker):
     config = make_monitor_config(tmp_path, no_shared_fs=True)
     log_dir = tmp_path / "logs"
     log_dir.mkdir(exist_ok=True)
@@ -430,14 +412,10 @@ def test_generate_diagnostic_for_host_logs_no_file_and_exception(tmp_path, mocke
 
 
 def test_generate_hang_diagnostic_creates_file_for_local_and_no_shared_fs(tmp_path):
-    service = MonitorService(
-        make_monitor_config(tmp_path, timeout=120), FakeRunner(), interval=1
-    )
+    service = MonitorService(make_monitor_config(tmp_path, timeout=120), FakeRunner(), interval=1)
     service._generate_hang_diagnostic("localhost", 0)
 
-    diagnostic_file = os.path.join(
-        service.monitor_log_dir, "host_0_localhost_diagnostic.txt"
-    )
+    diagnostic_file = os.path.join(service.monitor_log_dir, "host_0_localhost_diagnostic.txt")
     content = open(diagnostic_file, encoding="utf-8").read()
     assert "HangError" in content
     assert "host_0_localhost.output" in content
@@ -473,20 +451,14 @@ def test_check_and_report_hang_single_and_local_modes(tmp_path, mocker):
         host="worker0",
         node_rank=1,
     )
-    single_check = mocker.patch.object(
-        single_service, "_check_log_hang", return_value=True
-    )
+    single_check = mocker.patch.object(single_service, "_check_log_hang", return_value=True)
     single_generate = mocker.patch.object(single_service, "_generate_hang_diagnostic")
     single_service._check_and_report_hang()
     single_check.assert_called_once_with("worker0", 1)
     single_generate.assert_called_once_with("worker0", 1)
 
-    local_service = MonitorService(
-        make_monitor_config(tmp_path), FakeRunner(), interval=1
-    )
-    local_check = mocker.patch.object(
-        local_service, "_check_log_hang", return_value=True
-    )
+    local_service = MonitorService(make_monitor_config(tmp_path), FakeRunner(), interval=1)
+    local_check = mocker.patch.object(local_service, "_check_log_hang", return_value=True)
     local_generate = mocker.patch.object(local_service, "_generate_hang_diagnostic")
     local_service._check_and_report_hang()
     local_check.assert_called_once_with("localhost", 0)

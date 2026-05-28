@@ -131,9 +131,7 @@ class TestGPUHealthCheck:
 
         with (
             patch("sys.argv", ["gpu_health_check.py", *test_args]),
-            patch.dict(
-                os.environ, {"RANK": "0", "WORLD_SIZE": "16", "LOCAL_RANK": "0"}
-            ),
+            patch.dict(os.environ, {"RANK": "0", "WORLD_SIZE": "16", "LOCAL_RANK": "0"}),
         ):
             args = parse_args()
 
@@ -145,9 +143,7 @@ class TestGPUHealthCheck:
     @patch("torch.distributed.is_initialized", return_value=True)
     @patch("torch.distributed.get_world_size", return_value=8)
     @patch("torch.distributed.get_rank", return_value=0)
-    def test_initialize_model_parallel_valid_config(
-        self, mock_rank, mock_world_size, mock_init
-    ):
+    def test_initialize_model_parallel_valid_config(self, mock_rank, mock_world_size, mock_init):
         """Test initialize_model_parallel with valid configuration"""
         from flagscale.runner.elastic.gpu_health_check import initialize_model_parallel
 
@@ -159,9 +155,7 @@ class TestGPUHealthCheck:
             mock_new_group.return_value = mock_group
 
             # Test TP=2, PP=2, world_size=8 (2*2*2=8, valid)
-            initialize_model_parallel(
-                tensor_model_parallel_size=2, pipeline_model_parallel_size=2
-            )
+            initialize_model_parallel(tensor_model_parallel_size=2, pipeline_model_parallel_size=2)
 
             assert mock_new_group.called
 
@@ -177,9 +171,7 @@ class TestGPUHealthCheck:
 
         with patch("torch.distributed.new_group"):
             # TP=1, PP=1 means data parallel only
-            initialize_model_parallel(
-                tensor_model_parallel_size=1, pipeline_model_parallel_size=1
-            )
+            initialize_model_parallel(tensor_model_parallel_size=1, pipeline_model_parallel_size=1)
 
     @patch("torch.distributed.is_initialized", return_value=True)
     @patch("torch.distributed.get_world_size", return_value=8)
@@ -264,9 +256,7 @@ class TestGPUHealthCheck:
         ):
             health_check.check_computation()
 
-            with patch(
-                "flagscale.runner.elastic.gpu_health_check.log_check_result"
-            ) as mock_log:
+            with patch("flagscale.runner.elastic.gpu_health_check.log_check_result") as mock_log:
                 health_check.check_computation()
                 mock_log.assert_called_with("gpu_computation", "passed")
 
@@ -284,9 +274,9 @@ class TestGPUHealthCheck:
 
         for world_size, tp, pp, expected_dp in test_cases:
             calculated_dp = world_size // (tp * pp)
-            assert (
-                calculated_dp == expected_dp
-            ), f"Failed for world_size={world_size}, TP={tp}, PP={pp}"
+            assert calculated_dp == expected_dp, (
+                f"Failed for world_size={world_size}, TP={tp}, PP={pp}"
+            )
 
     @patch("torch.distributed.is_initialized", return_value=True)
     @patch("torch.distributed.get_world_size", return_value=8)
@@ -302,9 +292,7 @@ class TestGPUHealthCheck:
             patch("torch.distributed.new_group"),
             patch("builtins.print") as mock_print,
         ):
-            initialize_model_parallel(
-                tensor_model_parallel_size=2, pipeline_model_parallel_size=2
-            )
+            initialize_model_parallel(tensor_model_parallel_size=2, pipeline_model_parallel_size=2)
 
             assert mock_print.called
 
@@ -355,23 +343,19 @@ class TestGPUHealthCheck:
 
         for world_size, tp, pp in invalid_configs:
             # These should not divide evenly
-            assert (
-                world_size % (tp * pp) != 0
-            ), f"Expected invalid config: world_size={world_size}, TP={tp}, PP={pp}"
+            assert world_size % (tp * pp) != 0, (
+                f"Expected invalid config: world_size={world_size}, TP={tp}, PP={pp}"
+            )
 
     @patch("torch.distributed.is_initialized", return_value=True)
     @patch("torch.distributed.get_rank", return_value=0)
     @patch("torch.cuda.is_available", return_value=True)
     @patch("torch.cuda.device_count", return_value=8)
-    def test_main_function_single_process(
-        self, mock_device_count, mock_cuda, mock_rank, mock_init
-    ):
+    def test_main_function_single_process(self, mock_device_count, mock_cuda, mock_rank, mock_init):
         """Test main function in single-process mode"""
         from flagscale.runner.elastic.gpu_health_check import main
 
-        with patch(
-            "flagscale.runner.elastic.gpu_health_check.parse_args"
-        ) as mock_parse_args:
+        with patch("flagscale.runner.elastic.gpu_health_check.parse_args") as mock_parse_args:
             mock_args = MagicMock()
             mock_args.tensor_model_parallel_size = 1
             mock_args.pipeline_model_parallel_size = 1
@@ -387,23 +371,17 @@ class TestGPUHealthCheck:
                 ) as mock_safe_exec,
             ):
                 mock_safe_exec.return_value = True
-                with patch(
-                    "flagscale.runner.elastic.gpu_health_check.print_check_summary"
-                ):
+                with patch("flagscale.runner.elastic.gpu_health_check.print_check_summary"):
                     main()
 
     @patch("torch.distributed.is_initialized", return_value=False)
     @patch("torch.cuda.is_available", return_value=True)
     @patch("torch.cuda.device_count", return_value=8)
-    def test_main_function_multi_process(
-        self, mock_device_count, mock_cuda, mock_is_init
-    ):
+    def test_main_function_multi_process(self, mock_device_count, mock_cuda, mock_is_init):
         """Test main function in multi-process mode"""
         from flagscale.runner.elastic.gpu_health_check import main
 
-        with patch(
-            "flagscale.runner.elastic.gpu_health_check.parse_args"
-        ) as mock_parse_args:
+        with patch("flagscale.runner.elastic.gpu_health_check.parse_args") as mock_parse_args:
             mock_args = MagicMock()
             mock_args.tensor_model_parallel_size = 2
             mock_args.pipeline_model_parallel_size = 2
@@ -416,9 +394,7 @@ class TestGPUHealthCheck:
 
             with (
                 patch.dict(os.environ, {"WORLD_SIZE": "8", "RANK": "0"}),
-                patch(
-                    "flagscale.runner.elastic.gpu_health_check.initialize_distributed"
-                ),
+                patch("flagscale.runner.elastic.gpu_health_check.initialize_distributed"),
                 patch("flagscale.runner.elastic.gpu_health_check.check_communication"),
                 patch("flagscale.runner.elastic.gpu_health_check.check_hardware"),
                 patch("flagscale.runner.elastic.gpu_health_check.check_computation"),
@@ -458,16 +434,11 @@ class TestGPUHealthCheck:
             raise RuntimeError("boom")
 
         with patch.object(health_check, "log_check_result") as mock_log:
-            assert (
-                health_check.safe_check_execution(timeout_check, "tensor_parallel")
-                is False
-            )
+            assert health_check.safe_check_execution(timeout_check, "tensor_parallel") is False
             mock_log.assert_called_with("tensor_parallel", "failed", "check timed out")
 
         with patch.object(health_check, "log_check_result") as mock_log:
-            assert (
-                health_check.safe_check_execution(error_check, "data_parallel") is False
-            )
+            assert health_check.safe_check_execution(error_check, "data_parallel") is False
             mock_log.assert_called_with("data_parallel", "failed", "Exception: boom")
 
     def test_log_check_result_updates_state_and_prints_rank0(self):
@@ -566,9 +537,7 @@ class TestGPUHealthCheck:
             patch.object(health_check, "log_check_result") as mock_log,
         ):
             assert health_check.check_hardware_single() is False
-            mock_log.assert_called_with(
-                "gpu_hardware", status="failed", error="driver unavailable"
-            )
+            mock_log.assert_called_with("gpu_hardware", status="failed", error="driver unavailable")
 
     @pytest.mark.parametrize(
         ("nan_result", "inf_result", "expected"),
@@ -592,8 +561,7 @@ class TestGPUHealthCheck:
             patch("torch.any", side_effect=[nan_result, inf_result]),
         ):
             assert (
-                health_check.check_computation_for_different_dtype("float32", "float")
-                is expected
+                health_check.check_computation_for_different_dtype("float32", "float") is expected
             )
 
     def test_check_computation_single_reports_failure_when_any_subcheck_fails(self):
@@ -606,9 +574,7 @@ class TestGPUHealthCheck:
                 "check_computation_for_different_dtype",
                 side_effect=[True, False, True],
             ),
-            patch.object(
-                health_check, "check_computation_endurance", return_value=True
-            ),
+            patch.object(health_check, "check_computation_endurance", return_value=True),
             patch.object(health_check, "check_ecc_error", return_value=True),
             patch.object(health_check, "log_check_result") as mock_log,
         ):
@@ -634,9 +600,7 @@ class TestGPUHealthCheck:
             assert health_check.check_ecc_error() is True
             assert empty_cache.call_count == 5
 
-        with patch(
-            "torch.randn", side_effect=health_check.torch.cuda.OutOfMemoryError("oom")
-        ):
+        with patch("torch.randn", side_effect=health_check.torch.cuda.OutOfMemoryError("oom")):
             assert health_check.check_ecc_error() is False
 
         with patch("torch.randn", side_effect=RuntimeError("cuda launch failed")):
@@ -683,9 +647,7 @@ class TestGPUHealthCheck:
         from flagscale.runner.elastic import gpu_health_check as health_check
 
         with patch.object(health_check, "log_check_result") as mock_log:
-            assert (
-                health_check.safe_check_execution(lambda: None, "gpu_hardware") is True
-            )
+            assert health_check.safe_check_execution(lambda: None, "gpu_hardware") is True
             mock_log.assert_not_called()
 
         with (
@@ -764,9 +726,7 @@ class TestGPUHealthCheck:
             patch("torch.distributed.is_initialized", return_value=False),
             patch("torch.distributed.init_process_group") as mock_init,
             patch("torch.distributed.new_group", return_value="gloo-world"),
-            patch.object(
-                health_check, "initialize_model_parallel"
-            ) as mock_model_parallel,
+            patch.object(health_check, "initialize_model_parallel") as mock_model_parallel,
         ):
             health_check.initialize_distributed(rank=0, world_size=2)
 
@@ -830,9 +790,9 @@ class TestGPUHealthCheck:
             patch("torch.tensor", return_value=FakeTensor(99)),
             patch("torch.distributed.all_reduce"),
             patch("torch.allclose", return_value=False),
+            pytest.raises(AssertionError, match="TP all_reduce wrong"),
         ):
-            with pytest.raises(AssertionError, match="TP all_reduce wrong"):
-                health_check.check_tensor_parallel_group()
+            health_check.check_tensor_parallel_group()
 
         health_check._GLOBAL_ARGS.tensor_model_parallel_size = 1
         health_check._GLOBAL_ARGS.pipeline_model_parallel_size = 1
@@ -861,9 +821,9 @@ class TestGPUHealthCheck:
         with (
             patch("torch.distributed.get_rank", return_value=0),
             patch.object(health_check, "control_barrier"),
+            pytest.raises(RuntimeError, match="not found"),
         ):
-            with pytest.raises(RuntimeError, match="not found"):
-                health_check.check_pipeline_parallel_group()
+            health_check.check_pipeline_parallel_group()
 
     def test_computation_endurance_success_and_nan_failure(self):
         """Cover endurance loop success and NaN failure branch without waiting."""
@@ -948,26 +908,18 @@ class TestGPUHealthCheck:
                 "check_computation_for_different_dtype",
                 side_effect=[False, True, True],
             ),
-            patch.object(
-                health_check, "check_computation_endurance", return_value=True
-            ),
+            patch.object(health_check, "check_computation_endurance", return_value=True),
             patch.object(health_check, "check_ecc_error", return_value=True),
             patch("torch.zeros", return_value=result_tensor),
             patch("torch.ones_like", return_value=expected_tensor),
-            patch(
-                "torch.distributed.all_reduce", side_effect=RuntimeError("reduce fail")
-            ),
-            patch(
-                "torch.distributed.barrier", side_effect=RuntimeError("barrier fail")
-            ),
+            patch("torch.distributed.all_reduce", side_effect=RuntimeError("reduce fail")),
+            patch("torch.distributed.barrier", side_effect=RuntimeError("barrier fail")),
             patch.object(health_check, "log_check_result") as mock_log,
             patch("builtins.print") as mock_print,
         ):
             health_check.check_computation()
 
-        mock_log.assert_called_with(
-            "gpu_computation", "failed", "Failed checks: Float computation"
-        )
+        mock_log.assert_called_with("gpu_computation", "failed", "Failed checks: Float computation")
         output = "\n".join(str(call.args[0]) for call in mock_print.call_args_list)
         assert "Failed to gather" in output
         assert "barrier failed" in output
@@ -1029,14 +981,12 @@ class TestGPUHealthCheck:
 
         with (
             patch.object(health_check, "parse_args", return_value=single_args),
-            patch.object(
-                health_check, "safe_check_execution", side_effect=single_safe_execution
-            ),
+            patch.object(health_check, "safe_check_execution", side_effect=single_safe_execution),
             patch.object(health_check, "print_check_summary"),
             patch("sys.exit", side_effect=SystemExit(1)) as mock_exit,
+            pytest.raises(SystemExit),
         ):
-            with pytest.raises(SystemExit):
-                health_check.main()
+            health_check.main()
         mock_exit.assert_called_once_with(1)
 
         multi_args = MagicMock(
@@ -1054,9 +1004,7 @@ class TestGPUHealthCheck:
         }
         with (
             patch.object(health_check, "parse_args", return_value=multi_args),
-            patch.object(
-                health_check, "initialize_distributed", side_effect=RuntimeError("boom")
-            ),
+            patch.object(health_check, "initialize_distributed", side_effect=RuntimeError("boom")),
             patch("torch.distributed.is_initialized", return_value=True),
             patch(
                 "torch.distributed.destroy_process_group",
@@ -1065,9 +1013,9 @@ class TestGPUHealthCheck:
             patch.object(health_check, "print_check_summary"),
             patch("builtins.print") as mock_print,
             patch("sys.exit", side_effect=SystemExit(1)) as mock_exit,
+            pytest.raises(SystemExit),
         ):
-            with pytest.raises(SystemExit):
-                health_check.main()
+            health_check.main()
 
         output = "\n".join(str(call.args[0]) for call in mock_print.call_args_list)
         assert "Critical error" in output

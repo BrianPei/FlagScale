@@ -18,9 +18,7 @@ def test_monitor_runner_query_status_returns_completed_when_pid_file_missing(tmp
     ("returncode", "expected"),
     [(0, JobStatus.RUNNING), (1, JobStatus.COMPLETED_OR_IDLE)],
 )
-def test_monitor_runner_query_status_reads_pid_and_checks_process(
-    tmp_path, returncode, expected
-):
+def test_monitor_runner_query_status_reads_pid_and_checks_process(tmp_path, returncode, expected):
     pid_file = tmp_path / "train.pid"
     pid_file.write_text("12345")
     runner = MonitorRunner(MagicMock(), str(pid_file))
@@ -61,14 +59,12 @@ def test_main_waits_for_pid_timeout_and_exits(tmp_path):
             "flagscale.runner.elastic.monitor_launcher.os.path.exists",
             return_value=False,
         ),
-        patch(
-            "flagscale.runner.elastic.monitor_launcher.time.time", side_effect=[0, 61]
-        ),
+        patch("flagscale.runner.elastic.monitor_launcher.time.time", side_effect=[0, 61]),
         patch("flagscale.runner.elastic.monitor_launcher.time.sleep") as sleep,
         patch("flagscale.runner.elastic.monitor_launcher.logger") as logger,
+        pytest.raises(SystemExit) as exc,
     ):
-        with pytest.raises(SystemExit) as exc:
-            monitor_launcher.main()
+        monitor_launcher.main()
 
     assert exc.value.code == 1
     sleep.assert_not_called()

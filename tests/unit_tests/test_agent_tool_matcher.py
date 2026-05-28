@@ -19,9 +19,7 @@ def test_degradation_weights_and_errors(monkeypatch):
     matcher.set_degradation("semantic", True)
     assert matcher.get_degradation_status()["semantic"] is True
     assert matcher.get_effective_weights()["semantic"] == 0.0
-    assert matcher.normalize_weights(
-        {"semantic": 0.0, "keyword": 0.2, "category": 0.1}
-    ) == {
+    assert matcher.normalize_weights({"semantic": 0.0, "keyword": 0.2, "category": 0.1}) == {
         "semantic": 0.0,
         "keyword": pytest.approx(2 / 3),
         "category": pytest.approx(1 / 3),
@@ -32,9 +30,7 @@ def test_degradation_weights_and_errors(monkeypatch):
 
     matcher.set_degradation("keyword", True)
     matcher.set_degradation("category", True)
-    assert matcher.normalize_weights(
-        {"semantic": 0.0, "keyword": 0.0, "category": 0.0}
-    ) == {
+    assert matcher.normalize_weights({"semantic": 0.0, "keyword": 0.0, "category": 0.0}) == {
         "semantic": 0.0,
         "keyword": 0.0,
         "category": 0.0,
@@ -139,12 +135,8 @@ def test_network_and_model_initialization_paths(monkeypatch):
 
     fake_sentence_transformers = types.ModuleType("sentence_transformers")
     fake_sentence_transformers.SentenceTransformer = FakeSentenceTransformer
-    monkeypatch.setitem(
-        sys.modules, "sentence_transformers", fake_sentence_transformers
-    )
-    monkeypatch.setattr(
-        module.ToolMatcher, "_check_network_connectivity", lambda self: True
-    )
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_sentence_transformers)
+    monkeypatch.setattr(module.ToolMatcher, "_check_network_connectivity", lambda self: True)
 
     matcher = module.ToolMatcher()
     assert isinstance(matcher.model, FakeSentenceTransformer)
@@ -152,9 +144,7 @@ def test_network_and_model_initialization_paths(monkeypatch):
 
 
 def test_model_initialization_degrades_when_network_or_import_fails(monkeypatch):
-    module = importlib.reload(
-        importlib.import_module("flagscale.agent.tool_match.tool_matcher")
-    )
+    module = importlib.reload(importlib.import_module("flagscale.agent.tool_match.tool_matcher"))
 
     class FakeSentenceTransformer:
         def __init__(self, name):
@@ -162,12 +152,8 @@ def test_model_initialization_degrades_when_network_or_import_fails(monkeypatch)
 
     fake_sentence_transformers = types.ModuleType("sentence_transformers")
     fake_sentence_transformers.SentenceTransformer = FakeSentenceTransformer
-    monkeypatch.setitem(
-        sys.modules, "sentence_transformers", fake_sentence_transformers
-    )
-    monkeypatch.setattr(
-        module.ToolMatcher, "_check_network_connectivity", lambda self: False
-    )
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_sentence_transformers)
+    monkeypatch.setattr(module.ToolMatcher, "_check_network_connectivity", lambda self: False)
 
     matcher = module.ToolMatcher()
     assert matcher.model is None
