@@ -216,7 +216,6 @@ def test_save_and_read_history_roundtrip_types(tmp_path):
             "sequence_parallel": True,
             "dims": [1, 2],
             "meta": {"a": 1},
-            "stopped_by_tuner": None,
         }
     ]
 
