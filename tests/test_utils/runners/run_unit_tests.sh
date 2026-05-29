@@ -81,7 +81,7 @@ run_unit_tests_for_device() {
         USE_COVERAGE=true
         mkdir -p "$COVERAGE_DIR"
         COVERAGERC="$COVERAGE_DIR/.coveragerc"
-        # Route B: keep unit-testable modules in coverage, but exclude heavy
+        # keep unit-testable modules in coverage, but exclude heavy
         # model/training/inference/serve-engine paths that are validated by
         # functional or integration tests instead of unit coverage gates.
         cat > "$COVERAGERC" <<EOF
@@ -89,8 +89,8 @@ run_unit_tests_for_device() {
 parallel = true
 source =
     $PROJECT_ROOT/flagscale
-    $PROJECT_ROOT/tools/install
 omit =
+    */tools/*
     */tests/*
     */examples/*
     */docs/*
