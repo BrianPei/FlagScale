@@ -81,20 +81,29 @@ run_unit_tests_for_device() {
         USE_COVERAGE=true
         mkdir -p "$COVERAGE_DIR"
         COVERAGERC="$COVERAGE_DIR/.coveragerc"
+        # Route B: keep unit-testable modules in coverage, but exclude heavy
+        # model/training/inference/serve-engine paths that are validated by
+        # functional or integration tests instead of unit coverage gates.
         cat > "$COVERAGERC" <<EOF
 [run]
 parallel = true
 source =
     $PROJECT_ROOT/flagscale
+    $PROJECT_ROOT/tools/install
 omit =
-    */tools/*
     */tests/*
     */examples/*
     */docs/*
     */docker/*
     */setup.py
-    */run.py
     */__init__.py
+    */flagscale/models/*
+    */flagscale/inference/*
+    */flagscale/train/megatron/*
+    */flagscale/serve/engine.py
+    */flagscale/serve/run_*.py
+    */flagscale/serve/websocket_policy_server.py
+    */flagscale/serve/managers/*
 data_file = $COVERAGE_DIR/.coverage
 EOF
     fi
