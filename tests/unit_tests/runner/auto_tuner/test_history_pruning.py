@@ -110,6 +110,50 @@ def test_prune_by_recompute_uniform_larger_num_layers_oom():
     assert current["max_mem"] == "OOM"
 
 
+def test_prune_by_recompute_block_larger_num_layers_reuses_success():
+    current = _strategy(
+        use_recompute=True,
+        recompute_method="block",
+        recompute_granularity="full",
+        recompute_num_layers=4,
+    )
+    hist = [
+        _strategy(
+            use_recompute=True,
+            recompute_method="block",
+            recompute_granularity="full",
+            recompute_num_layers=2,
+            performance=77.0,
+            max_mem=1234,
+        )
+    ]
+
+    assert history_prune.prune_by_recompute(None, current, hist) is True
+    assert current["performance"] == 77.0
+    assert current["max_mem"] == 1234
+
+
+def test_prune_by_recompute_block_smaller_num_layers_oom():
+    current = _strategy(
+        use_recompute=True,
+        recompute_method="block",
+        recompute_granularity="full",
+        recompute_num_layers=1,
+    )
+    hist = [
+        _strategy(
+            use_recompute=True,
+            recompute_method="block",
+            recompute_granularity="full",
+            recompute_num_layers=4,
+            max_mem="OOM",
+        )
+    ]
+
+    assert history_prune.prune_by_recompute(None, current, hist) is True
+    assert current["max_mem"] == "OOM"
+
+
 def test_prune_by_sequence_parallel_reuses_sp_success_for_no_sp_performance():
     current = _strategy(sequence_parallel=False, tensor_model_parallel_size=2)
     hist = [
@@ -156,6 +200,417 @@ def test_prune_by_mbs_recompute_sp_combines_all_memory_rules():
 
     assert history_prune.prune_by_mbs_recompute_sp(None, current, hist) is True
     assert current["max_mem"] == "OOM"
+
+
+@pytest.mark.parametrize(
+    ("func_name", "current_overrides", "history_overrides"),
+    [
+        (
+            "prune_by_mbs_recompute",
+            {"micro_batch_size": 4, "use_recompute": False},
+            {
+                "micro_batch_size": 2,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_mbs_sp",
+            {"micro_batch_size": 4, "sequence_parallel": False},
+            {"micro_batch_size": 2, "sequence_parallel": True},
+        ),
+        (
+            "prune_by_recompute_sp",
+            {"sequence_parallel": False, "use_recompute": False},
+            {
+                "sequence_parallel": True,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_tp_pp_sp",
+            {
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "sequence_parallel": False,
+            },
+            {
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "sequence_parallel": True,
+            },
+        ),
+        (
+            "prune_by_tp_pp_mbs",
+            {
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "micro_batch_size": 4,
+                "sequence_parallel": True,
+            },
+            {
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "micro_batch_size": 2,
+                "sequence_parallel": True,
+            },
+        ),
+        (
+            "prune_by_tp_pp_recompute",
+            {
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "use_recompute": False,
+            },
+            {
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_tp_pp_mbs_sp",
+            {
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "micro_batch_size": 4,
+                "sequence_parallel": False,
+            },
+            {
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "micro_batch_size": 2,
+                "sequence_parallel": True,
+            },
+        ),
+        (
+            "prune_by_tp_pp_mbs_recompute",
+            {
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "micro_batch_size": 4,
+                "use_recompute": False,
+            },
+            {
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "micro_batch_size": 2,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_tp_pp_recompute_sp",
+            {
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "sequence_parallel": False,
+                "use_recompute": False,
+            },
+            {
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "sequence_parallel": True,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_tp_pp_mbs_recompute_sp",
+            {
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "micro_batch_size": 4,
+                "sequence_parallel": False,
+                "use_recompute": False,
+            },
+            {
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "micro_batch_size": 2,
+                "sequence_parallel": True,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+    ],
+)
+def test_tp_mbs_recompute_sp_combination_rules_mark_memory_pruned(
+    func_name, current_overrides, history_overrides
+):
+    current = _strategy(**current_overrides)
+    hist = [_strategy(max_mem="OOM", **history_overrides)]
+
+    assert getattr(history_prune, func_name)(None, current, hist) is True
+    assert current["pruned"] is True
+    assert current["max_mem"] == "OOM"
+    assert current["performance"] is None
+
+
+@pytest.mark.parametrize(
+    ("func_name", "current_overrides", "history_overrides"),
+    [
+        (
+            "prune_by_distopt",
+            {"use_distributed_optimizer": False},
+            {"use_distributed_optimizer": True},
+        ),
+        (
+            "prune_by_distopt_mbs",
+            {"use_distributed_optimizer": False, "micro_batch_size": 4},
+            {"use_distributed_optimizer": True, "micro_batch_size": 2},
+        ),
+        (
+            "prune_by_distopt_recompute",
+            {"use_distributed_optimizer": False, "use_recompute": False},
+            {
+                "use_distributed_optimizer": True,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_distopt_sp",
+            {"use_distributed_optimizer": False, "sequence_parallel": False},
+            {"use_distributed_optimizer": True, "sequence_parallel": True},
+        ),
+        (
+            "prune_by_distopt_tp_pp",
+            {
+                "use_distributed_optimizer": False,
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+            },
+        ),
+        (
+            "prune_by_distopt_mbs_recompute",
+            {
+                "use_distributed_optimizer": False,
+                "micro_batch_size": 4,
+                "use_recompute": False,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "micro_batch_size": 2,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_distopt_mbs_sp",
+            {
+                "use_distributed_optimizer": False,
+                "micro_batch_size": 4,
+                "sequence_parallel": False,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "micro_batch_size": 2,
+                "sequence_parallel": True,
+            },
+        ),
+        (
+            "prune_by_distopt_mbs_tp_pp",
+            {
+                "use_distributed_optimizer": False,
+                "micro_batch_size": 4,
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "micro_batch_size": 2,
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+            },
+        ),
+        (
+            "prune_by_distopt_recompute_sp",
+            {
+                "use_distributed_optimizer": False,
+                "sequence_parallel": False,
+                "use_recompute": False,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "sequence_parallel": True,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_distopt_recompute_tp_pp",
+            {
+                "use_distributed_optimizer": False,
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "use_recompute": False,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_distopt_sp_tp_pp",
+            {
+                "use_distributed_optimizer": False,
+                "sequence_parallel": False,
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "sequence_parallel": True,
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+            },
+        ),
+        (
+            "prune_by_distopt_mbs_recompute_tp_pp",
+            {
+                "use_distributed_optimizer": False,
+                "micro_batch_size": 4,
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "use_recompute": False,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "micro_batch_size": 2,
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_distopt_mbs_sp_tp_pp",
+            {
+                "use_distributed_optimizer": False,
+                "micro_batch_size": 4,
+                "sequence_parallel": False,
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "micro_batch_size": 2,
+                "sequence_parallel": True,
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+            },
+        ),
+        (
+            "prune_by_distopt_recompute_sp_tp_pp",
+            {
+                "use_distributed_optimizer": False,
+                "sequence_parallel": False,
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "use_recompute": False,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "sequence_parallel": True,
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+        (
+            "prune_by_distopt_mbs_recompute_sp_tp_pp",
+            {
+                "use_distributed_optimizer": False,
+                "micro_batch_size": 4,
+                "sequence_parallel": False,
+                "tensor_model_parallel_size": 1,
+                "pipeline_model_parallel_size": 4,
+                "use_recompute": False,
+            },
+            {
+                "use_distributed_optimizer": True,
+                "micro_batch_size": 2,
+                "sequence_parallel": True,
+                "tensor_model_parallel_size": 2,
+                "pipeline_model_parallel_size": 2,
+                "use_recompute": True,
+                "recompute_method": "uniform",
+                "recompute_granularity": "full",
+                "recompute_num_layers": 1,
+            },
+        ),
+    ],
+)
+def test_distopt_combination_rules_mark_memory_pruned(
+    func_name, current_overrides, history_overrides
+):
+    current = _strategy(**current_overrides)
+    hist = [_strategy(max_mem="OOM", **history_overrides)]
+
+    assert getattr(history_prune, func_name)(None, current, hist) is True
+    assert current["pruned"] is True
+    assert current["max_mem"] == "OOM"
+    assert current["performance"] is None
+
+
+def test_unreachable_distopt_mbs_recompute_sp_shape_does_not_prune():
+    current = _strategy(
+        use_distributed_optimizer=False,
+        micro_batch_size=4,
+        sequence_parallel=False,
+        use_recompute=False,
+    )
+    hist = [
+        _strategy(
+            use_distributed_optimizer=True,
+            micro_batch_size=2,
+            sequence_parallel=True,
+            use_recompute=True,
+            recompute_method="uniform",
+            recompute_granularity="full",
+            recompute_num_layers=1,
+            max_mem="OOM",
+        )
+    ]
+
+    assert history_prune.prune_by_distopt_mbs_recompute_sp(None, current, hist) is False
+    assert current["pruned"] is False
 
 
 def test_prune_by_tp_pp_prunes_same_parallel_product_lower_tp_after_oom():
