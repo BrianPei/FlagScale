@@ -120,6 +120,7 @@ def test_to_str_falls_back_to_str_for_unserializable_object():
 
 def test_save_filters_pruned_rows_drops_runtime_columns_and_quotes_csv(tmp_path):
     recorder = HeteroRecorder(_config(tmp_path))
+    Path(recorder.path).parent.mkdir(parents=True)
     history = [
         {
             "idx": 2,
@@ -147,6 +148,7 @@ def test_save_filters_pruned_rows_drops_runtime_columns_and_quotes_csv(tmp_path)
 
 def test_save_empty_or_all_pruned_history_writes_empty_csv(tmp_path):
     recorder = HeteroRecorder(_config(tmp_path))
+    Path(recorder.path).parent.mkdir(parents=True)
 
     recorder.save([])
     assert recorder.path

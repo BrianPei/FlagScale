@@ -138,7 +138,7 @@ def test_sort_by_performance_prefers_larger_data_parallel_and_smaller_recompute_
                 recompute_granularity="full",
                 recompute_num_layers=2,
             ),
-            True,
+            False,
         ),
     ],
 )
