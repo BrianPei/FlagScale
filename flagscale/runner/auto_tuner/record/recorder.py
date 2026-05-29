@@ -18,17 +18,19 @@ class Recorder:
             and "performance" in self.config.experiment.auto_tuner
         ):
             self.metric = self.config.experiment.auto_tuner.performance.get(
-                "name", "elapsed time per iteration \(ms\):"
+                "name", r"elapsed time per iteration \(ms\):"
             )
         else:
-            self.metric = "elapsed time per iteration \(ms\):"
+            self.metric = r"elapsed time per iteration \(ms\):"
 
         # Sort order of performance, order just in [ascend, and descend], default ascend
         if (
             "auto_tuner" in self.config.experiment
             and "performance" in self.config.experiment.auto_tuner
         ):
-            self.sorted_order = self.config.experiment.auto_tuner.performance.get("order", "ascend")
+            self.sorted_order = self.config.experiment.auto_tuner.performance.get(
+                "order", "ascend"
+            )
         else:
             self.sorted_order = "ascend"
 
@@ -83,7 +85,10 @@ class Recorder:
         seq_len = int(self.config.train.model.seq_length)
         throughput = gbs * seq_len / (strategy["performance"] / 1000)
         day = round(
-            self.config.train.model.train_samples * seq_len / (throughput * 60 * 60 * 24), 2
+            self.config.train.model.train_samples
+            * seq_len
+            / (throughput * 60 * 60 * 24),
+            2,
         )
         command = [
             "airsctl job performance",
@@ -110,9 +115,17 @@ class Recorder:
                 else "None"
             ),
             "-R",
-            (f"{strategy['recompute_method']}" if strategy["recompute_granularity"] else "None"),
+            (
+                f"{strategy['recompute_method']}"
+                if strategy["recompute_granularity"]
+                else "None"
+            ),
             "-N",
-            (f"{strategy['recompute_num_layers']}" if strategy["recompute_num_layers"] else "0"),
+            (
+                f"{strategy['recompute_num_layers']}"
+                if strategy["recompute_num_layers"]
+                else "0"
+            ),
             "-S",
             (
                 f"{strategy['sequence_parallel']}"
@@ -211,7 +224,7 @@ class Recorder:
                             all_log_paths.append(log_path)
         return all_log_paths, logs
 
-    def grep_performance(self, paths, pattern="elapsed time per iteration \(ms\):"):
+    def grep_performance(self, paths, pattern=r"elapsed time per iteration \(ms\):"):
         """Read the log file and return the performance."""
         metric_pattern = pattern + r":* *(\d+(\.\d*)?)|(\d+(\.\d*)?) *" + pattern
         if not paths:
@@ -242,11 +255,15 @@ class Recorder:
             self.logger.info(f"task_{self.cur_strategy['idx']} performance: {None}")
             return None
         if len(performance) == 1:
-            self.logger.info(f"task_{self.cur_strategy['idx']} performance: {performance[0]} ms")
+            self.logger.info(
+                f"task_{self.cur_strategy['idx']} performance: {performance[0]} ms"
+            )
             return round(performance[0], 3)
         else:
             average = sum(performance[1:]) / (len(performance) - 1)
-            self.logger.info(f"task_{self.cur_strategy['idx']} performance: {average} ms")
+            self.logger.info(
+                f"task_{self.cur_strategy['idx']} performance: {average} ms"
+            )
             return round(average, 3)
 
     def grep_error(self, path, pattern="Error:"):
@@ -287,12 +304,16 @@ class Recorder:
         if self.sorted_order == "ascend":
             sorted_history = sorted(
                 no_pruned_history,
-                key=lambda x: (x["performance"] if x["performance"] is not None else float("inf")),
+                key=lambda x: (
+                    x["performance"] if x["performance"] is not None else float("inf")
+                ),
             )
         elif self.sorted_order == "descend":
             sorted_history = sorted(
                 no_pruned_history,
-                key=lambda x: (x["performance"] if x["performance"] is not None else float("-inf")),
+                key=lambda x: (
+                    x["performance"] if x["performance"] is not None else float("-inf")
+                ),
                 reverse=True,
             )
         else:
@@ -315,6 +336,7 @@ class Recorder:
             cols.insert(0, cols.pop(cols.index("idx")))
         if "stopped_by_tuner" in cols:
             df = df.drop(columns=["stopped_by_tuner"])
+            cols.remove("stopped_by_tuner")
         df = df.reindex(columns=cols)
         for c in df.columns:
             df[c] = df[c].map(self.to_str)
@@ -338,7 +360,9 @@ class Recorder:
             pass
         try:
             # Check for JSON string start/end characters as a heuristic
-            if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
+            if (s.startswith("[") and s.endswith("]")) or (
+                s.startswith("{") and s.endswith("}")
+            ):
                 return json.loads(s)
         except (json.JSONDecodeError, TypeError):
             pass
@@ -348,7 +372,11 @@ class Recorder:
         if not os.path.exists(self.path):
             return []
         df = pd.read_csv(
-            self.path, dtype=str, keep_default_na=False, na_filter=False, escapechar="\\"
+            self.path,
+            dtype=str,
+            keep_default_na=False,
+            na_filter=False,
+            escapechar="\\",
         )
         for c in df.columns:
             df[c] = df[c].map(self.parse_value)
@@ -362,7 +390,9 @@ class ServeRecorder(Recorder):
             "auto_tuner" in self.config.experiment
             and "performance" in self.config.experiment.auto_tuner
         ):
-            self.metric = self.config.experiment.auto_tuner.performance.get("metric", "itl")
+            self.metric = self.config.experiment.auto_tuner.performance.get(
+                "metric", "itl"
+            )
         else:
             self.metric = "itl"
 
@@ -371,7 +401,9 @@ class ServeRecorder(Recorder):
             "auto_tuner" in self.config.experiment
             and "performance" in self.config.experiment.auto_tuner
         ):
-            self.sorted_order = self.config.experiment.auto_tuner.performance.get("order", "ascend")
+            self.sorted_order = self.config.experiment.auto_tuner.performance.get(
+                "order", "ascend"
+            )
         else:
             self.sorted_order = "ascend"
         self.logger = logging.getLogger("FlagScale-AutoTuner")
@@ -392,12 +424,16 @@ class ServeRecorder(Recorder):
         if self.sorted_order == "ascend":
             sorted_history = sorted(
                 history,
-                key=lambda x: (x[self.metric] if x[self.metric] is not None else float("inf")),
+                key=lambda x: (
+                    x[self.metric] if x[self.metric] is not None else float("inf")
+                ),
             )
         elif self.sorted_order == "descend":
             sorted_history = sorted(
                 history,
-                key=lambda x: (x[self.metric] if x[self.metric] is not None else float("-inf")),
+                key=lambda x: (
+                    x[self.metric] if x[self.metric] is not None else float("-inf")
+                ),
                 reverse=True,
             )
         else:
