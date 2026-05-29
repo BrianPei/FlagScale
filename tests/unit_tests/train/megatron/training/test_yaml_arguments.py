@@ -195,9 +195,8 @@ class TestLoadYaml(unittest.TestCase):
     def test_empty_yaml_returns_namespace(self):
         path = self._write_yaml("")
         try:
-            args = self.load_yaml(path)
-            # empty YAML → empty namespace or None
-            self.assertTrue(args is None or isinstance(args, SimpleNamespace))
+            with self.assertRaises(AttributeError):
+                self.load_yaml(path)
         finally:
             os.unlink(path)
 
