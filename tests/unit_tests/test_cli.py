@@ -1,12 +1,14 @@
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from click.exceptions import Exit as ClickExit
+import typer
 from typer.testing import CliRunner
 
 from flagscale.cli import app, get_action, resolve_config
+
+ClickExit = typer.Exit
 
 
 class TestGetAction:
@@ -275,3 +277,453 @@ class TestEvalRobo:
         result = runner.invoke(app, ["eval", "robo", "--help"])
         assert result.exit_code == 0
         assert "FlagEval" in result.output
+
+    def test_eval_robo_forwards_all_optional_args(self):
+        """eval robo forwards optional flags that are not covered by defaults test"""
+        with patch("flagscale.eval.robo.main") as mock_main:
+            result = runner.invoke(
+                app,
+                [
+                    "eval",
+                    "robo",
+                    "--model-name",
+                    "qwen_gr00t",
+                    "--datasets",
+                    "libero_10",
+                    "--server-host",
+                    "example.com",
+                    "--server-port",
+                    "7000",
+                    "--description",
+                    "nightly eval",
+                    "--detach",
+                    "--poll-interval",
+                    "5",
+                    "--server-timeout",
+                    "60",
+                ],
+            )
+
+        assert result.exit_code == 0
+        mock_main.assert_called_once()
+        assert "--server-port" in sys.argv
+        assert "7000" in sys.argv
+        assert "--description" in sys.argv
+        assert "nightly eval" in sys.argv
+        assert "--detach" in sys.argv
+        assert "5" in sys.argv
+        assert "60" in sys.argv
+
+
+class TestCliRootAndEntryPoint:
+    """Tests for top-level CLI behavior"""
+
+    def test_root_help_lists_core_commands(self):
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "FlagScale CLI" in result.output
+        for command in ["run", "train", "serve", "inference", "install", "test"]:
+            assert command in result.output
+
+    def test_invalid_command_exits_nonzero(self):
+        result = runner.invoke(app, ["unknown-command"])
+
+        assert result.exit_code != 0
+        assert "No such command" in result.output
+
+    def test_version_option_prints_version(self):
+        result = runner.invoke(app, ["--version"])
+
+        assert result.exit_code == 0
+        assert "flagscale version" in result.output
+
+    def test_flagscale_entrypoint_delegates_to_typer_app(self, monkeypatch):
+        import flagscale.cli as cli
+
+        fake_app = MagicMock()
+        monkeypatch.setattr(cli, "app", fake_app)
+
+        cli.flagscale()
+
+        fake_app.assert_called_once_with()
+
+
+class TestRunTaskAndRunCommand:
+    """Tests for run_task() and explicit flagscale run command"""
+
+    def test_run_task_sets_sys_argv_and_calls_run_main(self, monkeypatch):
+        import flagscale.cli as cli
+
+        fake_main = MagicMock()
+        monkeypatch.setitem(sys.modules, "flagscale.run", type(sys)("flagscale.run"))
+        sys.modules["flagscale.run"].main = fake_main
+
+        cli.run_task("/tmp/conf", "train", "dryrun", ["trainer.nnodes=1"])
+
+        fake_main.assert_called_once_with()
+        assert sys.argv == [
+            "run.py",
+            "--config-path=/tmp/conf",
+            "--config-name=train",
+            "action=dryrun",
+            "trainer.nnodes=1",
+        ]
+
+    def test_run_task_ignores_zero_system_exit(self, monkeypatch):
+        import flagscale.cli as cli
+
+        fake_main = MagicMock(side_effect=SystemExit(0))
+        monkeypatch.setitem(sys.modules, "flagscale.run", type(sys)("flagscale.run"))
+        sys.modules["flagscale.run"].main = fake_main
+
+        cli.run_task("/tmp/conf", "train", "run")
+
+        fake_main.assert_called_once_with()
+
+    def test_run_task_reraises_nonzero_system_exit(self, monkeypatch):
+        import flagscale.cli as cli
+
+        fake_main = MagicMock(side_effect=SystemExit(2))
+        monkeypatch.setitem(sys.modules, "flagscale.run", type(sys)("flagscale.run"))
+        sys.modules["flagscale.run"].main = fake_main
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.run_task("/tmp/conf", "train", "run")
+
+        assert exc_info.value.code == 2
+
+    def test_run_command_dispatches_with_explicit_config_and_overrides(
+        self, tmp_path, monkeypatch
+    ):
+        import flagscale.cli as cli
+
+        conf_dir = tmp_path / "conf"
+        conf_dir.mkdir()
+        (conf_dir / "train.yaml").write_text("experiment: {}")
+        run_task = MagicMock()
+        monkeypatch.setattr(cli, "run_task", run_task)
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--config-path",
+                str(conf_dir),
+                "--config-name",
+                "train",
+                "--action",
+                "stop",
+                "trainer.nnodes=1",
+            ],
+        )
+
+        assert result.exit_code == 0
+        run_task.assert_called_once_with(
+            str(conf_dir.resolve()), "train", "stop", extra_args=["trainer.nnodes=1"]
+        )
+        assert "action=stop" in result.output
+
+    def test_run_command_rejects_missing_config_path(self, tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--config-path",
+                str(tmp_path / "missing"),
+                "--config-name",
+                "train",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Config path does not exist" in result.output
+
+    def test_run_command_rejects_missing_config_file(self, tmp_path):
+        result = runner.invoke(
+            app,
+            ["run", "--config-path", str(tmp_path), "--config-name", "missing"],
+        )
+
+        assert result.exit_code == 1
+        assert "Config file does not exist" in result.output
+
+
+class TestTaskCommandDispatch:
+    """Tests for task commands that resolve configs and call run_task"""
+
+    def test_train_uses_config_path_and_flag_action(self, tmp_path, monkeypatch):
+        import flagscale.cli as cli
+
+        config = tmp_path / "custom_train.yaml"
+        config.write_text("experiment: {}")
+        run_task = MagicMock()
+        monkeypatch.setattr(cli, "run_task", run_task)
+
+        result = runner.invoke(
+            app, ["train", "qwen3", "--config", str(config), "--dryrun"]
+        )
+
+        assert result.exit_code == 0
+        run_task.assert_called_once_with(str(tmp_path), "custom_train", "dryrun")
+        assert "Train qwen3 [dryrun]" in result.output
+
+    def test_train_rejects_mutually_exclusive_flags(self, tmp_path):
+        config = tmp_path / "train.yaml"
+        config.write_text("experiment: {}")
+
+        result = runner.invoke(
+            app, ["train", "qwen3", "--config", str(config), "--stop", "--dryrun"]
+        )
+
+        assert result.exit_code == 1
+        assert "mutually exclusive" in result.output
+
+    def test_serve_run_adds_cli_overrides_and_warning(self, tmp_path, monkeypatch):
+        import flagscale.cli as cli
+
+        config = tmp_path / "serve.yaml"
+        config.write_text("serve: []")
+        run_task = MagicMock()
+        monkeypatch.setattr(cli, "run_task", run_task)
+
+        result = runner.invoke(
+            app,
+            [
+                "serve",
+                "qwen3",
+                "--config",
+                str(config),
+                "--port",
+                "8000",
+                "--model-path",
+                "/models/qwen",
+                "--engine-args",
+                '{"dtype":"float16"}',
+            ],
+        )
+
+        assert result.exit_code == 0
+        run_task.assert_called_once_with(
+            str(tmp_path),
+            "serve",
+            "run",
+            [
+                "+experiment.runner.cli_args.port=8000",
+                "+experiment.runner.cli_args.model_path=/models/qwen",
+                '+experiment.runner.cli_args.engine_args=\'{"dtype":"float16"}\'',
+            ],
+        )
+        assert "Warning: When serving" in result.output
+
+    @pytest.mark.parametrize(
+        ("args", "expected_action"),
+        [(["--stop"], "stop"), (["--test"], "test"), (["--tune"], "auto_tune")],
+    )
+    def test_serve_stop_test_tune_actions(
+        self, tmp_path, monkeypatch, args, expected_action
+    ):
+        import flagscale.cli as cli
+
+        config = tmp_path / "serve.yaml"
+        config.write_text("serve: []")
+        run_task = MagicMock()
+        monkeypatch.setattr(cli, "run_task", run_task)
+
+        result = runner.invoke(app, ["serve", "qwen3", "--config", str(config), *args])
+
+        assert result.exit_code == 0
+        run_task.assert_called_once_with(str(tmp_path), "serve", expected_action, [])
+
+    @pytest.mark.parametrize(
+        ("command", "flag", "expected_action"),
+        [
+            ("inference", "--test", "test"),
+            ("rl", "--stop", "stop"),
+            ("compress", "--dryrun", "dryrun"),
+        ],
+    )
+    def test_other_task_commands_dispatch(
+        self, tmp_path, monkeypatch, command, flag, expected_action
+    ):
+        import flagscale.cli as cli
+
+        config = tmp_path / f"{command}.yaml"
+        config.write_text("experiment: {}")
+        run_task = MagicMock()
+        monkeypatch.setattr(cli, "run_task", run_task)
+
+        result = runner.invoke(app, [command, "qwen3", "--config", str(config), flag])
+
+        assert result.exit_code == 0
+        run_task.assert_called_once_with(str(tmp_path), command, expected_action)
+
+
+class TestInstallTestAndPullCommands:
+    """Tests for CLI commands that dispatch to subprocesses"""
+
+    def test_install_builds_install_script_command(self, tmp_path, monkeypatch):
+        import flagscale.cli as cli
+
+        script = tmp_path / "tools" / "install" / "install.sh"
+        script.parent.mkdir(parents=True)
+        script.write_text("#!/usr/bin/env bash\n")
+        completed = MagicMock(returncode=0)
+        run = MagicMock(return_value=completed)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(cli.subprocess, "run", run)
+
+        result = runner.invoke(
+            app,
+            [
+                "install",
+                "--platform",
+                "ascend",
+                "--task",
+                "serve",
+                "--pkg-mgr",
+                "pip",
+                "--no-system",
+                "--only-pip",
+                "--no-dev",
+                "--no-base",
+                "--no-task",
+                "--debug",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert run.call_args.args[0] == [
+            str(script),
+            "--platform",
+            "ascend",
+            "--task",
+            "serve",
+            "--pkg-mgr",
+            "pip",
+            "--no-system",
+            "--only-pip",
+            "--no-dev",
+            "--no-base",
+            "--no-task",
+            "--debug",
+        ]
+
+    def test_install_missing_script_exits(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["install"])
+
+        assert result.exit_code == 1
+        assert "Install script not found" in result.output
+
+    def test_install_propagates_nonzero_return_code(self, tmp_path, monkeypatch):
+        import flagscale.cli as cli
+
+        script = tmp_path / "tools" / "install" / "install.sh"
+        script.parent.mkdir(parents=True)
+        script.write_text("#!/usr/bin/env bash\n")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            cli.subprocess, "run", MagicMock(return_value=MagicMock(returncode=7))
+        )
+
+        result = runner.invoke(app, ["install"])
+
+        assert result.exit_code == 7
+
+    def test_test_command_builds_runner_command(self, tmp_path, monkeypatch):
+        import flagscale.cli as cli
+
+        script = tmp_path / "tests" / "test_utils" / "runners" / "run_tests.sh"
+        script.parent.mkdir(parents=True)
+        script.write_text("#!/usr/bin/env bash\n")
+        run = MagicMock(return_value=MagicMock(returncode=0))
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(cli.subprocess, "run", run)
+
+        result = runner.invoke(
+            app,
+            [
+                "test",
+                "--platform",
+                "metax",
+                "--device",
+                "cpu",
+                "--type",
+                "functional",
+                "--task",
+                "serve",
+                "--model",
+                "qwen3",
+                "--list",
+                "smoke.txt",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert run.call_args.args[0] == [
+            str(script),
+            "--platform",
+            "metax",
+            "--device",
+            "cpu",
+            "--type",
+            "functional",
+            "--task",
+            "serve",
+            "--model",
+            "qwen3",
+            "--list",
+            "smoke.txt",
+        ]
+
+    def test_test_command_missing_script_exits(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["test"])
+
+        assert result.exit_code == 1
+        assert "Test script not found" in result.output
+
+    def test_pull_creates_default_dir_and_runs_docker_git_commands(
+        self, tmp_path, monkeypatch
+    ):
+        import flagscale.cli as cli
+
+        run = MagicMock()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(cli.subprocess, "run", run)
+
+        result = runner.invoke(
+            app, ["pull", "--image", "repo/image:tag", "--ckpt", "https://repo"]
+        )
+
+        assert result.exit_code == 0
+        ckpt_dir = tmp_path / "model_download"
+        assert ckpt_dir.exists()
+        assert run.call_args_list[0].args == (["docker", "pull", "repo/image:tag"],)
+        assert run.call_args_list[0].kwargs == {"check": True}
+        assert run.call_args_list[1].args == (
+            ["git", "clone", "https://repo", str(ckpt_dir)],
+        )
+        assert run.call_args_list[1].kwargs == {"check": True}
+        assert run.call_args_list[2].args == (["git", "lfs", "pull"],)
+        assert run.call_args_list[2].kwargs == {"cwd": str(ckpt_dir), "check": True}
+
+    def test_pull_exits_when_docker_pull_fails(self, tmp_path, monkeypatch):
+        import flagscale.cli as cli
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            cli.subprocess,
+            "run",
+            MagicMock(side_effect=cli.subprocess.CalledProcessError(1, "docker")),
+        )
+
+        result = runner.invoke(
+            app, ["pull", "--image", "bad", "--ckpt", "https://repo"]
+        )
+
+        assert result.exit_code == 1
+        assert "Failed to pull Docker image" in result.output
