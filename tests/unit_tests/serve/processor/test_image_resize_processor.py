@@ -1,12 +1,86 @@
+import importlib.util
+import sys
+import types
+from pathlib import Path
+
 import numpy as np
 import pytest
 
-from flagscale.serve.processor.image_resize_processor import ImageResizeProcessorStep
+
+@pytest.fixture
+def image_resize_processor_step(monkeypatch):
+    constants = types.ModuleType("flagscale.models.utils.constants")
+    constants.OBS_IMAGES = "observation.images"
+    monkeypatch.setitem(sys.modules, "flagscale.models.utils.constants", constants)
+
+    types_module = types.ModuleType("flagscale.models.configs.types")
+    types_module.PipelineFeatureType = str
+    types_module.PolicyFeature = object
+    monkeypatch.setitem(sys.modules, "flagscale.models.configs.types", types_module)
+
+    train_processor = types.ModuleType("flagscale.train.processor")
+
+    class ObservationProcessorStep:
+        pass
+
+    class ProcessorStepRegistry:
+        @staticmethod
+        def register(name):
+            def decorator(cls):
+                cls.registry_name = name
+                return cls
+
+            return decorator
+
+    train_processor.ObservationProcessorStep = ObservationProcessorStep
+    train_processor.ProcessorStepRegistry = ProcessorStepRegistry
+    monkeypatch.setitem(sys.modules, "flagscale.train.processor", train_processor)
+
+    if "PIL" not in sys.modules:
+        pil = types.ModuleType("PIL")
+        image_module = types.ModuleType("PIL.Image")
+
+        class FakeImage:
+            def __init__(self, array):
+                self.array = array
+
+            def resize(self, target):
+                width, height = target
+                channels = self.array.shape[2]
+                return FakeImage(
+                    np.zeros((height, width, channels), dtype=self.array.dtype)
+                )
+
+            def __array__(self, dtype=None, copy=None):
+                if dtype is not None:
+                    return self.array.astype(
+                        dtype, copy=copy if copy is not None else True
+                    )
+                return self.array.copy() if copy else self.array
+
+        image_module.fromarray = FakeImage
+        pil.Image = image_module
+        monkeypatch.setitem(sys.modules, "PIL", pil)
+        monkeypatch.setitem(sys.modules, "PIL.Image", image_module)
+
+    source_path = (
+        Path(__file__).resolve().parents[4]
+        / "flagscale"
+        / "serve"
+        / "processor"
+        / "image_resize_processor.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "_image_resize_processor_under_test", source_path
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.ImageResizeProcessorStep
 
 
 @pytest.fixture
-def step():
-    return ImageResizeProcessorStep(image_size=[128, 128])
+def step(image_resize_processor_step):
+    return image_resize_processor_step(image_size=[128, 128])
 
 
 def _make_obs(**image_kwargs):
@@ -75,8 +149,8 @@ def test_noop_when_already_target_size(step):
     assert result["observation.images.image"].shape == (128, 128, 3)
 
 
-def test_default_image_size():
-    step = ImageResizeProcessorStep()
+def test_default_image_size(image_resize_processor_step):
+    step = image_resize_processor_step()
     assert step.image_size == [224, 224]
 
 
@@ -87,7 +161,9 @@ def test_get_config(step):
 def test_ignores_non_image_observation_keys(step):
     obs = {
         "observation.state": np.array([1.0]),
-        "observation.images.cam": np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8),
+        "observation.images.cam": np.random.randint(
+            0, 255, (480, 640, 3), dtype=np.uint8
+        ),
         "task": "pick up the cup",
     }
     result = step.observation(obs)
