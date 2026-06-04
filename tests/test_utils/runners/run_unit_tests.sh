@@ -97,6 +97,13 @@ omit =
     */docker/*
     */setup.py
     */__init__.py
+    */flagscale/models/*
+    */flagscale/inference/*
+    */flagscale/train/megatron/*
+    */flagscale/serve/engine.py
+    */flagscale/serve/run_*.py
+    */flagscale/serve/websocket_policy_server.py
+    */flagscale/serve/managers/*
 data_file = $COVERAGE_DIR/.coverage
 EOF
     fi
