@@ -77,7 +77,7 @@ concurrency:
 
 env:
   # Local registry used by CI runners (see .github/configs/cuda.yml)
-  REGISTRY: localhost:5000
+  REGISTRY: harbor.baai.ac.cn/flagscale
   # Default build versions (keep in sync with docker/build.sh)
   CUDA_VERSION: '12.8.1'
   UBUNTU_VERSION: '22.04'
