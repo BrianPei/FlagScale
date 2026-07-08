@@ -69,8 +69,11 @@ on:
         type: string
         description: Override container_volumes. Falls back to platform config if not set.
         default: >-
-          ["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data",
-          "/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]
+          ["/home/flagscale_cicd/docker/docker_build/docker_data:/home/gitlab-runner/data",
+          "/home/flagscale_cicd/docker/docker_build/docker_tokenizers:/home/gitlab-runner/tokenizers"]
+        # default: >-
+        #   ["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data",
+        #   "/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]
 
   # Trigger on PRs that modify docker-related files (build + test only, no push)
   pull_request:
@@ -371,5 +374,9 @@ jobs:
         ${{ inputs.runs_on || '["flagscale-nvidia-a100-gpu2-32c-128g"]' }}
       container_volumes: >-
         ${{ inputs.container_volumes ||
-        '["/mnt/airs-business/cicd/docker_data:/home/gitlab-runner/data",
-        "/mnt/airs-business/cicd/docker_tokenizers:/home/gitlab-runner/tokenizers"]' }}
+        '["/home/flagscale_cicd/docker/docker_build/docker_data:/home/gitlab-runner/data",
+        "/home/flagscale_cicd/docker/docker_build/docker_tokenizers:/home/gitlab-runner/tokenizers"]' }}
+      # container_volumes: >-
+      #   ${{ inputs.container_volumes ||
+      #   '["/mnt/airs-business/cicd/docker_data:/home/gitlab-runner/data",
+      #   "/mnt/airs-business/cicd/docker_tokenizers:/home/gitlab-runner/tokenizers"]' }}
