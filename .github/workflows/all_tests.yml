@@ -2,7 +2,7 @@ name: all_tests
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "dev-0713"]
     paths-ignore:
       - 'docs/**'
       - 'docker/cuda/**'
