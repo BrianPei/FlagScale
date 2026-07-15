@@ -263,10 +263,20 @@ jobs:
 
       - name: Save image as tar
         run: |
+          set -euo pipefail
+
           TAR_DIR="${{ needs.prepare.outputs.tar_dir }}"
           sudo mkdir -p "$TAR_DIR"
           IMAGE_TAG="${{ steps.meta.outputs.build_tag }}"
           PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          echo "Runner hostname: $(hostname)"
+          echo "Tar directory: $TAR_DIR"
+          echo "Mount information:"
+          findmnt -T "$TAR_DIR" || true
+          echo "Filesystem usage:"
+          df -hT "$TAR_DIR"
+
           # Use PR number for deterministic lookup after merge; fall back to short SHA for manual dispatch
           if [ -n "$PR_NUMBER" ]; then
             SUFFIX="pr${PR_NUMBER}"
@@ -275,8 +285,21 @@ jobs:
             SUFFIX="${SHA:0:7}"
           fi
           TAR_NAME=$(echo "$IMAGE_TAG" | tr '/: ' '---')-${SUFFIX}.tar
-          sudo docker save "$IMAGE_TAG" -o "${TAR_DIR}/${TAR_NAME}"
-          echo "tar_path=${TAR_DIR}/${TAR_NAME}" >> $GITHUB_OUTPUT
+          TAR_PATH="${TAR_DIR}/${TAR_NAME}"
+
+          echo "Saving image $IMAGE_TAG to $TAR_PATH"
+          sudo docker save "$IMAGE_TAG" -o "$TAR_PATH"
+          sync
+
+          if ! sudo test -s "$TAR_PATH"; then
+            echo "::error::Image tar was not created or is empty: $TAR_PATH"
+            exit 1
+          fi
+
+          echo "Saved image tar successfully:"
+          sudo stat "$TAR_PATH"
+          sudo ls -lh "$TAR_PATH"
+          echo "tar_path=${TAR_PATH}" >> "$GITHUB_OUTPUT"
         id: save_tar
 
       - name: Export image tag for config update
@@ -315,31 +338,63 @@ jobs:
   # ---------------------------------------------------------------------------
   load_images:
     name: Load and push images
-    needs: ['build', 'summary']
+    needs: ['prepare', 'build', 'summary']
     runs-on: ${{ fromJson(inputs.runs_on || '["flagscale-nvidia-a100-gpu2-32c-128g"]') }}
     steps:
       - name: Load train image from tar and push
         run: |
+          set -euo pipefail
+
           TAR="${{ needs.build.outputs.train_tar }}"
           TAG="${{ needs.build.outputs.train_tag }}"
-          if [ -f "$TAR" ]; then
+          TAR_DIR="${{ needs.prepare.outputs.tar_dir }}"
+
+          echo "Runner hostname: $(hostname)"
+          echo "Expected train tar: $TAR"
+          echo "Mount information:"
+          findmnt -T "$TAR_DIR" || true
+          echo "Filesystem usage:"
+          df -hT "$TAR_DIR" || true
+          echo "Tar directory contents:"
+          sudo ls -lah "$TAR_DIR" 2>/dev/null || true
+
+          if sudo test -s "$TAR"; then
             echo "Loading $TAR"
+            sudo stat "$TAR"
             sudo docker load -i "$TAR"
             sudo docker push "$TAG"
           else
             echo "::warning::Train image tar not found: $TAR, skipping load"
+            echo "Available train tar files:"
+            sudo find "$TAR_DIR" -maxdepth 1 -type f -name '*flagscale-train*.tar' -print 2>/dev/null || true
           fi
 
       - name: Load inference image from tar and push
         run: |
+          set -euo pipefail
+
           TAR="${{ needs.build.outputs.inference_tar }}"
           TAG="${{ needs.build.outputs.inference_tag }}"
-          if [ -f "$TAR" ]; then
+          TAR_DIR="${{ needs.prepare.outputs.tar_dir }}"
+
+          echo "Runner hostname: $(hostname)"
+          echo "Expected inference tar: $TAR"
+          echo "Mount information:"
+          findmnt -T "$TAR_DIR" || true
+          echo "Filesystem usage:"
+          df -hT "$TAR_DIR" || true
+          echo "Tar directory contents:"
+          sudo ls -lah "$TAR_DIR" 2>/dev/null || true
+
+          if sudo test -s "$TAR"; then
             echo "Loading $TAR"
+            sudo stat "$TAR"
             sudo docker load -i "$TAR"
             sudo docker push "$TAG"
           else
             echo "::warning::Inference image tar not found: $TAR, skipping load"
+            echo "Available inference tar files:"
+            sudo find "$TAR_DIR" -maxdepth 1 -type f -name '*flagscale-inference*.tar' -print 2>/dev/null || true
           fi
 
   # ---------------------------------------------------------------------------
