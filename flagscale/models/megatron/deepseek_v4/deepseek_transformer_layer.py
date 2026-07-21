@@ -41,15 +41,21 @@ class DeepSeekTransformerLayer(HyperConnectionTransformerLayer):
                 "DeepSeekTransformerLayer now requires config.enable_hyper_connections=True."
             )
         super().__init__(config=config, submodules=submodules, *args, **kwargs)
-
-        self.engram = build_module(
-            submodules.engram,
-            engram_cfg=self.config,
-            layer_id=self.layer_number - 1,
-        )
+        if self.config.use_engram:
+            # If not use_engram, the submodules.engram is None
+            self.engram = build_module(
+                submodules.engram,
+                engram_cfg=self.config,
+                layer_id=self.layer_number - 1,
+            )
+        else:
+            self.engram = None
         self._deepseek_engram_hash_input_ids = None
         self._mhc_recompute_manager = None
-        if self.config.engram_layer_ids is not None and self.layer_number - 1 in self.config.engram_layer_ids:
+        if (
+            self.config.engram_layer_ids is not None
+            and self.layer_number - 1 in self.config.engram_layer_ids
+        ):
             self.is_engram_layer = True
         else:
             self.is_engram_layer = False
@@ -99,12 +105,12 @@ class DeepSeekTransformerLayer(HyperConnectionTransformerLayer):
         sequence_len_offset: Optional[Tensor] = None,
         padding_mask: Optional[Tensor] = None,
         input_ids: Optional[Tensor] = None,
-        mhc_recompute_manager = None,
+        mhc_recompute_manager=None,
         *,
         inference_params: Optional[Any] = None,
     ):
         """Apply DeepSeek engram before the parent attention path."""
-        if not isinstance(self.engram, IdentityOp):
+        if self.engram is not None:
             nvtx_range_push(suffix="engram")
             hidden_states = self.engram(hidden_states, self._deepseek_engram_hash_input_ids)
             nvtx_range_pop(suffix="engram")
@@ -128,7 +134,9 @@ class DeepSeekTransformerLayer(HyperConnectionTransformerLayer):
         )
 
     def pre_compute_embedding(self, engram_hash_input_ids):
-        if isinstance(self.engram, IdentityOp) or (self.layer_number not in self.config.engram_layer_ids):
+        if isinstance(self.engram, IdentityOp) or (
+            self.layer_number not in self.config.engram_layer_ids
+        ):
             return
         hash_input_ids = engram_hash_input_ids[self.layer_number - 1]
         self.engram.pre_compute_embedding(hash_input_ids)

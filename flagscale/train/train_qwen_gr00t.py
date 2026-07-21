@@ -1,3 +1,17 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Mainly adopted from
 # https://github.com/huggingface/lerobot/blob/2b304eeb841ae6c371e3dd341bbbb9dd254b07cb/src/lerobot/scripts/lerobot_train.py
 
@@ -17,7 +31,11 @@ import torch
 import torch.distributed as dist
 from torch.distributed._composable.fsdp import fully_shard, MixedPrecisionPolicy
 from torch.distributed.device_mesh import init_device_mesh
-from torch.distributed.checkpoint.state_dict import get_model_state_dict, get_optimizer_state_dict, StateDictOptions
+from torch.distributed.checkpoint.state_dict import (
+    get_model_state_dict,
+    get_optimizer_state_dict,
+    StateDictOptions,
+)
 from torch.optim import Optimizer
 
 from flagscale.logger import logger
@@ -41,6 +59,7 @@ from flagscale.train.utils.logging_utils import (
     format_big_number,
 )
 from flagscale.train.utils.train_utils import (
+    StatefulDistributedSampler,
     get_step_checkpoint_dir,
     load_training_state_fsdp2,
     save_checkpoint,
@@ -48,6 +67,8 @@ from flagscale.train.utils.train_utils import (
 )
 from flagscale.train.utils.random_utils import serialize_rng_state, deserialize_rng_state
 from flagscale.train.utils.optim_setup import setup_optimizer_and_scheduler
+from flagscale.train.utils.activation_checkpoint import apply_activation_checkpointing
+from flagscale.train.datasets.lerobot_mixture_dataset import LeRobotMixtureDataset
 from flagscale.models.vla import TrainablePolicy
 from flagscale.models.vla.pretrained_config import PreTrainedConfig
 from flagscale.platforms import get_platform
@@ -94,7 +115,6 @@ def make_dataset(config: TrainConfig, policy_config: PreTrainedConfig):
     ds_meta = LeRobotDatasetMetadata(root=config.data.data_path, revision=None)
     delta_timestamps = _resolve_delta_timestamps(policy_config, ds_meta)
 
-
     # torchcodec depends on NVIDIA NVDEC which is not available on all platforms (e.g. MUSA);
     # fall back to pyav for non-CUDA platforms.
     video_backend = "torchcodec" if get_platform().name() == "cuda" else "pyav"
@@ -125,6 +145,55 @@ def make_dataset(config: TrainConfig, policy_config: PreTrainedConfig):
         tolerance_s=config.data.tolerance_s,
     )
 
+    return dataset
+
+
+def _make_mixture_dataset(config: TrainConfig, policy_config: PreTrainedConfig):
+    """Build a LeRobotMixtureDataset from config.data.data_mix entries.
+
+    Each entry in data_mix should be a dict with:
+      - path: str (dataset path, relative to data_root_dir if set)
+      - weight: float (sampling weight, default 1.0)
+    """
+    data_mix = config.data.data_mix
+    data_root_dir = getattr(config.data, "data_root_dir", None)
+    balance = getattr(config.data, "balance_dataset_weights", True)
+
+    ds_meta = None
+    mixture_entries = []
+    for entry in data_mix:
+        if isinstance(entry, str):
+            path, weight = entry, 1.0
+        else:
+            path = entry["path"]
+            weight = entry.get("weight", 1.0)
+
+        if data_root_dir and not Path(path).is_absolute():
+            path = str(Path(data_root_dir) / path)
+
+        meta = LeRobotDatasetMetadata(root=path, revision=None)
+        if ds_meta is None:
+            ds_meta = meta
+        delta_timestamps = _resolve_delta_timestamps(policy_config, meta)
+
+        video_backend = "torchcodec" if get_platform().name() == "cuda" else "pyav"
+
+        ds = LeRobotDataset(
+            root=path,
+            episodes=None,
+            delta_timestamps=delta_timestamps,
+            image_transforms=None,
+            revision=None,
+            video_backend=video_backend,
+            tolerance_s=config.data.tolerance_s,
+        )
+        mixture_entries.append((ds, weight))
+
+    dataset = LeRobotMixtureDataset(
+        data_mixture=mixture_entries,
+        mode="train",
+        balance_dataset_weights=balance,
+    )
     return dataset
 
 
@@ -204,7 +273,6 @@ def format_train_tracker_step(train_tracker: MetricsTracker) -> str:
         *[_format_meter_val(m) for m in train_tracker.metrics.values()],
     ]
     return " ".join(display_list)
-
 
 
 def make_pre_post_processors(
@@ -412,7 +480,9 @@ def update_policy(
     optimizer.zero_grad()
 
     autocast_context = (
-        torch.amp.autocast(get_platform().amp_device_type(), dtype=torch.bfloat16) if use_amp else nullcontext()
+        torch.amp.autocast(get_platform().amp_device_type(), dtype=torch.bfloat16)
+        if use_amp
+        else nullcontext()
     )
     with autocast_context:
         output = policy(batch, vlm_batch=vlm_batch)
@@ -439,7 +509,9 @@ def update_policy(
         policy.update()
 
     train_metrics.loss = loss.item()
-    train_metrics.grad_norm = grad_norm.full_tensor().item() if hasattr(grad_norm, 'full_tensor') else grad_norm.item()
+    train_metrics.grad_norm = (
+        grad_norm.full_tensor().item() if hasattr(grad_norm, "full_tensor") else grad_norm.item()
+    )
     train_metrics.lr = optimizer.param_groups[0]["lr"]
     train_metrics.update_s = time.perf_counter() - start_time
     if "vlm_loss" in output and "vlm_loss" in train_metrics.metrics:
@@ -511,22 +583,36 @@ def main(config: TrainConfig, seed: int):
         num_frames = 1
         num_episodes = 1
     else:
-        dataset = make_dataset(config, policy_config)
+        # --- Build dataset: single or mixture ---
+        data_mix = getattr(config.data, "data_mix", None)
+        if data_mix is not None:
+            dataset = _make_mixture_dataset(config, policy_config)
+        else:
+            dataset = make_dataset(config, policy_config)
         dist.barrier()
 
-        policy = make_policy(policy_config, dataset.meta)
+        ds_meta = dataset.meta if hasattr(dataset, "meta") else dataset.datasets[0].meta
+        policy = make_policy(policy_config, ds_meta)
         dist.barrier()
 
+        dataset_stats = (
+            ds_meta.stats
+            if not isinstance(dataset, LeRobotMixtureDataset)
+            else dataset.merged_stats
+        )
         # Create processors - only provide dataset_stats if not resuming from saved processors
         preprocessor, postprocessor = make_pre_post_processors(
-            policy, config.data, dataset_stats=dataset.meta.stats, device=device.type,
+            policy,
+            config.data,
+            dataset_stats=dataset_stats,
+            device=device.type,
         )
 
         num_workers = 0  # config.system.num_workers
         shuffle = config.system.shuffle
 
-        # DistributedSampler ensures each rank gets different data
-        sampler = torch.utils.data.distributed.DistributedSampler(
+        # Use StatefulDistributedSampler when available for checkpoint/resume support
+        sampler = StatefulDistributedSampler(
             dataset,
             num_replicas=world_size,
             rank=rank,
@@ -545,11 +631,18 @@ def main(config: TrainConfig, seed: int):
             prefetch_factor=2 if num_workers > 0 else None,
         )
 
-
         dl_iter = cycle(dataloader)
-        num_frames = dataset.num_frames
-        num_episodes = dataset.num_episodes
+        num_frames = dataset.num_frames if hasattr(dataset, "num_frames") else len(dataset)
+        num_episodes = dataset.num_episodes if hasattr(dataset, "num_episodes") else 1
         vlm_dl_iter = None
+
+    # --- Apply Activation Checkpointing (before FSDP) ---
+    ac_config = config.system.activation_checkpoint
+    apply_activation_checkpointing(
+        policy,
+        ac_config,
+        units=policy.fsdp_units(),
+    )
 
     # --- Apply FSDP2 ---
     device_mesh = init_device_mesh(get_platform().name(), (world_size,))
@@ -563,21 +656,21 @@ def main(config: TrainConfig, seed: int):
     step = 0
     resume_from = config.system.checkpoint.resume_from
     if resume_from:
-        step = load_training_state_fsdp2(
-            Path(resume_from), policy, optimizer, lr_scheduler,
+        step, dl_state = load_training_state_fsdp2(
+            Path(resume_from),
+            policy,
+            optimizer,
+            lr_scheduler,
         )
-        # Advance the dataloader iterator to the correct position. The data
-        # ordering is deterministic from the DistributedSampler's own seed
-        # (not the global RNG), so calling next() `step` times moves the
-        # cursor to the right batch. We save/restore the global RNG around
-        # this so the fast-forward's incidental RNG consumption is discarded
-        # and training resumes with the exact RNG state from the checkpoint.
-        saved_rng = serialize_rng_state()
-        # TODO: (yupu) Maybe save/restore the dataloader state?
-        for _ in range(step):
-            next(dl_iter)
-        deserialize_rng_state(saved_rng)
-        logger.info(f"Resumed from checkpoint at step {step}")
+        # Restore dataloader position via StatefulDistributedSampler if state
+        # was saved; otherwise fall back to advancing the iterator manually.
+        if dl_state is not None and sampler is not None and hasattr(sampler, "load_state_dict"):
+            sampler.load_state_dict(dl_state)
+        else:
+            saved_rng = serialize_rng_state()
+            for _ in range(step):
+                next(dl_iter)
+            deserialize_rng_state(saved_rng)
 
     train_metrics = {
         "loss": AverageMeter("loss", ":.3f"),
@@ -665,6 +758,11 @@ def main(config: TrainConfig, seed: int):
                 checkpoint_dir = get_step_checkpoint_dir(
                     output_dir, config.system.train_steps, step
                 )
+                dl_state = (
+                    sampler.state_dict()
+                    if sampler is not None and hasattr(sampler, "state_dict")
+                    else None
+                )
                 save_checkpoint(
                     checkpoint_dir=checkpoint_dir,
                     step=step,
@@ -675,6 +773,7 @@ def main(config: TrainConfig, seed: int):
                     preprocessor=preprocessor,
                     postprocessor=postprocessor,
                     state_dict=state_dict,
+                    dataloader_state=dl_state,
                 )
                 update_last_checkpoint(checkpoint_dir)
 

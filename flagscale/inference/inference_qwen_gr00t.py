@@ -1,3 +1,17 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 
 import numpy as np
@@ -10,6 +24,7 @@ from flagscale.models.utils.constants import OBS_STATE
 from flagscale.models.vla import TrainablePolicy
 from flagscale.platforms import get_platform  # noqa: F401 must be before model imports
 from flagscale.train.processor import PolicyProcessorPipeline
+from flagscale.train.processor.pipeline import get_device_override
 
 
 def load_image(image_path: str, size: tuple[int, int] | None = None) -> torch.Tensor:
@@ -35,11 +50,13 @@ def run_inference(config_path: str):
     generate_cfg = cfg.generate
 
     pretrained_dir = engine_cfg.model
-    model = TrainablePolicy.from_pretrained(pretrained_dir, device=engine_cfg.device)
+    runtime_device = getattr(engine_cfg, "device", None) or "cpu"
+    model = TrainablePolicy.from_pretrained(pretrained_dir, device=runtime_device)
 
     preprocessor = PolicyProcessorPipeline.from_pretrained(
         pretrained_dir,
         config_filename="policy_preprocessor.json",
+        overrides=get_device_override(runtime_device),
     )
     postprocessor = PolicyProcessorPipeline.from_pretrained(
         pretrained_dir,

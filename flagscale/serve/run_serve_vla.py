@@ -1,3 +1,17 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Mainly adopted from:
 # https://github.com/starVLA/starVLA/blob/3f7feefbc5fc25890ad3a7d262b8a0aea1339aa7/deployment/model_server/server_policy.py
 
@@ -16,6 +30,7 @@ from flagscale.serve.processor.image_layout_processor import ImageLayoutProcesso
 from flagscale.serve.processor.image_resize_processor import ImageResizeProcessorStep
 from flagscale.serve.websocket_policy_server import WebsocketPolicyServer
 from flagscale.train.processor import PolicyProcessorPipeline, ProcessorStepRegistry
+from flagscale.train.processor.pipeline import get_device_override
 
 # TODO: (yupu) to constant.py?
 TASK_KEY = "task"
@@ -136,9 +151,8 @@ class Policy:
         """Load the policy model and all processor pipelines from the checkpoint."""
         t_s = time.perf_counter()
         pretrained_dir: str = self.config_engine.model
-        self.model = TrainablePolicy.from_pretrained(
-            pretrained_dir, device=self.config_engine.device
-        )
+        runtime_device = getattr(self.config_engine, "device", None) or "cpu"
+        self.model = TrainablePolicy.from_pretrained(pretrained_dir, device=runtime_device)
         self._load_processors(pretrained_dir)
         # TODO: (yupu): model.to(dtype)?
         logger.info(f"Policy model loading latency: {time.perf_counter() - t_s:.2f}s")
@@ -147,9 +161,11 @@ class Policy:
         """Load pre/post-processors from the checkpoint and build the serve preprocessor."""
         self.rename_map = self.config_engine.get("rename_map")
 
+        runtime_device = getattr(self.config_engine, "device", None) or "cpu"
         self.preprocessor = PolicyProcessorPipeline.from_pretrained(
             pretrained_dir,
             config_filename="policy_preprocessor.json",
+            overrides=get_device_override(runtime_device),
         )
         self.postprocessor = PolicyProcessorPipeline.from_pretrained(
             pretrained_dir,

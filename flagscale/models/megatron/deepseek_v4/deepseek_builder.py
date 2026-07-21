@@ -15,7 +15,7 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_mtp_block_spec,
     get_gpt_layer_with_transformer_engine_spec,
     get_gpt_layer_local_spec,
-    get_gpt_layer_with_inference_spec
+    get_gpt_layer_with_inference_spec,
 )
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
 from megatron.core.transformer.spec_utils import ModuleSpec
@@ -33,14 +33,15 @@ from megatron.core.transformer.transformer_block import (
 from megatron.core.transformer.enums import LayerType
 from megatron.training.utils import get_args
 from megatron.core.models.gpt.experimental_attention_variant_module_specs import (
-    get_transformer_block_with_experimental_attention_variant_spec, 
+    get_transformer_block_with_experimental_attention_variant_spec,
     _get_backend_spec_provider,
     get_dsv4_hybrid_module_spec_for_backend,
     _get_moe_module_spec,
-    get_moe_layer_pattern
+    get_moe_layer_pattern,
 )
 from megatron.core.transformer.hyper_connection import HyperConnectionModule
 from megatron.core.transformer.engram import EngramModule
+
 try:
     import transformer_engine as te  # pylint: disable=unused-import
 
@@ -80,7 +81,6 @@ from .deepseek_transformer_layer import DeepSeekTransformerLayer, DeepSeekTransf
 from .deepseek_model import DeepSeekModel
 
 
-
 def get_deepseek_layer_spec(
     use_te: bool,
     config: TransformerConfig,
@@ -106,9 +106,9 @@ def get_deepseek_layer_spec(
         else backend.layer_norm(rms_norm=rms_norm, for_qk=False)
     )
     if build_engram:
-        engram_module = EngramModule 
+        engram_module = EngramModule
     else:
-        engram_module = IdentityOp
+        engram_module = None
     submodules = DeepSeekTransformerLayerSubmodules(
         input_layernorm=input_layernorm,
         self_attention=hybrid_attn_spec,
@@ -118,7 +118,7 @@ def get_deepseek_layer_spec(
         mlp=moe_layer_spec,
         mlp_bda=get_bias_dropout_add,
         mlp_hyper_connection=HyperConnectionModule,
-        engram=ModuleSpec(module=engram_module)
+        engram=ModuleSpec(module=engram_module),
     )
 
     return ModuleSpec(module=DeepSeekTransformerLayer, submodules=submodules)
@@ -131,7 +131,7 @@ def get_deepseek_decoder_block_spec(
     qk_l2_norm: Optional[bool] = False,
     vp_stage: Optional[int] = None,
     pp_rank: int | None = None,
-    is_dualpipev_first_chunk: bool | None = False,
+    dualpipev_stage: Optional[int] = None,
     use_moe: bool | None = False,
 ):
     """Build decoder block spec and attach STM/HC placeholders to each local layer."""
@@ -149,7 +149,6 @@ def get_deepseek_decoder_block_spec(
         build_engram=False,
     )
 
-
     # Create the layer specs for the model.
     layer_specs = []
     for layer_number in range(config.num_layers):
@@ -157,7 +156,9 @@ def get_deepseek_decoder_block_spec(
             is_engram_layer = True
         else:
             is_engram_layer = False
-        layer_specs.append(moe_deepseek_engram_layer_spec if is_engram_layer else moe_deepseek_layer_spec)
+        layer_specs.append(
+            moe_deepseek_engram_layer_spec if is_engram_layer else moe_deepseek_layer_spec
+        )
 
     # Slice the layer specs to only include the layers that are built in this pipeline stage.
     # Note: MCore layer_number starts at 1
@@ -166,7 +167,7 @@ def get_deepseek_decoder_block_spec(
         config,
         vp_stage=vp_stage,
         pp_rank=pp_rank,
-        is_dualpipev_first_chunk=is_dualpipev_first_chunk,
+        dualpipev_stage=dualpipev_stage,
     )
 
     if config.pipeline_model_parallel_layout is not None:
@@ -182,7 +183,7 @@ def get_deepseek_decoder_block_spec(
             config,
             vp_stage=vp_stage,
             pp_rank=pp_rank,
-            is_dualpipev_first_chunk=is_dualpipev_first_chunk,
+            dualpipev_stage=dualpipev_stage,
         )
         local_layer_specs = layer_specs[offset : offset + num_layers_to_build]
 
@@ -194,16 +195,17 @@ def get_deepseek_decoder_block_spec(
     return block_spec
 
 
-def deepseek_builder(args, pre_process, post_process, vp_stage=None, config=None, pg_collection=None):
+def deepseek_builder(
+    args, pre_process, post_process, vp_stage=None, config=None, pg_collection=None
+):
     """Drop-in replacement builder compatible with model_provider(...)."""
-    print_rank_0('building DeepSeek model (engram and mhc file) ...')
+    print_rank_0("building DeepSeek model (engram and mhc file) ...")
 
     if config is None:
         if args.yaml_cfg is not None:
             config = core_transformer_config_from_yaml(args, "language_model")
         else:
             config = core_transformer_config_from_args(args)
-
 
     if args.use_legacy_models:
         raise NotImplementedError("Legacy GPT models do not support deepseek module insertion.")
@@ -215,20 +217,24 @@ def deepseek_builder(args, pre_process, post_process, vp_stage=None, config=None
 
             if args.heterogeneous_layers_config_path is not None:
                 assert not (config.transformer_impl == "inference_optimized")
-                raise NotImplementedError("Using heterogeneous layers is not supported with deepseek builder.")
+                raise NotImplementedError(
+                    "Using heterogeneous layers is not supported with deepseek builder."
+                )
             transformer_layer_spec = get_deepseek_decoder_block_spec(
                 config=config,
                 use_transformer_engine=use_te,
                 normalization=args.normalization,
                 qk_l2_norm=args.qk_l2_norm,
                 vp_stage=vp_stage,
-                use_moe=True
+                use_moe=True,
             )
 
         mtp_block_spec = None
         if args.mtp_num_layers is not None:
             assert not (config.transformer_impl == "inference_optimized")
-            transformer_layer_spec_for_mtp = get_deepseek_layer_spec(use_te, config, build_engram=False)
+            transformer_layer_spec_for_mtp = get_deepseek_layer_spec(
+                use_te, config, build_engram=False
+            )
             mtp_block_spec = get_gpt_mtp_block_spec(
                 config,
                 transformer_layer_spec_for_mtp,

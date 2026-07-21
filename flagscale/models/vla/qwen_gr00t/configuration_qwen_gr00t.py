@@ -1,3 +1,17 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -22,6 +36,10 @@ class QwenGr00tConfig(PreTrainedConfig):
     action_model: GR00TActionHeadConfig = field(default_factory=GR00TActionHeadConfig)
 
     prompt_template: str | None = None
+
+    # Chunked cross-entropy for VLM co-training loss.
+    # 0 = disabled (use HF model's built-in CE), >0 = chunk size in tokens.
+    chunked_ce_tokens: int = 0
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -61,8 +79,14 @@ class QwenGr00tConfig(PreTrainedConfig):
         action_model = GR00TActionHeadConfig.from_omegaconf(model_cfg.action_model)
 
         prompt_template = getattr(model_cfg, "prompt_template", None)
+        chunked_ce_tokens = getattr(model_cfg, "chunked_ce_tokens", 0)
 
-        kwargs = dict(vlm=vlm, action_model=action_model, prompt_template=prompt_template)
+        kwargs = dict(
+            vlm=vlm,
+            action_model=action_model,
+            prompt_template=prompt_template,
+            chunked_ce_tokens=chunked_ce_tokens,
+        )
 
         raw_norm = getattr(model_cfg, "normalization_mapping", None)
         if raw_norm is not None:
