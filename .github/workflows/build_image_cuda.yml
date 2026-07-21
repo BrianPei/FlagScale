@@ -63,7 +63,7 @@ on:
         required: false
         type: string
         description: Override runs_on. Falls back to platform config if not set.
-        default: '["flagscale-nvidia-a100-gpu2-32c-128g"]'
+        default: '["self-hosted", "Linux", "X64", "nvidia-0", "gpus-8"]'
       container_volumes:
         required: false
         type: string
