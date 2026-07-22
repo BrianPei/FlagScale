@@ -130,6 +130,31 @@ jobs:
       - name: Check environment info
         run: cd $PROJECT_ROOT && bash ./tests/test_utils/runners/check_env.sh
 
+      - name: Validate Ascend runtime
+        if: inputs.platform == 'ascend'
+        run: |
+          set -euo pipefail
+
+          command -v npu-smi >/dev/null || {
+            echo "❌ npu-smi is not available in the Ascend CI container"
+            exit 1
+          }
+          npu-smi info
+
+          python - <<'PY'
+          import torch
+          import torch_npu  # noqa: F401
+
+          if not hasattr(torch, "npu"):
+              raise RuntimeError("torch.npu is not available")
+
+          device_count = torch.npu.device_count()
+          print(f"PyTorch: {torch.__version__}")
+          print(f"Ascend NPU count: {device_count}")
+          if device_count < 1:
+              raise RuntimeError("No Ascend NPU is visible inside the CI container")
+          PY
+
       - name: Install FlagScale CLI
         run: |
           set -euo pipefail
