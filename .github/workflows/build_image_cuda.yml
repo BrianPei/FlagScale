@@ -1,4 +1,4 @@
-# Copyright 2026 FlagOS Contributors
+﻿# Copyright 2026 FlagOS Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ on:
           "/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]
 
   # Trigger on PRs that modify docker-related files (build + test only, no push)
-  pull_request:
+  pull_request_target:
     branches: [main]
     paths:
       - 'docker/cuda/**'
@@ -91,7 +91,7 @@ concurrency:
 
 env:
   # Local registry used by CI runners (see .github/configs/cuda.yml)
-  REGISTRY: localhost:5000
+  REGISTRY: harbor.baai.ac.cn/flagscale
   # Default build versions (keep in sync with docker/build.sh)
   CUDA_VERSION: '12.8.1'
   UBUNTU_VERSION: '22.04'
@@ -111,7 +111,7 @@ jobs:
       target: ${{ steps.params.outputs.target }}
       push: ${{ steps.params.outputs.push }}
       no_cache: ${{ steps.params.outputs.no_cache }}
-      tar_dir: ${{ steps.config.outputs.tar_dir }}
+    tar_dir: ${{ steps.config.outputs.tar_dir }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -147,8 +147,8 @@ jobs:
         run: |
           EVENT="${{ github.event_name }}"
 
-          if [ "$EVENT" = "pull_request" ]; then
-            # PR: always build dev images, push to local registry, use cache
+          if [ "$EVENT" = "pull_request_target" ]; then
+            # PR: always build dev images, push to Harbor, use cache
             echo "target=dev" >> $GITHUB_OUTPUT
             echo "push=true" >> $GITHUB_OUTPUT
             echo "no_cache=false" >> $GITHUB_OUTPUT
@@ -187,6 +187,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -344,6 +346,13 @@ jobs:
     needs: ['prepare', 'build', 'summary']
     runs-on: ${{ fromJson(inputs.runs_on || '["flagscale-nvidia-a100-gpu2-32c-128g"]') }}
     steps:
+      - name: Login to Harbor registry
+        uses: docker/login-action@v3
+        with:
+          registry: harbor.baai.ac.cn
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
       - name: Load train image from tar and push
         run: |
           set -euo pipefail
@@ -383,6 +392,7 @@ jobs:
     name: Run CUDA tests
     needs: ['prepare', 'build', 'load_images']
     uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
     with:
       platform: cuda
       ci_train_image: ${{ needs.build.outputs.train_tag }}

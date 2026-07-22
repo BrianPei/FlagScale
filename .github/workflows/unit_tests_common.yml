@@ -65,6 +65,9 @@ jobs:
     name: unit-${{ inputs.device }}
     container:
       image: ${{ inputs.image }}
+      credentials:
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.CONTAINER_REGISTRY }}
       ports:
         - 80
       volumes: ${{ fromJson(inputs.container_volumes) }}
