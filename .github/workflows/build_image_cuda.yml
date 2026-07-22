@@ -111,7 +111,7 @@ jobs:
       target: ${{ steps.params.outputs.target }}
       push: ${{ steps.params.outputs.push }}
       no_cache: ${{ steps.params.outputs.no_cache }}
-    tar_dir: ${{ steps.config.outputs.tar_dir }}
+      tar_dir: ${{ steps.config.outputs.tar_dir }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
