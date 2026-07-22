@@ -21,8 +21,8 @@ on:
       - 'docs/**'
       - 'docker/cuda/**'
       - 'docker/build.sh'
-      - 'tools/install/**'
-      - 'requirements/**'
+      - 'tools/install/cuda/**'
+      - 'requirements/cuda/**'
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/push_image_harbor.yml'
   pull_request:
@@ -31,8 +31,8 @@ on:
       - 'docs/**'
       - 'docker/cuda/**'
       - 'docker/build.sh'
-      - 'tools/install/**'
-      - 'requirements/**'
+      - 'tools/install/cuda/**'
+      - 'requirements/cuda/**'
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/push_image_harbor.yml'
   workflow_dispatch:
@@ -88,13 +88,12 @@ jobs:
     with:
       platform: cuda
 
-  # Disable util the new devices ready
-  # ascend_tests:
-  #   name: Ascend tests
-  #   if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ascend'
-  #   uses: ./.github/workflows/all_tests_common.yml
-  #   with:
-  #     platform: ascend
+  ascend_tests:
+    name: Ascend tests
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ascend'
+    uses: ./.github/workflows/all_tests_common.yml
+    with:
+      platform: ascend
 
   metax_tests:
     name: MetaX tests
@@ -109,7 +108,7 @@ jobs:
     needs:
       - check_docker_changes
       - cuda_tests
-      # - ascend_tests
+      - ascend_tests
       - metax_tests
     runs-on: ubuntu-latest
     if: always()
@@ -126,11 +125,11 @@ jobs:
           #   failed=true
           # fi
 
-          # if [ "${{ needs.ascend_tests.result }}" != "success" ] && \
-          #    [ "${{ needs.ascend_tests.result }}" != "skipped" ]; then
-          #   echo "❌ Ascend tests failed"
-          #   failed=true
-          # fi
+          if [ "${{ needs.ascend_tests.result }}" != "success" ] && \
+             [ "${{ needs.ascend_tests.result }}" != "skipped" ]; then
+            echo "❌ Ascend tests failed"
+            failed=true
+          fi
 
           if [ "${{ needs.metax_tests.result }}" != "success" ] && \
              [ "${{ needs.metax_tests.result }}" != "skipped" ]; then
