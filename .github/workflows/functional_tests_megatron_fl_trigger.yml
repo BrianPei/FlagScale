@@ -98,9 +98,6 @@ jobs:
         test_config: ${{ fromJson(needs.checkout_and_config.outputs.train_test_matrix) }}
     container:
       image: ${{ needs.checkout_and_config.outputs.ci_train_image }}
-      credentials:
-        username: ${{ secrets.REGISTRY_USERNAME }}
-        password: ${{ secrets.CONTAINER_REGISTRY }}
       ports:
         - 80
       volumes: ${{ fromJson(needs.checkout_and_config.outputs.container_volumes) }}
@@ -270,9 +267,6 @@ jobs:
         test_config: ${{ fromJson(needs.checkout_and_config.outputs.hetero_train_test_matrix) }}
     container:
       image: ${{ needs.checkout_and_config.outputs.ci_train_image }}
-      credentials:
-        username: ${{ secrets.REGISTRY_USERNAME }}
-        password: ${{ secrets.CONTAINER_REGISTRY }}
       ports:
         - 80
       volumes: ${{ fromJson(needs.checkout_and_config.outputs.container_volumes) }}
