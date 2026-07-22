@@ -1,0 +1,18 @@
+name: ascend_tests
+
+on:
+  push:
+    branches:
+      - test-v0.1
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ascend_tests:
+    name: Ascend tests
+    uses: ./.github/workflows/all_tests_common.yml
+    with:
+      platform: ascend
