@@ -1,4 +1,4 @@
-# Copyright 2026 FlagOS Contributors
+﻿# Copyright 2026 FlagOS Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -165,7 +165,7 @@ jobs:
   build:
     name: Build ${{ matrix.task }}
     needs: prepare
-    runs-on: ${{ fromJson(inputs.runs_on || '["flagscale-nvidia-a100-gpu2-32c-128g"]') }}
+    runs-on: ["self-hosted", "Linux", "X64", "nvidia-0", "gpus-8"]
     env:
       HTTP_PROXY: ${{ vars.HTTP_PROXY }}
       HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
@@ -353,7 +353,7 @@ jobs:
   load_images:
     name: Load and push images
     needs: ['prepare', 'build', 'summary']
-    runs-on: ${{ fromJson(inputs.runs_on || '["flagscale-nvidia-a100-gpu2-32c-128g"]') }}
+    runs-on: ["self-hosted", "Linux", "X64", "nvidia-0", "gpus-8"]
     steps:
       - name: Load train image from tar and push
         run: |
