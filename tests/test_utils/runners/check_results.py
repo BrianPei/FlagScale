@@ -65,6 +65,34 @@ def load_gold_file(gold_path):
         return json.load(f) if gold_path.endswith(".json") else f.readlines()
 
 
+def extract_marked_output(lines):
+    """Extract output between functional-test markers.
+
+    Golden files may include a license header before the first marker. Preserve
+    unmarked legacy result formats unchanged.
+    """
+    start_marker = "**************************************************"
+    end_marker = "##################################################"
+    output = False
+    found_marker = False
+    result = []
+
+    for line in lines:
+        stripped = line.rstrip("\n")
+        if stripped.endswith(start_marker):
+            output = True
+            found_marker = True
+            result.append(start_marker + "\n")
+            continue
+        if output and stripped.endswith(end_marker):
+            output = False
+            continue
+        if output:
+            result.append(line)
+
+    return result if found_marker else lines
+
+
 def extract_metrics_from_log(lines, metric_keys=None):
     """
     Extract metrics from training log lines.
@@ -333,20 +361,10 @@ def test_inference_equal(path, task, model, case):
         lines = file.readlines()
 
     # Extract inference output content within the marker range
-    result_lines = []
-    output = False  # Flag to indicate whether to start collecting output content
+    result_lines = extract_marked_output(lines)
     for line in lines:
         # Assertion check: ensure no 'flag_gems' import failure errors exist
         assert "Failed to import 'flag_gems'" not in line, "Failed to import 'flag_gems''"
-
-        if line.rstrip("\n").endswith("**************************************************"):
-            output = True
-            result_lines.append("**************************************************\n")
-            continue
-        if line.rstrip("\n").endswith("##################################################"):
-            output = False
-        if output:
-            result_lines.append(line)
 
     # Construct the path to the golden reference result file
     gold_value_path = os.path.join(path, task, model, "results_gold", case)
@@ -354,6 +372,8 @@ def test_inference_equal(path, task, model, case):
 
     with open(gold_value_path, "r") as file:
         gold_value_lines = file.readlines()
+
+    gold_value_lines = extract_marked_output(gold_value_lines)
 
     # Clean up trailing blank lines in the golden reference results: improve comparison robustness
     if gold_value_lines:

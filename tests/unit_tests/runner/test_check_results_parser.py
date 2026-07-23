@@ -1,4 +1,25 @@
-from tests.test_utils.runners.check_results import extract_metrics_from_log
+from tests.test_utils.runners.check_results import (
+    extract_marked_output,
+    extract_metrics_from_log,
+)
+
+
+def test_extract_marked_output_skips_license_header():
+    lines = [
+        "# Copyright 2026 FlagOS Contributors\n",
+        "\n",
+        "**************************************************\n",
+        "output.prompt='hello'\n",
+        "output.outputs[0].text='world'\n",
+    ]
+
+    assert extract_marked_output(lines) == lines[2:]
+
+
+def test_extract_marked_output_preserves_unmarked_results():
+    lines = ["legacy output\n"]
+
+    assert extract_marked_output(lines) == lines
 
 
 def test_extract_metrics_from_log_supports_pipe_separated_format():
