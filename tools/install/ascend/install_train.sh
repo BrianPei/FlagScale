@@ -68,7 +68,15 @@ install_transformer_engine() {
 }
 
 install_megatron_lm() {
-    should_build_package "megatron-core" || return 0
+    if [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] && \
+        TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c \
+            "from megatron.core.models.gpt import GPTModel" &>/dev/null; then
+        local version
+        version=$(get_package_version "megatron-core")
+        log_info "megatron-core is importable (version: ${version:-unknown}), skipping"
+        return 0
+    fi
+
     set_step "Installing Megatron-LM-FL for Ascend"
     mkdir -p "$FLAGSCALE_DEPS"
     retry_git_clone -d $DEBUG \
