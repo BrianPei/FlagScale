@@ -61,7 +61,8 @@ install_transformer_engine() {
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
     run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/TransformerEngine-FL' && \
-        TE_FL_SKIP_CUDA=1 $pip_cmd install --root-user-action=ignore \
+        TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 \
+        $pip_cmd install --root-user-action=ignore \
         --no-build-isolation ." || return 1
     log_success "TransformerEngine-FL ready"
 }
@@ -76,6 +77,7 @@ install_megatron_lm() {
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
     run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && \
+        TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
         $pip_cmd install --root-user-action=ignore --no-build-isolation . -v" || return 1
     log_success "Megatron-LM-FL ready"
 }
