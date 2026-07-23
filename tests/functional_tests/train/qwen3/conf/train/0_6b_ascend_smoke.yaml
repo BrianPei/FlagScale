@@ -44,6 +44,8 @@ model:
   # Reference/unfused operators avoid CUDA-only Transformer Engine kernels.
   transformer_impl: local
   attention_backend: unfused
+  no_persist_layer_norm: true
+  no_masked_softmax_fusion: true
   no_check_for_nan_in_loss_and_grad: false
   no_gradient_accumulation_fusion: true
   num_layers: 28
