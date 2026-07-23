@@ -177,6 +177,38 @@ def test_train_equal(path, task, model, case):
     with open(result_path, "r", errors="replace") as file:
         lines = file.readlines()
 
+    # A case may explicitly opt into smoke validation. This is useful when a
+    # new accelerator is first enabled and no trustworthy, platform-specific
+    # golden loss curve has been recorded yet. Smoke mode still requires a
+    # completed run log and finite loss values; it never invents golden data.
+    config_path = os.path.join(path, task, model, "conf", case + ".yaml")
+    smoke_config = {}
+    if os.path.exists(config_path):
+        case_config = OmegaConf.load(config_path)
+        training_smoke = case_config.get("test", {}).get("training_smoke", {})
+        smoke_config = (
+            OmegaConf.to_container(training_smoke, resolve=True)
+            if OmegaConf.is_config(training_smoke)
+            else training_smoke
+        )
+
+    if smoke_config and smoke_config.get("enabled", False):
+        metric_key = smoke_config.get("metric", "lm loss:")
+        min_values = int(smoke_config.get("min_values", 1))
+        result_values = extract_metrics_from_log(lines, [metric_key])[metric_key]["values"]
+
+        print("\nAscend training smoke validation")
+        print(f"Metric: {metric_key}")
+        print(f"Values: {result_values}")
+        assert len(result_values) >= min_values, (
+            f"Expected at least {min_values} values for '{metric_key}', "
+            f"but extracted {len(result_values)}"
+        )
+        assert np.all(np.isfinite(result_values)), (
+            f"Metric '{metric_key}' contains NaN or Inf: {result_values}"
+        )
+        return
+
     # Load gold values first to determine which metrics to extract
     gold_value_path = os.path.join(path, task, model, "gold_values", case + ".json")
     assert os.path.exists(gold_value_path), f"Failed to find gold result JSON at {gold_value_path}"
