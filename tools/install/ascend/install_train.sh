@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Train task (Ascend): Python requirements plus Megatron-LM-FL.
+# Train task (Ascend): Python requirements plus training source dependencies.
 # The Ascend CANN runtime and torch_npu are supplied by the base image/host.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,7 +29,7 @@ FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/ascend/train.txt"
 
-SRC_DEPS_LIST="megatron-lm"
+SRC_DEPS_LIST="transformer-engine megatron-lm"
 
 while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac
@@ -49,6 +49,21 @@ install_pip() {
         run_cmd -d $DEBUG $(get_pip_cmd) install --root-user-action=ignore $pkgs || return 1
         log_success "Ascend train pip packages installed"
     fi
+}
+
+install_transformer_engine() {
+    should_build_package "transformer-engine" || return 0
+    set_step "Installing TransformerEngine-FL for Ascend"
+    mkdir -p "$FLAGSCALE_DEPS"
+    retry_git_clone -d $DEBUG --depth 1 \
+        "https://github.com/flagos-ai/TransformerEngine-FL.git" \
+        "$FLAGSCALE_DEPS/TransformerEngine-FL" "$RETRY_COUNT" || return 1
+    local pip_cmd
+    pip_cmd=$(get_pip_cmd)
+    run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/TransformerEngine-FL' && \
+        TE_FL_SKIP_CUDA=1 $pip_cmd install --root-user-action=ignore \
+        --no-build-isolation ." || return 1
+    log_success "TransformerEngine-FL ready"
 }
 
 install_megatron_lm() {
@@ -72,6 +87,9 @@ install_src() {
     fi
     is_phase_enabled task || has_src_deps_for_phase $SRC_DEPS_LIST || return 0
 
+    should_install_src task "transformer-engine" && {
+        install_transformer_engine || die "TransformerEngine-FL failed"
+    }
     should_install_src task "megatron-lm" && {
         install_megatron_lm || die "Megatron-LM-FL failed"
     }
