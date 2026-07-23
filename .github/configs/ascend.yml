@@ -21,7 +21,7 @@ display_name: "Ascend NPU Tests"
 
 # Docker image for this hardware
 ci_image: harbor.baai.ac.cn/flagscale/vllm-plugin-fl:v0.1.0-ascend-ci
-ci_train_image: harbor.baai.ac.cn/flagscale/vllm-plugin-fl:v0.1.0-ascend-ci
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260723-ascend-dev
 ci_inference_image: harbor.baai.ac.cn/flagscale/vllm-plugin-fl:v0.1.0-ascend-ci
 
 # Runner labels for this hardware
