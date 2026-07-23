@@ -81,8 +81,20 @@ EOF
     log_success "python3-config ready"
 }
 
+transformer_engine_ready() {
+    TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c \
+        "from transformer_engine.pytorch import DotProductAttention, LayerNormLinear; \
+from transformer_engine.pytorch.fp8 import FP8GlobalStateManager, fp8_autocast" &>/dev/null
+}
+
 install_transformer_engine() {
-    should_build_package "transformer-engine" || return 0
+    if [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] && transformer_engine_ready; then
+        local version
+        version=$(get_package_version "transformer-engine")
+        log_info "TransformerEngine-FL is importable (version: ${version:-unknown}), skipping"
+        return 0
+    fi
+
     set_step "Installing TransformerEngine-FL for Ascend"
     mkdir -p "$FLAGSCALE_DEPS"
     retry_git_clone -d $DEBUG --depth 1 \
@@ -94,6 +106,7 @@ install_transformer_engine() {
         TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 \
         $pip_cmd install --root-user-action=ignore \
         --no-build-isolation ." || return 1
+    [ "$DEBUG" = true ] || transformer_engine_ready || return 1
     log_success "TransformerEngine-FL ready"
 }
 
@@ -135,10 +148,28 @@ install_src() {
     }
 }
 
+validate_training_stack() {
+    set_step "Validating Ascend training stack"
+    if [ "$DEBUG" = true ]; then
+        log_info "Would validate Megatron-LM-FL and TransformerEngine-FL integration"
+        return 0
+    fi
+
+    TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c '
+from megatron.core.extensions.transformer_engine import HAVE_TE
+from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
+
+assert HAVE_TE, "Megatron-LM-FL did not detect TransformerEngine-FL"
+assert TESpecProvider is not None, "TransformerEngine spec provider is unavailable"
+' || return 1
+    log_success "Ascend training stack ready"
+}
+
 main() {
     install_pip || die "Ascend train pip failed"
     ensure_python_config || die "python3-config setup failed"
     install_src
+    validate_training_stack || die "Ascend training stack validation failed"
 }
 
 main
