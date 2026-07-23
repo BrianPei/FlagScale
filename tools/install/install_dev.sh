@@ -82,15 +82,47 @@ install_sccache() {
     set_step "Installing sccache v${SCCACHE_VERSION}"
 
     if [ "$DEBUG" = true ]; then
-        log_info "[DRY-RUN] curl -L $url | tar xz"
+        log_info "[DRY-RUN] download and extract $url"
         return 0
     fi
 
-    curl --connect-timeout 120 --max-time 600 --retry 5 --retry-delay 60 -L "$url" | tar xz || {
+    local archive
+    archive=$(mktemp "/tmp/${tmp_dir}.XXXXXX.tar.gz")
+    local attempt=1
+    local max_attempts="${SCCACHE_DOWNLOAD_RETRIES:-5}"
+    local download_ok=false
+
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if curl --connect-timeout 120 --max-time 600 -L \
+            --continue-at - --output "$archive" "$url"; then
+            if tar -tzf "$archive" >/dev/null 2>&1; then
+                download_ok=true
+                break
+            fi
+            log_warn "Downloaded sccache archive is invalid; restarting download"
+            : > "$archive"
+        fi
+
+        [ "$attempt" -ge "$max_attempts" ] && break
+        log_warn "Retrying sccache download ($attempt/$max_attempts) in 5s..."
+        attempt=$((attempt + 1))
+        sleep 5
+    done
+
+    if [ "$download_ok" != true ]; then
         log_error "Failed to download sccache"
+        rm -f "$archive"
+        [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    tar -xzf "$archive" || {
+        log_error "Failed to extract sccache"
+        rm -f "$archive"
         [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
         return 1
     }
+    rm -f "$archive"
 
     [ ! -f "$tmp_dir/sccache" ] && { log_error "sccache binary not found"; rm -rf "$tmp_dir"; return 1; }
     mv "$tmp_dir/sccache" /usr/bin/sccache
