@@ -81,7 +81,7 @@ env:
   REGISTRY: harbor.baai.ac.cn
   REGISTRY_NAMESPACE: flagscale
   ASCEND_BASE_IMAGE: quay.io/ascend/vllm-ascend:v0.13.0rc1-a3
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.11'
   PKG_MGR: pip
 
 jobs:
@@ -222,7 +222,6 @@ jobs:
           no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
           build-args: |
             BASE_IMAGE=${{ env.ASCEND_BASE_IMAGE }}
-            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
             PKG_MGR=${{ env.PKG_MGR }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
