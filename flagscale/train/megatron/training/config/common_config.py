@@ -74,7 +74,7 @@ class ProfilingConfig:
 class DistributedInitConfig:
     """Configuration settings for distributed training initialization."""
 
-    distributed_backend: Literal["nccl", "gloo", "flagcx"] = "nccl"
+    distributed_backend: Literal["nccl", "hccl", "gloo", "flagcx"] = "nccl"
     """Which backend to use for distributed training."""
 
     distributed_timeout_minutes: int = 10
