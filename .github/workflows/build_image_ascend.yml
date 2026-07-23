@@ -80,8 +80,10 @@ concurrency:
 env:
   REGISTRY: harbor.baai.ac.cn
   REGISTRY_NAMESPACE: flagscale
-  ASCEND_BASE_IMAGE: quay.io/ascend/vllm-ascend:v0.13.0rc1-a3
-  PYTHON_VERSION: '3.11'
+  ASCEND_TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev
+  ASCEND_INFERENCE_BASE_IMAGE: quay.io/ascend/vllm-ascend:v0.13.0rc1-a3
+  TRAIN_PYTHON_VERSION: '3.12'
+  INFERENCE_PYTHON_VERSION: '3.11'
   PKG_MGR: pip
 
 jobs:
@@ -93,9 +95,9 @@ jobs:
       target: ${{ steps.params.outputs.target }}
       publish: ${{ steps.params.outputs.publish }}
       no_cache: ${{ steps.params.outputs.no_cache }}
-      tag_suffix: ${{ steps.params.outputs.tag_suffix }}
       train_image: ${{ steps.params.outputs.train_image }}
       inference_image: ${{ steps.params.outputs.inference_image }}
+      all_image: ${{ steps.params.outputs.all_image }}
       run_tests: ${{ steps.params.outputs.run_tests }}
     steps:
       - name: Compute parameters
@@ -132,18 +134,20 @@ jobs:
             fi
           fi
 
-          TAG_SUFFIX="${TARGET}-ascend-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
-          TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TAG_SUFFIX}"
-          INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${TAG_SUFFIX}"
+          TRAIN_TAG="${TARGET}-ascend-py${{ env.TRAIN_PYTHON_VERSION }}-${SHORT_SHA}"
+          INFERENCE_TAG="${TARGET}-ascend-py${{ env.INFERENCE_PYTHON_VERSION }}-${SHORT_SHA}"
+          TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TRAIN_TAG}"
+          INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${INFERENCE_TAG}"
+          ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${INFERENCE_TAG}"
 
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
           echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
           echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
-          echo "tag_suffix=$TAG_SUFFIX" >> "$GITHUB_OUTPUT"
           echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
           echo "inference_image=$INFERENCE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "all_image=$ALL_IMAGE" >> "$GITHUB_OUTPUT"
 
   validate_pr:
     name: Validate untrusted Ascend PR
@@ -211,6 +215,26 @@ jobs:
           echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
+      - name: Select task image and base
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.task }}" in
+            train)
+              echo "base=${{ env.ASCEND_TRAIN_BASE_IMAGE }}" >> "$GITHUB_OUTPUT"
+              echo "tag=${{ needs.prepare.outputs.train_image }}" >> "$GITHUB_OUTPUT"
+              ;;
+            inference)
+              echo "base=${{ env.ASCEND_INFERENCE_BASE_IMAGE }}" >> "$GITHUB_OUTPUT"
+              echo "tag=${{ needs.prepare.outputs.inference_image }}" >> "$GITHUB_OUTPUT"
+              ;;
+            all)
+              echo "base=${{ env.ASCEND_INFERENCE_BASE_IMAGE }}" >> "$GITHUB_OUTPUT"
+              echo "tag=${{ needs.prepare.outputs.all_image }}" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       - name: Build and optionally push
         uses: docker/build-push-action@v6
         with:
@@ -218,10 +242,10 @@ jobs:
           file: docker/ascend/Dockerfile.${{ matrix.task }}
           target: ${{ needs.prepare.outputs.target }}
           push: ${{ needs.prepare.outputs.publish == 'true' }}
-          tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-${{ matrix.task }}:${{ needs.prepare.outputs.tag_suffix }}
+          tags: ${{ steps.image.outputs.tag }}
           no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
           build-args: |
-            BASE_IMAGE=${{ env.ASCEND_BASE_IMAGE }}
+            BASE_IMAGE=${{ steps.image.outputs.base }}
             PKG_MGR=${{ env.PKG_MGR }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}

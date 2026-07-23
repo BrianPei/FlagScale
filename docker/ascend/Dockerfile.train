@@ -3,7 +3,7 @@
 # driver is mounted at container runtime; credentials and drivers are never
 # baked into this image.
 
-ARG BASE_IMAGE=quay.io/ascend/vllm-ascend:v0.13.0rc1-a3
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev
 ARG PKG_MGR=pip
 ARG FLAGSCALE_HOME=/opt/flagscale
 
