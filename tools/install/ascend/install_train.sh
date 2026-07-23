@@ -51,6 +51,36 @@ install_pip() {
     fi
 }
 
+ensure_python_config() {
+    command -v python3-config &>/dev/null && return 0
+
+    local python_bin
+    python_bin=$(command -v python || command -v python3) || return 1
+    local python_config="$(dirname "$python_bin")/python3-config"
+
+    set_step "Installing python3-config for Ascend dataset helpers"
+    if [ "$DEBUG" = true ]; then
+        log_info "Would install $python_config"
+        return 0
+    fi
+
+    cat >"$python_config" <<EOF
+#!$python_bin
+import sys
+import sysconfig
+
+if sys.argv[1:] != ["--extension-suffix"]:
+    raise SystemExit("python3-config shim only supports --extension-suffix")
+suffix = sysconfig.get_config_var("EXT_SUFFIX")
+if not suffix:
+    raise SystemExit("Python EXT_SUFFIX is unavailable")
+print(suffix)
+EOF
+    chmod 0755 "$python_config"
+    "$python_config" --extension-suffix >/dev/null || return 1
+    log_success "python3-config ready"
+}
+
 install_transformer_engine() {
     should_build_package "transformer-engine" || return 0
     set_step "Installing TransformerEngine-FL for Ascend"
@@ -107,6 +137,7 @@ install_src() {
 
 main() {
     install_pip || die "Ascend train pip failed"
+    ensure_python_config || die "python3-config setup failed"
     install_src
 }
 
