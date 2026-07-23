@@ -40,6 +40,7 @@ COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
 
 RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/opt/flagscale/downloads,sharing=locked \
     . /etc/profile.d/flagscale-env.sh && \
     chmod +x /workspace/tools/install/*.sh \
         /workspace/tools/install/utils/*.sh \

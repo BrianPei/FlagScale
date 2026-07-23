@@ -86,43 +86,46 @@ install_sccache() {
         return 0
     fi
 
-    local archive
-    archive=$(mktemp "/tmp/${tmp_dir}.XXXXXX.tar.gz")
+    local downloads_dir="${FLAGSCALE_DOWNLOADS:-${FLAGSCALE_HOME:-/opt/flagscale}/downloads}"
+    mkdir -p "$downloads_dir"
+    local archive="$downloads_dir/${tmp_dir}.tar.gz"
     local attempt=1
     local max_attempts="${SCCACHE_DOWNLOAD_RETRIES:-5}"
     local download_ok=false
 
-    while [ "$attempt" -le "$max_attempts" ]; do
-        if curl --connect-timeout 120 --max-time 600 -L \
-            --continue-at - --output "$archive" "$url"; then
-            if tar -tzf "$archive" >/dev/null 2>&1; then
-                download_ok=true
-                break
+    if [ -s "$archive" ] && tar -tzf "$archive" >/dev/null 2>&1; then
+        download_ok=true
+        log_info "Using cached sccache archive"
+    else
+        while [ "$attempt" -le "$max_attempts" ]; do
+            if curl --connect-timeout 120 --max-time 600 -L \
+                --continue-at - --output "$archive" "$url"; then
+                if tar -tzf "$archive" >/dev/null 2>&1; then
+                    download_ok=true
+                    break
+                fi
+                log_warn "Downloaded sccache archive is invalid; restarting download"
+                : > "$archive"
             fi
-            log_warn "Downloaded sccache archive is invalid; restarting download"
-            : > "$archive"
-        fi
 
-        [ "$attempt" -ge "$max_attempts" ] && break
-        log_warn "Retrying sccache download ($attempt/$max_attempts) in 5s..."
-        attempt=$((attempt + 1))
-        sleep 5
-    done
+            [ "$attempt" -ge "$max_attempts" ] && break
+            log_warn "Retrying sccache download ($attempt/$max_attempts) in 5s..."
+            attempt=$((attempt + 1))
+            sleep 5
+        done
+    fi
 
     if [ "$download_ok" != true ]; then
         log_error "Failed to download sccache"
-        rm -f "$archive"
         [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
         return 1
     fi
 
     tar -xzf "$archive" || {
         log_error "Failed to extract sccache"
-        rm -f "$archive"
         [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
         return 1
     }
-    rm -f "$archive"
 
     [ ! -f "$tmp_dir/sccache" ] && { log_error "sccache binary not found"; rm -rf "$tmp_dir"; return 1; }
     mv "$tmp_dir/sccache" /usr/bin/sccache
