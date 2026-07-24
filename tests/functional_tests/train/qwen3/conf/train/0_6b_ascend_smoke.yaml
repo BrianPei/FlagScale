@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-defaults:
-  - data
-
 data:
   # Keep the accelerator smoke test independent of runner-local .idx/.bin files.
   # MockGPTDataset still exercises tokenization, forward/backward, HCCL, and the optimizer.
-  data_path: []
   mock_data: true
+  tokenizer:
+    tokenizer_type: QwenTokenizerFS
+    tokenizer_path: /home/gitlab-runner/tokenizers/qwentokenizer
+    vocab_size: 151936
+    make_vocab_size_divisible_by: 64
 
 system:
   distributed_backend: hccl
