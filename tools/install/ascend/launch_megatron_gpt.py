@@ -35,6 +35,9 @@ from megatron.plugin.platform import get_platform
 
 
 platform = get_platform()
+# Megatron's NPU registration may replace torch.cuda compatibility helpers.
+# Restore TE-FL's NPU compatibility layer before importing/running the model.
+apply_patch()
 if platform.device_name() != "npu":
     raise RuntimeError(f"Megatron-LM-FL selected {platform.device_name()}, expected npu")
 if not torch_npu.npu.is_available():

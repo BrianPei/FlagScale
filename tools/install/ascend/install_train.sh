@@ -27,6 +27,8 @@ DEBUG="${FLAGSCALE_DEBUG:-false}"
 RETRY_COUNT="${FLAGSCALE_RETRY_COUNT:-3}"
 FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
+TE_REPO="${FLAGSCALE_TE_REPO:-https://github.com/flagos-ai/TransformerEngine-FL.git}"
+TE_REF="${FLAGSCALE_TE_REF:-}"
 REQ_FILE="$PROJECT_ROOT/requirements/ascend/train.txt"
 
 SRC_DEPS_LIST="transformer-engine megatron-lm"
@@ -109,8 +111,9 @@ install_transformer_engine() {
 
     set_step "Installing TransformerEngine-FL for Ascend"
     mkdir -p "$FLAGSCALE_DEPS"
-    retry_git_clone -d $DEBUG --depth 1 \
-        "https://github.com/flagos-ai/TransformerEngine-FL.git" \
+    local clone_args=(-d "$DEBUG" --depth 1)
+    [ -n "$TE_REF" ] && clone_args+=(--branch "$TE_REF")
+    retry_git_clone "${clone_args[@]}" "$TE_REPO" \
         "$FLAGSCALE_DEPS/TransformerEngine-FL" "$RETRY_COUNT" || return 1
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
@@ -172,6 +175,7 @@ except ImportError:
     torch_npu = None
 
 import transformer_engine
+apply_patch = None
 if torch_npu is not None and torch_npu.npu.is_available():
     from transformer_engine.plugin.core.backends.vendor.npu.patches import apply_patch
 
@@ -182,6 +186,16 @@ if torch_npu is not None and torch_npu.npu.is_available():
 from megatron.plugin.platform import get_platform
 
 platform = get_platform()
+# Megatron NPU registration may replace torch.cuda compatibility helpers.
+# Re-apply TE-FL NPU patch after platform initialization so real TE modules
+# do not enter the CUDA-only compatibility path.
+if apply_patch is not None:
+    import torch
+
+    apply_patch()
+    properties = torch.cuda.get_device_properties(torch.cuda.current_device())
+    assert properties.major is not None, \
+        "TE-FL NPU compatibility patch did not restore device properties"
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
 
