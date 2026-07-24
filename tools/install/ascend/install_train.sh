@@ -83,29 +83,13 @@ EOF
 
 transformer_engine_ready() {
     TE_FL_SKIP_CUDA=1 python -c '
-try:
-    import torch_npu
-    import torch_npu.contrib.transfer_to_npu
-except ImportError:
-    torch_npu = None
-
-from transformer_engine import te_device_type
 from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
 from transformer_engine.pytorch.fp8 import FP8GlobalStateManager, fp8_autocast
-
-if torch_npu is not None and torch_npu.npu.is_available():
-    assert te_device_type() == "npu", f"TransformerEngine selected {te_device_type()}, expected npu"
 ' &>/dev/null
 }
 
 megatron_lm_ready() {
     TE_FL_SKIP_CUDA=1 python -c '
-try:
-    import torch_npu
-    import torch_npu.contrib.transfer_to_npu
-except ImportError:
-    pass
-
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
 from megatron.core.models.gpt import GPTModel
@@ -182,19 +166,23 @@ validate_training_stack() {
     fi
 
     TE_FL_SKIP_CUDA=1 python -c '
-try:
-    import torch_npu
-    import torch_npu.contrib.transfer_to_npu
-except ImportError:
-    torch_npu = None
+from megatron.plugin.platform import get_platform
 
+platform = get_platform()
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
 from transformer_engine import te_device_type
 
+try:
+    import torch_npu
+except ImportError:
+    torch_npu = None
+
 assert HAVE_TE, "Megatron-LM-FL did not detect TransformerEngine-FL"
 assert TESpecProvider is not None, "TransformerEngine spec provider is unavailable"
 if torch_npu is not None and torch_npu.npu.is_available():
+    assert platform.device_name() == "npu", \
+        f"Megatron-LM-FL selected {platform.device_name()}, expected npu"
     assert te_device_type() == "npu", f"TransformerEngine selected {te_device_type()}, expected npu"
 ' || return 1
     log_success "Ascend training stack ready"
