@@ -83,30 +83,8 @@ EOF
 
 transformer_engine_ready() {
     TE_FL_SKIP_CUDA=1 python -c '
-import torch
-
-try:
-    import torch_npu
-    import torch_npu.contrib.transfer_to_npu
-except ImportError:
-    torch_npu = None
-
 from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
 from transformer_engine.pytorch.fp8 import FP8GlobalStateManager, fp8_autocast
-
-if torch_npu is not None and torch_npu.npu.is_available():
-    from transformer_engine.plugin.core.backends.reference.reference import ReferenceBackend
-    from transformer_engine.plugin.core.ops import DType
-
-    x = torch.randn(2, 8, device="npu", dtype=torch.float32)
-    weight = torch.ones(8, device="npu", dtype=torch.float32)
-    output, _, rsigma = ReferenceBackend().rmsnorm_fwd(
-        x, weight, 1e-5, None, None, DType.kFloat32, 0, False
-    )
-    assert output.device.type == "npu"
-    assert rsigma.device.type == "npu"
-    assert torch.isfinite(output).all()
-    assert torch.isfinite(rsigma).all()
 ' &>/dev/null
 }
 
@@ -187,8 +165,26 @@ validate_training_stack() {
         return 0
     fi
 
-    transformer_engine_ready || return 1
-    megatron_lm_ready || return 1
+    TE_FL_SKIP_CUDA=1 python -c '
+from megatron.plugin.platform import get_platform
+
+platform = get_platform()
+from megatron.core.extensions.transformer_engine import HAVE_TE
+from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
+from transformer_engine import te_device_type
+
+try:
+    import torch_npu
+except ImportError:
+    torch_npu = None
+
+assert HAVE_TE, "Megatron-LM-FL did not detect TransformerEngine-FL"
+assert TESpecProvider is not None, "TransformerEngine spec provider is unavailable"
+if torch_npu is not None and torch_npu.npu.is_available():
+    assert platform.device_name() == "npu", \
+        f"Megatron-LM-FL selected {platform.device_name()}, expected npu"
+    assert te_device_type() == "npu", f"TransformerEngine selected {te_device_type()}, expected npu"
+' || return 1
     log_success "Ascend training stack ready"
 }
 

@@ -48,9 +48,11 @@ system:
     tensorboard_log_interval: 999999
 
 model:
-  # TE modules still require CUDA. The local spec uses TE-FL's reference
-  # operators for RMSNorm and optimizer operations without the CUDA wrapper.
-  transformer_impl: local
+  transformer_impl: transformer_engine
+  te_fl_prefer: reference
+  te_fl_per_op: "rmsnorm_fwd=reference"
+  te_fl_allow_vendors: "npu"
+  te_fl_deny_vendors: "cuda"
   enable_flag_gems: false
   no_persist_layer_norm: true
   no_masked_softmax_fusion: true

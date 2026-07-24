@@ -491,15 +491,11 @@ def flatten_dict_to_args(config_dict, ignore_keys=[], do_dash_replace=True):
     for key, value in config_dict.items():
         if key in ignore_keys:
             continue
-        if value is None:
-            continue
         if do_dash_replace:
             key = key.replace("_", "-")
         if isinstance(value, dict):
             args.extend(flatten_dict_to_args(value, ignore_keys, do_dash_replace=do_dash_replace))
         elif isinstance(value, list):
-            if not value:
-                continue
             args.append(f"--{key}")
             for v in value:
                 args.append(f"{v}")
