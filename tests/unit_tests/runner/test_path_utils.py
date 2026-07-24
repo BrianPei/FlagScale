@@ -18,12 +18,24 @@ import pytest
 from omegaconf import OmegaConf
 
 from flagscale.runner.utils import (
+    flatten_dict_to_args,
     get_cwd_dir,
     get_pkg_dir,
     resolve_path,
     setup_exp_dir,
     setup_logging_dirs,
 )
+
+
+def test_flatten_dict_to_args_skips_unset_values():
+    config = {
+        "data_path": None,
+        "train_data_path": [],
+        "mock_data": True,
+        "seq_length": 256,
+    }
+
+    assert flatten_dict_to_args(config) == ["--mock-data", "--seq-length", "256"]
 
 # ---------------------------------------------------------------------------
 # resolve_path
