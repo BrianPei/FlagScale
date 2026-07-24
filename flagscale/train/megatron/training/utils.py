@@ -593,6 +593,9 @@ def append_to_progress_log(string, barrier=True):
 
 def get_blend_and_blend_per_split(args):
     """Get blend and blend_per_split from passed-in arguments."""
+    if getattr(args, "mock_data", False):
+        return None, None
+
     use_data_path = args.data_path is not None or args.data_args_path is not None
     use_per_split_data_path = (
         any(
