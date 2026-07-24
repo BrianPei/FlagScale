@@ -166,24 +166,27 @@ validate_training_stack() {
     fi
 
     TE_FL_SKIP_CUDA=1 python -c '
+try:
+    import torch_npu
+except ImportError:
+    torch_npu = None
+
+import transformer_engine
+if torch_npu is not None and torch_npu.npu.is_available():
+    assert transformer_engine.te_device_type() == "npu", \
+        f"TransformerEngine selected {transformer_engine.te_device_type()}, expected npu"
+
 from megatron.plugin.platform import get_platform
 
 platform = get_platform()
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
-from transformer_engine import te_device_type
-
-try:
-    import torch_npu
-except ImportError:
-    torch_npu = None
 
 assert HAVE_TE, "Megatron-LM-FL did not detect TransformerEngine-FL"
 assert TESpecProvider is not None, "TransformerEngine spec provider is unavailable"
 if torch_npu is not None and torch_npu.npu.is_available():
     assert platform.device_name() == "npu", \
         f"Megatron-LM-FL selected {platform.device_name()}, expected npu"
-    assert te_device_type() == "npu", f"TransformerEngine selected {te_device_type()}, expected npu"
 ' || return 1
     log_success "Ascend training stack ready"
 }
