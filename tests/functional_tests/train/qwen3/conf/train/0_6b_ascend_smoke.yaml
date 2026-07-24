@@ -18,7 +18,7 @@ defaults:
 data:
   # Keep the accelerator smoke test independent of runner-local .idx/.bin files.
   # MockGPTDataset still exercises tokenization, forward/backward, HCCL, and the optimizer.
-  data_path: null
+  data_path: []
   mock_data: true
 
 system:
