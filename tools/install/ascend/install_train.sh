@@ -82,15 +82,16 @@ EOF
 }
 
 transformer_engine_ready() {
-    TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c '
+    TE_FL_SKIP_CUDA=1 python -c '
+try:
+    import torch_npu
+    import torch_npu.contrib.transfer_to_npu
+except ImportError:
+    torch_npu = None
+
 from transformer_engine import te_device_type
 from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
 from transformer_engine.pytorch.fp8 import FP8GlobalStateManager, fp8_autocast
-
-try:
-    import torch_npu
-except ImportError:
-    torch_npu = None
 
 if torch_npu is not None and torch_npu.npu.is_available():
     assert te_device_type() == "npu", f"TransformerEngine selected {te_device_type()}, expected npu"
@@ -98,7 +99,13 @@ if torch_npu is not None and torch_npu.npu.is_available():
 }
 
 megatron_lm_ready() {
-    TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c '
+    TE_FL_SKIP_CUDA=1 python -c '
+try:
+    import torch_npu
+    import torch_npu.contrib.transfer_to_npu
+except ImportError:
+    pass
+
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
 from megatron.core.models.gpt import GPTModel
@@ -127,7 +134,6 @@ install_transformer_engine() {
         TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 \
         $pip_cmd install --root-user-action=ignore \
         --no-build-isolation ." || return 1
-    [ "$DEBUG" = true ] || transformer_engine_ready || return 1
     log_success "TransformerEngine-FL ready"
 }
 
@@ -150,7 +156,6 @@ install_megatron_lm() {
     run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && \
         TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
         $pip_cmd install --root-user-action=ignore --no-build-isolation . -v" || return 1
-    [ "$DEBUG" = true ] || megatron_lm_ready || return 1
     log_success "Megatron-LM-FL ready"
 }
 
@@ -176,15 +181,16 @@ validate_training_stack() {
         return 0
     fi
 
-    TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c '
+    TE_FL_SKIP_CUDA=1 python -c '
+try:
+    import torch_npu
+    import torch_npu.contrib.transfer_to_npu
+except ImportError:
+    torch_npu = None
+
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
 from transformer_engine import te_device_type
-
-try:
-    import torch_npu
-except ImportError:
-    torch_npu = None
 
 assert HAVE_TE, "Megatron-LM-FL did not detect TransformerEngine-FL"
 assert TESpecProvider is not None, "TransformerEngine spec provider is unavailable"
