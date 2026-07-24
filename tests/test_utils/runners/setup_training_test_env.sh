@@ -143,14 +143,15 @@ setup_ascend_training_env() {
     python -m pip install datasets==4.5.0 omegaconf==2.3.0 diffusers==0.36.0 hydra-core==1.3.2
 
     # Keep the legacy Ascend CI image usable while the newly built training
-    # image is rolling out. New images already contain Megatron-LM-FL, so the
-    # installer detects it and exits without rebuilding it.
+    # image is rolling out. The training stack requires both Megatron-LM-FL
+    # and TransformerEngine-FL, so validate the full integration before
+    # skipping either source dependency.
     ./tools/install/install.sh \
         --platform ascend \
         --task train \
         --pkg-mgr pip \
         --no-system --no-dev --no-base --no-task \
-        --src-deps megatron-lm \
+        --src-deps transformer-engine,megatron-lm \
         --retry-count 3
 
     apt-get update
