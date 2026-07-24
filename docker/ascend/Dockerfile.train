@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/ascend/*.sh && \
     ./tools/install/install.sh --platform ascend --task train \
-        --pkg-mgr ${PKG_MGR} --no-system && \
+        --pkg-mgr ${PKG_MGR} --no-system --force-build && \
     rm -rf /workspace/*
 
 FROM deps AS dev
@@ -71,7 +71,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/ascend/*.sh && \
     ./tools/install/install.sh --platform ascend --task train \
-        --pkg-mgr ${PKG_MGR} --no-system --no-dev && \
+        --pkg-mgr ${PKG_MGR} --no-system --no-dev --force-build && \
     rm -rf /workspace/*
 
 CMD ["/bin/bash"]

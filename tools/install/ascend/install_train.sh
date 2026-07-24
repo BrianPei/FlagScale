@@ -81,10 +81,27 @@ EOF
     log_success "python3-config ready"
 }
 
-training_stack_ready() {
+transformer_engine_ready() {
+    TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c '
+from transformer_engine import te_device_type
+from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
+from transformer_engine.pytorch.fp8 import FP8GlobalStateManager, fp8_autocast
+
+try:
+    import torch_npu
+except ImportError:
+    torch_npu = None
+
+if torch_npu is not None and torch_npu.npu.is_available():
+    assert te_device_type() == "npu", f"TransformerEngine selected {te_device_type()}, expected npu"
+' &>/dev/null
+}
+
+megatron_lm_ready() {
     TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c '
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
+from megatron.core.models.gpt import GPTModel
 
 assert HAVE_TE
 assert TESpecProvider is not None
@@ -92,10 +109,10 @@ assert TESpecProvider is not None
 }
 
 install_transformer_engine() {
-    if [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] && training_stack_ready; then
+    if [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] && transformer_engine_ready; then
         local version
         version=$(get_package_version "transformer-engine")
-        log_info "Ascend training stack is importable (TE version: ${version:-unknown}), skipping"
+        log_info "TransformerEngine-FL is ready (version: ${version:-unknown}), skipping"
         return 0
     fi
 
@@ -110,12 +127,13 @@ install_transformer_engine() {
         TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 \
         $pip_cmd install --root-user-action=ignore \
         --no-build-isolation ." || return 1
+    [ "$DEBUG" = true ] || transformer_engine_ready || return 1
     log_success "TransformerEngine-FL ready"
 }
 
 install_megatron_lm() {
     if [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] && \
-        training_stack_ready; then
+        megatron_lm_ready; then
         local version
         version=$(get_package_version "megatron-core")
         log_info "megatron-core is importable (version: ${version:-unknown}), skipping"
@@ -132,6 +150,7 @@ install_megatron_lm() {
     run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && \
         TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
         $pip_cmd install --root-user-action=ignore --no-build-isolation . -v" || return 1
+    [ "$DEBUG" = true ] || megatron_lm_ready || return 1
     log_success "Megatron-LM-FL ready"
 }
 
@@ -160,9 +179,17 @@ validate_training_stack() {
     TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c '
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
+from transformer_engine import te_device_type
+
+try:
+    import torch_npu
+except ImportError:
+    torch_npu = None
 
 assert HAVE_TE, "Megatron-LM-FL did not detect TransformerEngine-FL"
 assert TESpecProvider is not None, "TransformerEngine spec provider is unavailable"
+if torch_npu is not None and torch_npu.npu.is_available():
+    assert te_device_type() == "npu", f"TransformerEngine selected {te_device_type()}, expected npu"
 ' || return 1
     log_success "Ascend training stack ready"
 }
