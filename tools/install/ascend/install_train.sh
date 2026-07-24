@@ -173,6 +173,9 @@ except ImportError:
 
 import transformer_engine
 if torch_npu is not None and torch_npu.npu.is_available():
+    from transformer_engine.plugin.core.backends.vendor.npu.patches import apply_patch
+
+    apply_patch()
     assert transformer_engine.te_device_type() == "npu", \
         f"TransformerEngine selected {transformer_engine.te_device_type()}, expected npu"
 

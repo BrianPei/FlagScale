@@ -20,8 +20,10 @@ from pathlib import Path
 
 import torch_npu
 import transformer_engine
+from transformer_engine.plugin.core.backends.vendor.npu.patches import apply_patch
 
 
+apply_patch()
 if transformer_engine.te_device_type() != "npu":
     raise RuntimeError(
         f"TransformerEngine selected {transformer_engine.te_device_type()}, expected npu"
