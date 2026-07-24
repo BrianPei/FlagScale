@@ -15,6 +15,12 @@
 defaults:
   - data
 
+data:
+  # Keep the accelerator smoke test independent of runner-local .idx/.bin files.
+  # MockGPTDataset still exercises tokenization, forward/backward, HCCL, and the optimizer.
+  data_path: null
+  mock_data: true
+
 system:
   distributed_backend: hccl
   tensor_model_parallel_size: 1
