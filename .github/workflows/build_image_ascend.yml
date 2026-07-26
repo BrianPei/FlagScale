@@ -1,0 +1,241 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Docker Image - Ascend Train
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker/ascend/**'
+      - 'tools/install/ascend/**'
+      - 'tools/install/utils/**'
+      - 'tools/install/install.sh'
+      - 'requirements/ascend/**'
+      - 'flagscale/train/megatron/plugin_flagscale/**'
+      - 'flagscale/train/megatron/training/config/common_config.py'
+      - 'tests/functional_tests/train/qwen3/**'
+      - 'tests/test_utils/config/platforms/ascend.yaml'
+      - 'tests/test_utils/runners/check_results.py'
+      - '.github/workflows/build_image_ascend.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docker/ascend/**'
+      - 'tools/install/ascend/**'
+      - 'tools/install/utils/**'
+      - 'tools/install/install.sh'
+      - 'requirements/ascend/**'
+      - 'flagscale/train/megatron/plugin_flagscale/**'
+      - 'flagscale/train/megatron/training/config/common_config.py'
+      - 'tests/functional_tests/train/qwen3/**'
+      - 'tests/test_utils/config/platforms/ascend.yaml'
+      - 'tests/test_utils/runners/check_results.py'
+      - '.github/workflows/build_image_ascend.yml'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Docker build target
+        required: true
+        type: choice
+        options: [dev, release]
+        default: dev
+      push:
+        description: Push images to Harbor after a successful build
+        type: boolean
+        default: true
+      no_cache:
+        description: Build without Docker cache
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: harbor.baai.ac.cn
+  REGISTRY_NAMESPACE: flagscale
+  ASCEND_TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev
+  TRAIN_PYTHON_VERSION: '3.12'
+  PKG_MGR: pip
+
+jobs:
+  prepare:
+    name: Prepare trusted build parameters
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.params.outputs.target }}
+      publish: ${{ steps.params.outputs.publish }}
+      no_cache: ${{ steps.params.outputs.no_cache }}
+      train_image: ${{ steps.params.outputs.train_image }}
+      run_tests: ${{ steps.params.outputs.run_tests }}
+    steps:
+      - name: Compute parameters
+        id: params
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SHORT_SHA="${GITHUB_SHA::12}"
+          TARGET="${{ inputs.target || 'dev' }}"
+          PUBLISH=false
+          RUN_TESTS=false
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Untrusted PR code never receives Harbor credentials and never pushes.
+            TARGET=dev
+            NO_CACHE=false
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            PUBLISH=true
+            RUN_TESTS=true
+            NO_CACHE=false
+          else
+            PUBLISH="${{ inputs.push }}"
+            NO_CACHE="${{ inputs.no_cache }}"
+            if [ "$PUBLISH" = "true" ]; then
+              RUN_TESTS=true
+            fi
+          fi
+
+          TRAIN_TAG="${TARGET}-ascend-py${{ env.TRAIN_PYTHON_VERSION }}-${SHORT_SHA}"
+          TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TRAIN_TAG}"
+
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
+          echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
+          echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+
+  validate_pr:
+    name: Validate untrusted Ascend PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate Dockerfiles, shell and test configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f docker/ascend/Dockerfile.train
+          test -f docker/ascend/Dockerfile.inference
+          test -f docker/ascend/Dockerfile.all
+          bash -n tools/install/ascend/install_train.sh
+          bash -n tools/install/ascend/install_inference.sh
+          bash -n tests/test_utils/runners/setup_training_test_env.sh
+          python -m py_compile \
+            tests/test_utils/runners/check_results.py \
+            flagscale/train/megatron/plugin_flagscale/npu_plugin.py \
+            flagscale/train/megatron/training/config/common_config.py
+          python tests/test_utils/runners/parse_config.py \
+            --platform ascend --device ascend910 \
+            --type functional --task train | \
+            grep -q '0_6b_ascend_smoke'
+
+  build:
+    name: Build Ascend train image
+    needs: prepare
+    # A full Ascend base image build is intentionally limited to trusted
+    # events. Pull requests run validate_pr above without secrets or access to
+    # the private accelerator runner.
+    if: github.event_name != 'pull_request'
+    runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Harbor for trusted publishing
+        if: needs.prepare.outputs.publish == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
+
+      - name: Detect runner proxy
+        id: proxy
+        shell: bash
+        run: |
+          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and optionally push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/ascend/Dockerfile.train
+          target: ${{ needs.prepare.outputs.target }}
+          push: ${{ needs.prepare.outputs.publish == 'true' }}
+          tags: ${{ needs.prepare.outputs.train_image }}
+          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
+          build-args: |
+            BASE_IMAGE=${{ env.ASCEND_TRAIN_BASE_IMAGE }}
+            PKG_MGR=${{ env.PKG_MGR }}
+            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
+            http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            no_proxy=${{ steps.proxy.outputs.no_proxy }}
+          cache-from: type=gha,scope=ascend-train
+          cache-to: type=gha,mode=max,scope=ascend-train
+
+  ascend_tests:
+    name: Test newly published Ascend images
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true'
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: ascend
+      ci_train_image: ${{ needs.prepare.outputs.train_image }}
+
+  summary:
+    name: Ascend image pipeline summary
+    needs: [prepare, validate_pr, build, ascend_tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Build result: ${{ needs.build.result }}"
+          echo "Test result: ${{ needs.ascend_tests.result }}"
+          echo "Published: ${{ needs.prepare.outputs.publish }}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            [ "${{ needs.validate_pr.result }}" = "success" ] || exit 1
+            exit 0
+          fi
+
+          [ "${{ needs.build.result }}" = "success" ] || exit 1
+          if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ] && \
+             [ "${{ needs.ascend_tests.result }}" != "success" ]; then
+            exit 1
+          fi

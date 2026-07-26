@@ -67,12 +67,47 @@ install_sccache() {
     set_step "Installing sccache v${SCCACHE_VERSION}"
 
     if [ "$DEBUG" = true ]; then
-        log_info "[DRY-RUN] curl -L $url | tar xz"
+        log_info "[DRY-RUN] download and extract $url"
         return 0
     fi
 
-    curl --connect-timeout 120 --max-time 600 --retry 5 --retry-delay 60 -L "$url" | tar xz || {
+    local downloads_dir="${FLAGSCALE_DOWNLOADS:-${FLAGSCALE_HOME:-/opt/flagscale}/downloads}"
+    mkdir -p "$downloads_dir"
+    local archive="$downloads_dir/${tmp_dir}.tar.gz"
+    local attempt=1
+    local max_attempts="${SCCACHE_DOWNLOAD_RETRIES:-5}"
+    local download_ok=false
+
+    if [ -s "$archive" ] && tar -tzf "$archive" >/dev/null 2>&1; then
+        download_ok=true
+        log_info "Using cached sccache archive"
+    else
+        while [ "$attempt" -le "$max_attempts" ]; do
+            if curl --connect-timeout 120 --max-time 600 -L \
+                --continue-at - --output "$archive" "$url"; then
+                if tar -tzf "$archive" >/dev/null 2>&1; then
+                    download_ok=true
+                    break
+                fi
+                log_warn "Downloaded sccache archive is invalid; restarting download"
+                : > "$archive"
+            fi
+
+            [ "$attempt" -ge "$max_attempts" ] && break
+            log_warn "Retrying sccache download ($attempt/$max_attempts) in 5s..."
+            attempt=$((attempt + 1))
+            sleep 5
+        done
+    fi
+
+    if [ "$download_ok" != true ]; then
         log_error "Failed to download sccache"
+        [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    tar -xzf "$archive" || {
+        log_error "Failed to extract sccache"
         [ -d "$tmp_dir" ] && rm -rf "$tmp_dir"
         return 1
     }
