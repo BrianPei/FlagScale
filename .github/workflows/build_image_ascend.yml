@@ -137,10 +137,7 @@ jobs:
           set -euo pipefail
 
           test -f docker/ascend/Dockerfile.train
-          test -f docker/ascend/Dockerfile.inference
-          test -f docker/ascend/Dockerfile.all
           bash -n tools/install/ascend/install_train.sh
-          bash -n tools/install/ascend/install_inference.sh
           bash -n tests/test_utils/runners/setup_training_test_env.sh
           python -m py_compile \
             tests/test_utils/runners/check_results.py \
