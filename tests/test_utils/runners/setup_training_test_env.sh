@@ -68,7 +68,7 @@ activate_python_env() {
             fi
             ;;
         pip)
-            echo "Using system Python with pip"
+            activate_pip_env "$ENV_PATH"
             ;;
         *)
             echo "Unsupported package manager: $PKG_MGR" >&2
@@ -140,6 +140,19 @@ setup_metax_training_env() {
 }
 
 setup_ascend_training_env() {
+    if TE_FL_SKIP_CUDA=1 python -c '
+from megatron.core.extensions.transformer_engine import HAVE_TE
+from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
+from megatron.core.models.gpt import GPTModel
+from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
+
+assert HAVE_TE
+assert TESpecProvider is not None
+' >/dev/null 2>&1; then
+        echo "Ascend training stack is preinstalled; skipping platform dependency installation"
+        return 0
+    fi
+
     python -m pip install datasets==4.5.0 omegaconf==2.3.0 diffusers==0.36.0 hydra-core==1.3.2
 
     # Keep the legacy Ascend CI image usable while the newly built training

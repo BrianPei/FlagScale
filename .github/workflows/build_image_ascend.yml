@@ -31,6 +31,7 @@ on:
       - '.github/workflows/functional_tests_serve.yml'
       - 'tests/test_utils/config/platforms/ascend.yaml'
       - 'tests/test_utils/runners/check_results.py'
+      - 'tests/test_utils/runners/setup_training_test_env.sh'
       - '.github/workflows/build_image_ascend.yml'
   push:
     branches: [main]
@@ -48,6 +49,7 @@ on:
       - '.github/workflows/functional_tests_serve.yml'
       - 'tests/test_utils/config/platforms/ascend.yaml'
       - 'tests/test_utils/runners/check_results.py'
+      - 'tests/test_utils/runners/setup_training_test_env.sh'
       - '.github/workflows/build_image_ascend.yml'
   workflow_dispatch:
     inputs:
