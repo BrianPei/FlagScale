@@ -60,6 +60,25 @@ activate_uv_env() {
     return 0
 }
 
+# Activate an image-provided pip runtime when one is configured. Plain pip
+# images can leave env_path empty and continue using their system Python.
+activate_pip_env() {
+    local env_path="${1:-}"
+
+    if [ -z "$env_path" ]; then
+        log_info "Using system Python with pip"
+        return 0
+    fi
+
+    if [ -f "$env_path/activate.sh" ]; then
+        source "$env_path/activate.sh"
+        log_info "Activated pip runtime: $env_path"
+        return 0
+    fi
+
+    log_info "Pip runtime not present in this image, using system Python: $env_path"
+}
+
 # =============================================================================
 # Conda Environment
 # =============================================================================

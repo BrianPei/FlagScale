@@ -43,6 +43,12 @@ load_platform_config() {
     # Extract package manager configuration
     PKG_MGR=$(/usr/local/bin/yq -r '.pkg_mgr // "uv"' "$CONFIG_FILE")
     ENV_PATH=$(/usr/local/bin/yq -r '.env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_TRAIN=$(/usr/local/bin/yq -r '.env_paths.train // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_HETERO_TRAIN=$(/usr/local/bin/yq -r '.env_paths.hetero_train // .env_paths.train // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_BENCHMARK=$(/usr/local/bin/yq -r '.env_paths.benchmark // .env_paths.train // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_INFERENCE=$(/usr/local/bin/yq -r '.env_paths.inference // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_SERVE=$(/usr/local/bin/yq -r '.env_paths.serve // .env_paths.inference // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_RL=$(/usr/local/bin/yq -r '.env_paths.rl // .env_path // "/opt/venv"' "$CONFIG_FILE")
     ENV_NAME_TRAIN=$(/usr/local/bin/yq -r '.env_names.train // "flagscale-train"' "$CONFIG_FILE")
     ENV_NAME_INFERENCE=$(/usr/local/bin/yq -r '.env_names.inference // "flagscale-inference"' "$CONFIG_FILE")
     ENV_NAME_SERVE=$(/usr/local/bin/yq -r '.env_names.serve // "flagscale-inference"' "$CONFIG_FILE")
@@ -129,6 +135,12 @@ load_platform_config() {
     # Output package manager configuration
     echo "pkg_mgr=$PKG_MGR" >> $GITHUB_OUTPUT
     echo "env_path=$ENV_PATH" >> $GITHUB_OUTPUT
+    echo "env_path_train=$ENV_PATH_TRAIN" >> $GITHUB_OUTPUT
+    echo "env_path_hetero_train=$ENV_PATH_HETERO_TRAIN" >> $GITHUB_OUTPUT
+    echo "env_path_benchmark=$ENV_PATH_BENCHMARK" >> $GITHUB_OUTPUT
+    echo "env_path_inference=$ENV_PATH_INFERENCE" >> $GITHUB_OUTPUT
+    echo "env_path_serve=$ENV_PATH_SERVE" >> $GITHUB_OUTPUT
+    echo "env_path_rl=$ENV_PATH_RL" >> $GITHUB_OUTPUT
     echo "env_name_train=$ENV_NAME_TRAIN" >> $GITHUB_OUTPUT
     echo "env_name_inference=$ENV_NAME_INFERENCE" >> $GITHUB_OUTPUT
     echo "env_name_serve=$ENV_NAME_SERVE" >> $GITHUB_OUTPUT

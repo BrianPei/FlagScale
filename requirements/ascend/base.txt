@@ -16,10 +16,6 @@
 
 -r ../common.txt
 
-# Keep the PyTorch stack aligned with the validated Ascend training runtime:
-# torch 2.7.1 + torch_npu 2.7.1.post2.
-torchvision==0.22.1
-
 # for robotics
 datasets==4.5.0
 diffusers==0.36.0

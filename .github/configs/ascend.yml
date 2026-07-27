@@ -64,6 +64,16 @@ pkg_mgr: "pip"
 # Environment path (not used for pip, kept for compatibility)
 env_path: ""
 
+# Task-specific runtimes are used by the all-in-one image. Task images do not
+# contain these paths and transparently fall back to their system Python.
+env_paths:
+  train: "/opt/flagscale/runtimes/train"
+  hetero_train: "/opt/flagscale/runtimes/train"
+  benchmark: "/opt/flagscale/runtimes/train"
+  inference: "/opt/flagscale/runtimes/inference"
+  serve: "/opt/flagscale/runtimes/serve"
+  rl: ""
+
 # Conda environment name (not used for pip)
 env_names:
   train: ""
