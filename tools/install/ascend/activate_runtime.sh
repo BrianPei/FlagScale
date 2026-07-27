@@ -54,4 +54,13 @@ export ASCEND_HOME ASCEND_TOOLKIT_HOME NNAL_HOME MPI_HOME
 export PATH="$PYTHON_HOME/bin:$NNAL_HOME/atb/latest/atb/cxx_abi_1/bin:$ASCEND_TOOLKIT_HOME/bin:$MPI_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$NNAL_HOME/atb/latest/atb/cxx_abi_1/lib:$ASCEND_TOOLKIT_HOME/lib64:$ASCEND_TOOLKIT_HOME/lib64/plugin/opskernel:$ASCEND_TOOLKIT_HOME/lib64/plugin/nnengine:/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:$MPI_HOME/lib64:$MPI_HOME/lib:${LD_LIBRARY_PATH:-}"
 
+# The all-in-one image inherits the inference CANN Python path from its base
+# image.  Reset it on every activation so the train runtime cannot import
+# TBE/opp modules from the other CANN release (and vice versa).
+export PYTHONPATH="$ASCEND_TOOLKIT_HOME/python/site-packages:$ASCEND_TOOLKIT_HOME/opp/built-in/op_impl/ai_core/tbe"
+export ASCEND_AICPU_PATH="$ASCEND_TOOLKIT_HOME"
+export ASCEND_OPP_PATH="$ASCEND_TOOLKIT_HOME/opp"
+export TOOLCHAIN_HOME="$ASCEND_TOOLKIT_HOME/toolkit"
+export ASCEND_HOME_PATH="$ASCEND_TOOLKIT_HOME"
+
 unset VIRTUAL_ENV UV_PROJECT_ENVIRONMENT
