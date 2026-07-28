@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Serve task (Ascend): requirements/ascend/serve.txt
+# Serve task (Ascend): requirements/ascend/serve.txt + source deps (FlagGems, vllm-plugin-FL)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../utils/utils.sh"
