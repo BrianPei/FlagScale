@@ -93,7 +93,7 @@ class TestCliErrorHandling:
 
     def test_handle_config_error_exits_with_context(self, capsys):
         """_handle_config_error should print config file, error, hint and exit."""
-        from click.exceptions import Exit
+        from typer import Exit
 
         from flagscale.cli import _handle_config_error
 
@@ -112,7 +112,7 @@ class TestCliErrorHandling:
 
     def test_run_task_catches_exception(self):
         """run_task should catch exceptions from run_main and format them."""
-        from click.exceptions import Exit
+        from typer import Exit
 
         from flagscale.cli import run_task
 
