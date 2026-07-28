@@ -16,8 +16,6 @@
 
 -r ../common.txt
 
-torchvision==0.23.0
-
 # for robotics
 datasets==4.5.0
 diffusers==0.36.0

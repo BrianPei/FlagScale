@@ -193,7 +193,7 @@ jobs:
               fi
               ;;
             pip)
-              echo "ℹ️  Running tests with pip/system Python"
+              activate_pip_env "$ENV_PATH"
               ;;
           esac
 

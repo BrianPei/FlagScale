@@ -1,0 +1,405 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Docker Images - Ascend
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker/ascend/**'
+      - 'tools/install/ascend/**'
+      - 'tools/install/utils/**'
+      - 'tools/install/install.sh'
+      - 'requirements/ascend/**'
+      - 'flagscale/train/megatron/plugin_flagscale/**'
+      - 'flagscale/train/megatron/training/config/common_config.py'
+      - 'tests/functional_tests/train/qwen3/**'
+      - '.github/configs/ascend.yml'
+      - '.github/workflows/functional_tests_inference.yml'
+      - '.github/workflows/functional_tests_serve.yml'
+      - 'tests/test_utils/config/platforms/ascend.yaml'
+      - 'tests/test_utils/runners/check_results.py'
+      - 'tests/test_utils/runners/setup_training_test_env.sh'
+      - '.github/workflows/build_image_ascend.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docker/ascend/**'
+      - 'tools/install/ascend/**'
+      - 'tools/install/utils/**'
+      - 'tools/install/install.sh'
+      - 'requirements/ascend/**'
+      - 'flagscale/train/megatron/plugin_flagscale/**'
+      - 'flagscale/train/megatron/training/config/common_config.py'
+      - 'tests/functional_tests/train/qwen3/**'
+      - '.github/configs/ascend.yml'
+      - '.github/workflows/functional_tests_inference.yml'
+      - '.github/workflows/functional_tests_serve.yml'
+      - 'tests/test_utils/config/platforms/ascend.yaml'
+      - 'tests/test_utils/runners/check_results.py'
+      - 'tests/test_utils/runners/setup_training_test_env.sh'
+      - '.github/workflows/build_image_ascend.yml'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Image task to build
+        required: true
+        type: choice
+        options: [train, inference, all]
+        default: all
+      target:
+        description: Docker build target
+        required: true
+        type: choice
+        options: [dev, release]
+        default: dev
+      build_all_tasks:
+        description: Build train, inference and all-in-one images
+        type: boolean
+        default: true
+      push:
+        description: Push candidate images to Harbor for validation
+        type: boolean
+        default: true
+      no_cache:
+        description: Build without Docker cache
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: harbor.baai.ac.cn
+  REGISTRY_NAMESPACE: flagscale
+  ASCEND_TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev
+  ASCEND_INFERENCE_BASE_IMAGE: quay.io/ascend/vllm-ascend:v0.13.0rc1-a3
+  ASCEND_TE_REPO: https://github.com/flagos-ai/TransformerEngine-FL.git
+  ASCEND_TE_REF: 771a7488fc01c50f7714b8c6162f6bbfe451608a
+  ASCEND_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
+  ASCEND_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
+  TRAIN_PYTHON_VERSION: '3.12'
+  INFERENCE_PYTHON_VERSION: '3.11'
+  PKG_MGR: pip
+
+jobs:
+  prepare:
+    name: Prepare trusted build parameters
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.params.outputs.matrix }}
+      target: ${{ steps.params.outputs.target }}
+      publish: ${{ steps.params.outputs.publish }}
+      no_cache: ${{ steps.params.outputs.no_cache }}
+      train_image: ${{ steps.params.outputs.train_image }}
+      inference_image: ${{ steps.params.outputs.inference_image }}
+      all_image: ${{ steps.params.outputs.all_image }}
+      release_train_image: ${{ steps.params.outputs.release_train_image }}
+      release_inference_image: ${{ steps.params.outputs.release_inference_image }}
+      release_all_image: ${{ steps.params.outputs.release_all_image }}
+      run_tests: ${{ steps.params.outputs.run_tests }}
+    steps:
+      - name: Compute parameters
+        id: params
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SHORT_SHA="${GITHUB_SHA::12}"
+          TARGET="${{ inputs.target || 'dev' }}"
+          PUBLISH=false
+          RUN_TESTS=false
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Untrusted PR code never receives Harbor credentials and never pushes.
+            MATRIX='{"task":["train","inference","all"]}'
+            TARGET=dev
+            NO_CACHE=false
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            MATRIX='{"task":["train","inference","all"]}'
+            PUBLISH=true
+            RUN_TESTS=true
+            NO_CACHE=false
+          else
+            if [ "${{ inputs.build_all_tasks }}" = "true" ]; then
+              MATRIX='{"task":["train","inference","all"]}'
+            else
+              MATRIX='{"task":["${{ inputs.task }}"]}'
+            fi
+            PUBLISH="${{ inputs.push }}"
+            NO_CACHE="${{ inputs.no_cache }}"
+            if [ "$PUBLISH" = "true" ] && [ "${{ inputs.build_all_tasks }}" = "true" ]; then
+              RUN_TESTS=true
+            fi
+          fi
+
+          TRAIN_TAG="${TARGET}-ascend-py${{ env.TRAIN_PYTHON_VERSION }}-${SHORT_SHA}"
+          INFERENCE_TAG="${TARGET}-ascend-py${{ env.INFERENCE_PYTHON_VERSION }}-${SHORT_SHA}"
+          ALL_TAG="${TARGET}-ascend-py${{ env.TRAIN_PYTHON_VERSION }}-py${{ env.INFERENCE_PYTHON_VERSION }}-${SHORT_SHA}"
+          CANDIDATE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TRAIN_TAG}"
+          CANDIDATE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:candidate-${INFERENCE_TAG}"
+          CANDIDATE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:candidate-${ALL_TAG}"
+          RELEASE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TRAIN_TAG}"
+          RELEASE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${INFERENCE_TAG}"
+          RELEASE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${ALL_TAG}"
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
+          echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
+          echo "train_image=$CANDIDATE_TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "inference_image=$CANDIDATE_INFERENCE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "all_image=$CANDIDATE_ALL_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_train_image=$RELEASE_TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_inference_image=$RELEASE_INFERENCE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_all_image=$RELEASE_ALL_IMAGE" >> "$GITHUB_OUTPUT"
+
+  validate_pr:
+    name: Validate untrusted Ascend PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate Dockerfiles, shell and test configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f docker/ascend/Dockerfile.train
+          test -f docker/ascend/Dockerfile.inference
+          test -f docker/ascend/Dockerfile.all
+          test -f requirements/ascend/inference.txt
+          bash -n tools/install/ascend/activate_runtime.sh
+          bash -n tools/install/ascend/install_train.sh
+          bash -n tools/install/ascend/install_inference.sh
+          bash -n tools/install/ascend/install_serve.sh
+          bash -n tools/install/utils/retry_utils.sh
+          bash -n tests/test_utils/runners/setup_training_test_env.sh
+          python -m py_compile \
+            tests/test_utils/runners/check_results.py \
+            flagscale/train/megatron/plugin_flagscale/npu_plugin.py \
+            flagscale/train/megatron/training/config/common_config.py
+          python tests/test_utils/runners/parse_config.py \
+            --platform ascend --device ascend910 \
+            --type functional --task train | \
+            grep -q '0_6b_ascend_smoke'
+
+  build:
+    name: Build Ascend ${{ matrix.task }}
+    needs: prepare
+    # A full Ascend base image build is intentionally limited to trusted
+    # events. Pull requests run validate_pr above without secrets or access to
+    # the private accelerator runner.
+    if: github.event_name != 'pull_request'
+    runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Harbor for trusted publishing
+        if: needs.prepare.outputs.publish == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
+
+      - name: Detect runner proxy
+        id: proxy
+        shell: bash
+        run: |
+          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
+
+      - name: Select task image and base
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.task }}" in
+            train)
+              echo "base=${{ env.ASCEND_TRAIN_BASE_IMAGE }}" >> "$GITHUB_OUTPUT"
+              echo "tag=${{ needs.prepare.outputs.train_image }}" >> "$GITHUB_OUTPUT"
+              ;;
+            inference)
+              echo "base=${{ env.ASCEND_INFERENCE_BASE_IMAGE }}" >> "$GITHUB_OUTPUT"
+              echo "tag=${{ needs.prepare.outputs.inference_image }}" >> "$GITHUB_OUTPUT"
+              ;;
+            all)
+              echo "tag=${{ needs.prepare.outputs.all_image }}" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Build and optionally push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/ascend/Dockerfile.${{ matrix.task }}
+          target: ${{ needs.prepare.outputs.target }}
+          push: ${{ needs.prepare.outputs.publish == 'true' }}
+          tags: ${{ steps.image.outputs.tag }}
+          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
+          build-args: |
+            BASE_IMAGE=${{ steps.image.outputs.base }}
+            TRAIN_BASE_IMAGE=${{ env.ASCEND_TRAIN_BASE_IMAGE }}
+            INFERENCE_BASE_IMAGE=${{ env.ASCEND_INFERENCE_BASE_IMAGE }}
+            PKG_MGR=${{ env.PKG_MGR }}
+            FLAGSCALE_TE_REPO=${{ env.ASCEND_TE_REPO }}
+            FLAGSCALE_TE_REF=${{ env.ASCEND_TE_REF }}
+            FLAGSCALE_MEGATRON_REPO=${{ env.ASCEND_MEGATRON_REPO }}
+            FLAGSCALE_MEGATRON_REF=${{ env.ASCEND_MEGATRON_REF }}
+            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
+            http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            no_proxy=${{ steps.proxy.outputs.no_proxy }}
+          cache-from: type=gha,scope=ascend-${{ matrix.task }}
+          cache-to: type=gha,mode=max,scope=ascend-${{ matrix.task }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  ascend_tests:
+    name: Test Ascend task images
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true'
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: ascend
+      ci_train_image: ${{ needs.prepare.outputs.train_image }}
+      ci_inference_image: ${{ needs.prepare.outputs.inference_image }}
+
+  ascend_all_tests:
+    name: Test Ascend all-in-one image
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true'
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: ascend
+      ci_train_image: ${{ needs.prepare.outputs.all_image }}
+      ci_inference_image: ${{ needs.prepare.outputs.all_image }}
+
+  promote:
+    name: Promote validated Ascend images
+    needs: [prepare, build, ascend_tests, ascend_all_tests]
+    if: >-
+      needs.prepare.outputs.publish == 'true' &&
+      needs.prepare.outputs.run_tests == 'true' &&
+      needs.ascend_tests.result == 'success' &&
+      needs.ascend_all_tests.result == 'success'
+    runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_TOKEN }}
+
+      - name: Promote candidate manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          promote() {
+            local candidate=$1
+            local release=$2
+            docker buildx imagetools create --tag "$release" "$candidate"
+            docker buildx imagetools inspect "$release"
+          }
+
+          promote \
+            "${{ needs.prepare.outputs.train_image }}" \
+            "${{ needs.prepare.outputs.release_train_image }}"
+          promote \
+            "${{ needs.prepare.outputs.inference_image }}" \
+            "${{ needs.prepare.outputs.release_inference_image }}"
+          promote \
+            "${{ needs.prepare.outputs.all_image }}" \
+            "${{ needs.prepare.outputs.release_all_image }}"
+
+      - name: Publish release manifest
+        shell: bash
+        run: |
+          {
+            echo "### Validated Ascend images"
+            echo ""
+            echo "- Train: \`${{ needs.prepare.outputs.release_train_image }}\`"
+            echo "- Inference: \`${{ needs.prepare.outputs.release_inference_image }}\`"
+            echo "- All-in-one: \`${{ needs.prepare.outputs.release_all_image }}\`"
+            echo "- FlagScale: \`${{ github.sha }}\`"
+            echo "- TransformerEngine-FL: \`${{ env.ASCEND_TE_REF }}\`"
+            echo "- Megatron-LM-FL: \`${{ env.ASCEND_MEGATRON_REF }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  summary:
+    name: Ascend image pipeline summary
+    needs: [prepare, validate_pr, build, ascend_tests, ascend_all_tests, promote]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Build result: ${{ needs.build.result }}"
+          echo "Task image test result: ${{ needs.ascend_tests.result }}"
+          echo "All-in-one image test result: ${{ needs.ascend_all_tests.result }}"
+          echo "Promotion result: ${{ needs.promote.result }}"
+          echo "Candidate publishing enabled: ${{ needs.prepare.outputs.publish }}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            [ "${{ needs.validate_pr.result }}" = "success" ] || exit 1
+            exit 0
+          fi
+
+          [ "${{ needs.build.result }}" = "success" ] || exit 1
+          if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ] && \
+             [ "${{ needs.ascend_tests.result }}" != "success" ]; then
+            exit 1
+          fi
+          if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ] && \
+             [ "${{ needs.ascend_all_tests.result }}" != "success" ]; then
+            exit 1
+          fi
+          if [ "${{ needs.prepare.outputs.publish }}" = "true" ] && \
+             [ "${{ needs.prepare.outputs.run_tests }}" = "true" ] && \
+             [ "${{ needs.promote.result }}" != "success" ]; then
+            exit 1
+          fi
