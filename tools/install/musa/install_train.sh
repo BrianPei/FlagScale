@@ -60,6 +60,15 @@ from megatron.plugin.platform import get_platform
 }
 
 validate_megatron_lm() {
+    if [ "${FLAGSCALE_MUSA_BUILD_NO_DEVICE:-false}" = true ]; then
+        "$(get_pip_cmd)" show megatron-core >/dev/null 2>&1 || return 1
+        TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c '
+import importlib.util
+assert importlib.util.find_spec("megatron") is not None
+' || return 1
+        log_success "Megatron-LM-FL package is installed; import validation deferred to runtime"
+        return 0
+    fi
     TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c '
 import megatron.core
 from megatron.plugin.platform import get_platform

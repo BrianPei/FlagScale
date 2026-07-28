@@ -320,9 +320,15 @@ jobs:
             python -c '
           import torch
           import torch_musa
+          import megatron.core
+          from megatron.plugin.platform import get_platform
 
           assert torch.musa.is_available(), "MUSA device is not available"
           assert torch.musa.device_count() > 0, "No MUSA devices detected"
+          platform = get_platform()
+          assert platform.device_name() == "musa", (
+              f"Megatron selected {platform.device_name()!r}, expected 'musa'"
+          )
           x = torch.arange(8, dtype=torch.float32, device="musa")
           y = (x * 2).cpu()
           assert y.tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
