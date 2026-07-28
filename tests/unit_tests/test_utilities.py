@@ -40,6 +40,12 @@ PLATFORM_RUNTIME_MAP = {
         "torch_accelerator_attr": "cuda",
         "optional_runtime_module": None,
     },
+    "musa": {
+        "dist_backend": "mccl",
+        "torch_device_type": "musa",
+        "torch_accelerator_attr": "musa",
+        "optional_runtime_module": "torch_musa",
+    },
 }
 
 DEFAULT_PLATFORM_RUNTIME = PLATFORM_RUNTIME_MAP["cuda"]
