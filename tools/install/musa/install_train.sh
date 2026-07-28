@@ -59,6 +59,14 @@ from megatron.plugin.platform import get_platform
 ' &>/dev/null
 }
 
+validate_megatron_lm() {
+    python -c '
+import megatron.core
+from megatron.plugin.platform import get_platform
+print("Megatron-LM-FL import validation passed")
+'
+}
+
 install_megatron_lm() {
     if [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] && megatron_lm_ready; then
         log_info "Megatron-LM-FL is importable, skipping"
@@ -78,7 +86,7 @@ install_megatron_lm() {
     run_cmd -d "$DEBUG" bash -c "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && \
         $pip_cmd install --ignore-requires-python --root-user-action=ignore \
         --no-build-isolation . -v" || return 1
-    megatron_lm_ready || return 1
+    validate_megatron_lm || return 1
     log_success "Megatron-LM-FL ready"
 }
 
