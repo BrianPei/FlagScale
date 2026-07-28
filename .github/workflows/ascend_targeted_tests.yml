@@ -1,0 +1,110 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Test Ascend Images - Targeted
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Failed or focused test suite to run
+        required: true
+        default: failed
+        type: choice
+        options:
+          - failed
+          - inference
+          - serve
+          - all_cli
+      task_image:
+        description: Existing Ascend inference task image
+        required: true
+        type: string
+      all_image:
+        description: Existing Ascend all-in-one image
+        required: true
+        type: string
+
+concurrency:
+  group: ascend-targeted-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  inference:
+    if: inputs.suite == 'failed' || inputs.suite == 'inference'
+    uses: ./.github/workflows/functional_tests_inference.yml
+    secrets: inherit
+    with:
+      platform: ascend
+      test_matrix: '[{"device":"ascend910","task":"inference","model":"qwen3","case":"4b_tp2_ascend"}]'
+      image: ${{ inputs.task_image }}
+      runs_on: '["flagscale-ascend-ascend910-gpu2-32c-128g"]'
+      container_volumes: '["/public-ks3/cicd/baai_datasets:/home/gitlab-runner/data","/public-ks3/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers","/usr/local/Ascend/driver:/usr/local/Ascend/driver:ro","/usr/local/Ascend/add-ons:/usr/local/Ascend/add-ons:ro","/usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro"]'
+      container_options: >-
+        --device /dev/davinci_manager --device /dev/devmm_svm
+        --device /dev/hisi_hdc --ipc=host --shm-size=500g
+        --hostname flagscale_cicd --user root
+        --ulimit nofile=65535:65535 --cap-add SYS_ADMIN
+        --cap-add SYS_PTRACE --cap-add IPC_LOCK --cap-add NET_ADMIN
+        --cap-add SYS_RAWIO --cap-add SYS_NICE
+        --security-opt seccomp=unconfined
+        --security-opt apparmor=unconfined --privileged
+      pkg_mgr: pip
+      env_name: ""
+      env_path: ""
+
+  serve:
+    if: inputs.suite == 'failed' || inputs.suite == 'serve'
+    uses: ./.github/workflows/functional_tests_serve.yml
+    secrets: inherit
+    with:
+      platform: ascend
+      test_matrix: '[{"device":"ascend910","task":"serve","model":"qwen3","case":"4b_tp2_ascend"}]'
+      image: ${{ inputs.task_image }}
+      runs_on: '["flagscale-ascend-ascend910-gpu2-32c-128g"]'
+      container_volumes: '["/public-ks3/cicd/baai_datasets:/home/gitlab-runner/data","/public-ks3/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers","/usr/local/Ascend/driver:/usr/local/Ascend/driver:ro","/usr/local/Ascend/add-ons:/usr/local/Ascend/add-ons:ro","/usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro"]'
+      container_options: >-
+        --device /dev/davinci_manager --device /dev/devmm_svm
+        --device /dev/hisi_hdc --ipc=host --shm-size=500g
+        --hostname flagscale_cicd --user root
+        --ulimit nofile=65535:65535 --cap-add SYS_ADMIN
+        --cap-add SYS_PTRACE --cap-add IPC_LOCK --cap-add NET_ADMIN
+        --cap-add SYS_RAWIO --cap-add SYS_NICE
+        --security-opt seccomp=unconfined
+        --security-opt apparmor=unconfined --privileged
+      pkg_mgr: pip
+      env_name: ""
+      env_path: ""
+
+  all_cli:
+    if: inputs.suite == 'failed' || inputs.suite == 'all_cli'
+    uses: ./.github/workflows/functional_tests_cli.yml
+    secrets: inherit
+    with:
+      platform: ascend
+      image: ${{ inputs.all_image }}
+      runs_on: '["flagscale-ascend-ascend910-gpu2-32c-128g"]'
+      container_volumes: '["/public-ks3/cicd/baai_datasets:/home/gitlab-runner/data","/public-ks3/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers","/usr/local/Ascend/driver:/usr/local/Ascend/driver:ro","/usr/local/Ascend/add-ons:/usr/local/Ascend/add-ons:ro","/usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro"]'
+      container_options: >-
+        --device /dev/davinci_manager --device /dev/devmm_svm
+        --device /dev/hisi_hdc --ipc=host --shm-size=500g
+        --hostname flagscale_cicd --user root
+        --ulimit nofile=65535:65535 --cap-add SYS_ADMIN
+        --cap-add SYS_PTRACE --cap-add IPC_LOCK --cap-add NET_ADMIN
+        --cap-add SYS_RAWIO --cap-add SYS_NICE
+        --security-opt seccomp=unconfined
+        --security-opt apparmor=unconfined --privileged
+      pkg_mgr: pip
+      env_name: ""
+      env_path: /opt/flagscale/runtimes/train

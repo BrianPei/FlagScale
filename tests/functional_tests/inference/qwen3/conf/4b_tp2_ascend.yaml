@@ -37,6 +37,7 @@ experiment:
     MKL_NUM_THREADS: 1
     OMP_NUM_THREADS: 1
     NUMEXPR_NUM_THREADS: 1
+    CC: ./tools/install/ascend/triton_gxx_wrapper.sh
     VLLM_TARGET_DEVICE: "npu"
     VLLM_PLATFORM_PLUGINS: "ascend"
 
