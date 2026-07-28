@@ -245,8 +245,13 @@ jobs:
         id: proxy
         shell: bash
         run: |
-          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
-          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          runner_http_proxy="${http_proxy:-${HTTP_PROXY:-}}"
+          runner_https_proxy="${https_proxy:-${HTTPS_PROXY:-}}"
+          buildkit_proxy="${HARBOR_PROXY:-$runner_http_proxy}"
+          echo "::add-mask::$buildkit_proxy"
+          echo "http_proxy=$runner_http_proxy" >> "$GITHUB_OUTPUT"
+          echo "https_proxy=$runner_https_proxy" >> "$GITHUB_OUTPUT"
+          echo "buildkit_proxy=$buildkit_proxy" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -254,11 +259,11 @@ jobs:
         with:
           driver-opts: |
             network=host
-            env.http_proxy=${{ steps.proxy.outputs.http_proxy }}
-            env.https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            env.http_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
+            env.https_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
             env.no_proxy=${{ steps.proxy.outputs.no_proxy }}
-            env.HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
-            env.HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            env.HTTP_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
+            env.HTTPS_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
             env.NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
 
       - name: Log in to Harbor for trusted publishing
@@ -392,8 +397,11 @@ jobs:
         id: proxy
         shell: bash
         run: |
-          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
-          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          runner_http_proxy="${http_proxy:-${HTTP_PROXY:-}}"
+          runner_https_proxy="${https_proxy:-${HTTPS_PROXY:-}}"
+          buildkit_proxy="${HARBOR_PROXY:-$runner_http_proxy}"
+          echo "::add-mask::$buildkit_proxy"
+          echo "buildkit_proxy=$buildkit_proxy" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -401,11 +409,11 @@ jobs:
         with:
           driver-opts: |
             network=host
-            env.http_proxy=${{ steps.proxy.outputs.http_proxy }}
-            env.https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            env.http_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
+            env.https_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
             env.no_proxy=${{ steps.proxy.outputs.no_proxy }}
-            env.HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
-            env.HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            env.HTTP_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
+            env.HTTPS_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
             env.NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
 
       - name: Log in to Harbor
