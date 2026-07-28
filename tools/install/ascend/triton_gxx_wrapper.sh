@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Copyright 2026 FlagOS Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,30 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-defaults:
-  - _self_
-  - serve: 4b_tp2_ascend
+set -euo pipefail
 
-experiment:
-  exp_name: qwen3
-  exp_dir: tests/functional_tests/serve/qwen3/test_results/4b_tp2_ascend
-  task:
-    type: serve
-    entrypoint: null
-  runner:
-    hostfile: null
-    deploy:
-      port: 6703
-      use_fs_serve: false
-  envs:
-    ASCEND_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
-    HCCL_WHITELIST_DISABLE: 1
-    CC: ./tools/install/ascend/triton_gxx_wrapper.sh
-    VLLM_TARGET_DEVICE: "npu"
-    no_proxy: "127.0.0.1,localhost"
+# Triton Ascend can compile the same precompiled launcher header from several
+# vLLM workers at once. GCC may then consume a partially-written .gch file and
+# crash with an internal compiler error. Serialize those short compiler calls
+# until the upstream Triton cache creation is made process-safe.
+compiler="${FLAGSCALE_TRITON_CXX:-/usr/bin/g++}"
+lock_file="${FLAGSCALE_TRITON_CXX_LOCK:-/tmp/flagscale-triton-gxx.lock}"
 
-action: run
+if ! command -v flock >/dev/null 2>&1; then
+    exec "$compiler" "$@"
+fi
 
-hydra:
-  run:
-    dir: ${experiment.exp_dir}/hydra
+exec flock "$lock_file" "$compiler" "$@"

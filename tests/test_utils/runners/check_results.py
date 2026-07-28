@@ -360,6 +360,12 @@ def test_inference_equal(path, task, model, case):
     with open(result_path, "r", errors="replace") as file:
         lines = file.readlines()
 
+    start_marker = "**************************************************"
+    assert any(line.rstrip("\n").endswith(start_marker) for line in lines), (
+        "Inference process did not produce marked output. The engine likely "
+        "failed before generation. Log tail:\n" + "".join(lines[-40:])
+    )
+
     # Extract inference output content within the marker range
     result_lines = extract_marked_output(lines)
     for line in lines:
