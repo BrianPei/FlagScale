@@ -22,7 +22,6 @@ import torch_npu
 import transformer_engine
 from transformer_engine.plugin.core.backends.vendor.npu.patches import apply_patch
 
-
 apply_patch()
 if transformer_engine.te_device_type() != "npu":
     raise RuntimeError(
@@ -32,7 +31,6 @@ if transformer_engine.te_device_type() != "npu":
 # Megatron's NPU registration imports transfer_to_npu, so select TE's NPU
 # backend first while the original torch.cuda namespace is still intact.
 from megatron.plugin.platform import get_platform
-
 
 platform = get_platform()
 # Megatron's NPU registration may replace torch.cuda compatibility helpers.
