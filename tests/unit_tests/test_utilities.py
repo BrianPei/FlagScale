@@ -196,8 +196,12 @@ class Utils:
         os.environ.pop("NVTE_UNFUSED_ATTN", None)
         if not Utils.inited:
             return
-        torch.distributed.barrier()
+        if torch.distributed.is_initialized():
+            torch.distributed.barrier()
         ps.destroy_model_parallel()
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
+        Utils.store = None
         Utils.inited = False
 
     @staticmethod
