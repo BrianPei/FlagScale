@@ -77,6 +77,8 @@ env:
   REGISTRY: harbor.baai.ac.cn
   REGISTRY_NAMESPACE: flagscale
   MUSA_BASE_IMAGE: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
+  MUSA_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
+  MUSA_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
   PYTHON_VERSION: '3.10'
   PKG_MGR: pip
   PIP_INDEX_URL: https://pypi.org/simple
@@ -248,6 +250,8 @@ jobs:
             PKG_MGR=${{ env.PKG_MGR }}
             PIP_INDEX_URL=${{ env.PIP_INDEX_URL }}
             PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
+            FLAGSCALE_MEGATRON_REPO=${{ env.MUSA_MEGATRON_REPO }}
+            FLAGSCALE_MEGATRON_REF=${{ env.MUSA_MEGATRON_REF }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -279,6 +283,8 @@ jobs:
             PKG_MGR=${{ env.PKG_MGR }}
             PIP_INDEX_URL=${{ env.PIP_INDEX_URL }}
             PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
+            FLAGSCALE_MEGATRON_REPO=${{ env.MUSA_MEGATRON_REPO }}
+            FLAGSCALE_MEGATRON_REF=${{ env.MUSA_MEGATRON_REF }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -375,6 +381,7 @@ jobs:
             echo "- Candidate: \`${{ needs.prepare.outputs.train_image }}\`"
             echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
             echo "- FlagScale: \`${{ github.sha }}\`"
+            echo "- Megatron-LM-FL: \`${{ env.MUSA_MEGATRON_REF }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   summary:

@@ -159,6 +159,7 @@ default_dist_backend() {
     case "$platform" in
         ascend) echo "hccl" ;;
         metax) echo "${FLAGSCALE_TEST_METAX_BACKEND:-nccl}" ;;
+        musa) echo "mccl" ;;
         *) echo "nccl" ;;
     esac
 }
@@ -167,6 +168,7 @@ default_torch_device_type() {
     local platform="${1:-}"
     case "$platform" in
         ascend) echo "npu" ;;
+        musa) echo "musa" ;;
         *) echo "cuda" ;;
     esac
 }
@@ -198,6 +200,19 @@ elif hasattr(torch, "cuda") and hasattr(torch.cuda, "device_count"):
     print(torch.cuda.device_count())
 else:
     print(1)
+PY
+            } | awk '/^[0-9]+$/ { value=$1 } END { print value ? value : 1 }'
+            ;;
+        musa)
+            {
+                python - <<'PY' 2>/dev/null || true
+import torch
+try:
+    import torch_musa  # noqa: F401
+except Exception:
+    pass
+device_count = getattr(getattr(torch, "musa", None), "device_count", None)
+print(device_count() if callable(device_count) else 1)
 PY
             } | awk '/^[0-9]+$/ { value=$1 } END { print value ? value : 1 }'
             ;;
