@@ -80,6 +80,7 @@ env:
   PYTHON_VERSION: '3.10'
   PKG_MGR: pip
   PIP_INDEX_URL: https://pypi.org/simple
+  PIP_DEFAULT_TIMEOUT: '300'
 
 jobs:
   prepare:
@@ -92,6 +93,7 @@ jobs:
       no_cache: ${{ steps.params.outputs.no_cache }}
       base_image: ${{ steps.params.outputs.base_image }}
       train_image: ${{ steps.params.outputs.train_image }}
+      release_train_image: ${{ steps.params.outputs.release_train_image }}
     steps:
       - name: Compute parameters
         id: params
@@ -123,6 +125,7 @@ jobs:
 
           SHORT_SHA="${GITHUB_SHA::12}"
           TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          RELEASE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
 
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
@@ -130,13 +133,30 @@ jobs:
           echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
           echo "base_image=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
           echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_train_image=$RELEASE_TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
 
   validate_pr:
     name: Validate untrusted MUSA PR
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      - name: Checkout source (attempt 1)
+        id: checkout_attempt_1
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Checkout source (attempt 2)
+        id: checkout_attempt_2
+        if: steps.checkout_attempt_1.outcome == 'failure'
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Checkout source (attempt 3)
+        if: steps.checkout_attempt_2.outcome == 'failure'
         uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -170,7 +190,23 @@ jobs:
       - name: Clean workspace
         run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
 
-      - name: Checkout source
+      - name: Checkout source (attempt 1)
+        id: build_checkout_attempt_1
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Checkout source (attempt 2)
+        id: build_checkout_attempt_2
+        if: steps.build_checkout_attempt_1.outcome == 'failure'
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Checkout source (attempt 3)
+        if: steps.build_checkout_attempt_2.outcome == 'failure'
         uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -196,7 +232,9 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.CONTAINER_REGISTRY }}
 
-      - name: Build MUSA train image
+      - name: Build MUSA train image (attempt 1)
+        id: build_attempt_1
+        continue-on-error: true
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -209,6 +247,38 @@ jobs:
             BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
             PKG_MGR=${{ env.PKG_MGR }}
             PIP_INDEX_URL=${{ env.PIP_INDEX_URL }}
+            PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
+            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
+            http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            no_proxy=${{ steps.proxy.outputs.no_proxy }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}
+
+      - name: Wait before build retry
+        if: steps.build_attempt_1.outcome == 'failure'
+        shell: bash
+        run: sleep 15
+
+      - name: Build MUSA train image (attempt 2)
+        if: steps.build_attempt_1.outcome == 'failure'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/musa/Dockerfile.train
+          target: ${{ needs.prepare.outputs.target }}
+          load: true
+          tags: ${{ needs.prepare.outputs.train_image }}
+          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
+          build-args: |
+            BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
+            PKG_MGR=${{ env.PKG_MGR }}
+            PIP_INDEX_URL=${{ env.PIP_INDEX_URL }}
+            PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -266,14 +336,50 @@ jobs:
     needs: [prepare, build]
     if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
     uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
     with:
       platform: musa
       ci_train_image: ${{ needs.prepare.outputs.train_image }}
-      ci_inference_image: ${{ needs.prepare.outputs.train_image }}
+
+  promote:
+    name: Promote validated MUSA image
+    needs: [prepare, build, musa_tests]
+    if: >-
+      needs.prepare.outputs.publish == 'true' &&
+      needs.prepare.outputs.run_tests == 'true' &&
+      needs.musa_tests.result == 'success'
+    runs-on: flagscale-musa-s5000-gpu2-8c-256g
+    steps:
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Promote candidate manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker buildx imagetools create \
+            --tag "${{ needs.prepare.outputs.release_train_image }}" \
+            "${{ needs.prepare.outputs.train_image }}"
+          docker buildx imagetools inspect \
+            "${{ needs.prepare.outputs.release_train_image }}"
+
+          {
+            echo "### Validated MThreads MUSA image"
+            echo ""
+            echo "- Train: \`${{ needs.prepare.outputs.release_train_image }}\`"
+            echo "- Candidate: \`${{ needs.prepare.outputs.train_image }}\`"
+            echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
+            echo "- FlagScale: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   summary:
     name: MUSA pipeline summary
-    needs: [prepare, validate_pr, build, musa_tests]
+    needs: [prepare, validate_pr, build, musa_tests, promote]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -291,6 +397,10 @@ jobs:
           if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
             test "${{ needs.musa_tests.result }}" = "success"
           fi
+          if [ "${{ needs.prepare.outputs.publish }}" = "true" ] && \
+             [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
+            test "${{ needs.promote.result }}" = "success"
+          fi
 
           {
             echo "### MThreads MUSA image"
@@ -298,4 +408,5 @@ jobs:
             echo "- Image: \`${{ needs.prepare.outputs.train_image }}\`"
             echo "- Target: \`${{ needs.prepare.outputs.target }}\`"
             echo "- Published: \`${{ needs.prepare.outputs.publish }}\`"
+            echo "- Promoted: \`${{ needs.promote.result }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
