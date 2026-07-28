@@ -1,4 +1,19 @@
 #!/bin/bash
+
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Platform configuration loading script
 # Extracts platform configuration and groups tests by task
 # Usage: source load_platform_config.sh && load_platform_config <platform_name>
@@ -28,6 +43,12 @@ load_platform_config() {
     # Extract package manager configuration
     PKG_MGR=$(/usr/local/bin/yq -r '.pkg_mgr // "uv"' "$CONFIG_FILE")
     ENV_PATH=$(/usr/local/bin/yq -r '.env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_TRAIN=$(/usr/local/bin/yq -r '.env_paths.train // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_HETERO_TRAIN=$(/usr/local/bin/yq -r '.env_paths.hetero_train // .env_paths.train // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_BENCHMARK=$(/usr/local/bin/yq -r '.env_paths.benchmark // .env_paths.train // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_INFERENCE=$(/usr/local/bin/yq -r '.env_paths.inference // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_SERVE=$(/usr/local/bin/yq -r '.env_paths.serve // .env_paths.inference // .env_path // "/opt/venv"' "$CONFIG_FILE")
+    ENV_PATH_RL=$(/usr/local/bin/yq -r '.env_paths.rl // .env_path // "/opt/venv"' "$CONFIG_FILE")
     ENV_NAME_TRAIN=$(/usr/local/bin/yq -r '.env_names.train // "flagscale-train"' "$CONFIG_FILE")
     ENV_NAME_INFERENCE=$(/usr/local/bin/yq -r '.env_names.inference // "flagscale-inference"' "$CONFIG_FILE")
     ENV_NAME_SERVE=$(/usr/local/bin/yq -r '.env_names.serve // "flagscale-inference"' "$CONFIG_FILE")
@@ -114,6 +135,12 @@ load_platform_config() {
     # Output package manager configuration
     echo "pkg_mgr=$PKG_MGR" >> $GITHUB_OUTPUT
     echo "env_path=$ENV_PATH" >> $GITHUB_OUTPUT
+    echo "env_path_train=$ENV_PATH_TRAIN" >> $GITHUB_OUTPUT
+    echo "env_path_hetero_train=$ENV_PATH_HETERO_TRAIN" >> $GITHUB_OUTPUT
+    echo "env_path_benchmark=$ENV_PATH_BENCHMARK" >> $GITHUB_OUTPUT
+    echo "env_path_inference=$ENV_PATH_INFERENCE" >> $GITHUB_OUTPUT
+    echo "env_path_serve=$ENV_PATH_SERVE" >> $GITHUB_OUTPUT
+    echo "env_path_rl=$ENV_PATH_RL" >> $GITHUB_OUTPUT
     echo "env_name_train=$ENV_NAME_TRAIN" >> $GITHUB_OUTPUT
     echo "env_name_inference=$ENV_NAME_INFERENCE" >> $GITHUB_OUTPUT
     echo "env_name_serve=$ENV_NAME_SERVE" >> $GITHUB_OUTPUT

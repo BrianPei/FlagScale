@@ -1,4 +1,19 @@
 #!/bin/bash
+
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # =============================================================================
 # Retry Utilities
 # =============================================================================
@@ -124,4 +139,28 @@ retry_git_clone() {
 
     log_info "Cloning $(basename "$repo_url" .git)"
     retry -d $debug $retries "rm -rf '$target_dir' && git clone$opts '$repo_url' '$target_dir'"
+}
+
+# Retry fetching an exact Git ref (branch, tag, or commit) into a clean checkout.
+# Unlike `git clone --branch`, this also supports immutable commit SHAs.
+# Usage: retry_git_checkout_ref -d <debug> <repo_url> <ref> <target_dir> [retries]
+retry_git_checkout_ref() {
+    local debug=false
+    if [[ "$1" == "-d" ]]; then
+        debug="$2"; shift 2
+    fi
+
+    local repo_url=$1
+    local ref=$2
+    local target_dir=$3
+    local retries=${4:-3}
+
+    [ -z "$ref" ] && { log_error "Git ref is required"; return 1; }
+
+    log_info "Fetching $(basename "$repo_url" .git) at $ref"
+    retry -d $debug $retries "rm -rf '$target_dir' && \
+        git init -q '$target_dir' && \
+        git -C '$target_dir' remote add origin '$repo_url' && \
+        git -C '$target_dir' fetch --depth 1 origin '$ref' && \
+        git -C '$target_dir' checkout -q --detach FETCH_HEAD"
 }

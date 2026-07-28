@@ -29,6 +29,8 @@ FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 TE_REPO="${FLAGSCALE_TE_REPO:-https://github.com/flagos-ai/TransformerEngine-FL.git}"
 TE_REF="${FLAGSCALE_TE_REF:-}"
+MEGATRON_REPO="${FLAGSCALE_MEGATRON_REPO:-https://github.com/flagos-ai/Megatron-LM-FL.git}"
+MEGATRON_REF="${FLAGSCALE_MEGATRON_REF:-}"
 REQ_FILE="$PROJECT_ROOT/requirements/ascend/train.txt"
 
 SRC_DEPS_LIST="transformer-engine megatron-lm"
@@ -111,10 +113,19 @@ install_transformer_engine() {
 
     set_step "Installing TransformerEngine-FL for Ascend"
     mkdir -p "$FLAGSCALE_DEPS"
-    local clone_args=(-d "$DEBUG" --depth 1)
-    [ -n "$TE_REF" ] && clone_args+=(--branch "$TE_REF")
-    retry_git_clone "${clone_args[@]}" "$TE_REPO" \
-        "$FLAGSCALE_DEPS/TransformerEngine-FL" "$RETRY_COUNT" || return 1
+    if [ -n "$TE_REF" ]; then
+        retry_git_checkout_ref -d "$DEBUG" "$TE_REPO" "$TE_REF" \
+            "$FLAGSCALE_DEPS/TransformerEngine-FL" "$RETRY_COUNT" || return 1
+    else
+        retry_git_clone -d "$DEBUG" --depth 1 "$TE_REPO" \
+            "$FLAGSCALE_DEPS/TransformerEngine-FL" "$RETRY_COUNT" || return 1
+    fi
+
+    local npu_init="$FLAGSCALE_DEPS/TransformerEngine-FL/transformer_engine/plugin/core/backends/vendor/npu/__init__.py"
+    if [ "$DEBUG" != true ] && [ ! -f "$npu_init" ]; then
+        log_error "TransformerEngine-FL ref ${TE_REF:-default} is missing the NPU backend package"
+        return 1
+    fi
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
     run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/TransformerEngine-FL' && \
@@ -135,9 +146,13 @@ install_megatron_lm() {
 
     set_step "Installing Megatron-LM-FL for Ascend"
     mkdir -p "$FLAGSCALE_DEPS"
-    retry_git_clone -d $DEBUG \
-        "https://github.com/flagos-ai/Megatron-LM-FL.git" \
-        "$FLAGSCALE_DEPS/Megatron-LM-FL" "$RETRY_COUNT" || return 1
+    if [ -n "$MEGATRON_REF" ]; then
+        retry_git_checkout_ref -d "$DEBUG" "$MEGATRON_REPO" "$MEGATRON_REF" \
+            "$FLAGSCALE_DEPS/Megatron-LM-FL" "$RETRY_COUNT" || return 1
+    else
+        retry_git_clone -d "$DEBUG" --depth 1 "$MEGATRON_REPO" \
+            "$FLAGSCALE_DEPS/Megatron-LM-FL" "$RETRY_COUNT" || return 1
+    fi
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
     run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && \

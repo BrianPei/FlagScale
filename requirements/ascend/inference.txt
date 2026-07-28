@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Ascend serve-specific dependencies
+# Ascend inference and serving currently use the same pinned vLLM stack.
+# Keep these entries aligned with serve.txt. They are listed explicitly because
+# per-package installation options are parsed from the selected task file.
 
 -r ./base.txt
 
@@ -20,7 +22,6 @@
 # The vLLM Ascend base image already provides CMake, Ninja, and PyBind11.
 scikit-build-core==0.11
 
-# FlagTree for Ascend (extra index so PyPI remains available for build deps)
 # [--extra-index-url https://resource.flagos.net/repository/flagos-pypi-hosted/simple]
 flagtree==0.4.0+ascend3.2
 

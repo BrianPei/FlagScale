@@ -1,3 +1,17 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 name: Common All Tests
 
 on:
@@ -50,6 +64,12 @@ jobs:
       benchmark_test_matrix: ${{ steps.config.outputs.benchmark_test_matrix }}
       pkg_mgr: ${{ steps.config.outputs.pkg_mgr }}
       env_path: ${{ steps.config.outputs.env_path }}
+      env_path_train: ${{ steps.config.outputs.env_path_train }}
+      env_path_hetero_train: ${{ steps.config.outputs.env_path_hetero_train }}
+      env_path_benchmark: ${{ steps.config.outputs.env_path_benchmark }}
+      env_path_inference: ${{ steps.config.outputs.env_path_inference }}
+      env_path_serve: ${{ steps.config.outputs.env_path_serve }}
+      env_path_rl: ${{ steps.config.outputs.env_path_rl }}
       env_name_train: ${{ steps.config.outputs.env_name_train }}
       env_name_inference: ${{ steps.config.outputs.env_name_inference }}
       env_name_serve: ${{ steps.config.outputs.env_name_serve }}
@@ -159,6 +179,7 @@ jobs:
   cli_validation:
     needs: checkout_and_config
     uses: ./.github/workflows/functional_tests_cli.yml
+    secrets: inherit
     with:
       platform: ${{ inputs.platform }}
       image: ${{ needs.checkout_and_config.outputs.ci_train_image }}
@@ -167,7 +188,7 @@ jobs:
       container_options: ${{ needs.checkout_and_config.outputs.container_options }}
       pkg_mgr: ${{ needs.checkout_and_config.outputs.pkg_mgr }}
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
-      env_path: ${{ needs.checkout_and_config.outputs.env_path }}
+      env_path: ${{ needs.checkout_and_config.outputs.env_path_train }}
 
   unit_tests:
     needs:
@@ -179,6 +200,7 @@ jobs:
       matrix:
         device: ${{ fromJson(needs.checkout_and_config.outputs.device_types) }}
     uses: ./.github/workflows/unit_tests_common.yml
+    secrets: inherit
     name: unit_tests
     with:
       platform: ${{ inputs.platform }}
@@ -189,7 +211,7 @@ jobs:
       container_options: ${{ needs.checkout_and_config.outputs.container_options }}
       pkg_mgr: ${{ needs.checkout_and_config.outputs.pkg_mgr }}
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
-      env_path: ${{ needs.checkout_and_config.outputs.env_path }}
+      env_path: ${{ needs.checkout_and_config.outputs.env_path_train }}
 
   functional_tests_train:
     needs:
@@ -198,6 +220,7 @@ jobs:
       - unit_tests
     if: fromJson(needs.checkout_and_config.outputs.train_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_train.yml
+    secrets: inherit
     with:
       platform: ${{ inputs.platform }}
       test_matrix: ${{ needs.checkout_and_config.outputs.train_test_matrix }}
@@ -207,7 +230,7 @@ jobs:
       container_options: ${{ needs.checkout_and_config.outputs.container_options }}
       pkg_mgr: ${{ needs.checkout_and_config.outputs.pkg_mgr }}
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
-      env_path: ${{ needs.checkout_and_config.outputs.env_path }}
+      env_path: ${{ needs.checkout_and_config.outputs.env_path_train }}
 
   functional_tests_hetero_train:
     needs:
@@ -216,6 +239,7 @@ jobs:
       - unit_tests
     if: fromJson(needs.checkout_and_config.outputs.hetero_train_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_hetero_train.yml
+    secrets: inherit
     with:
       platform: ${{ inputs.platform }}
       test_matrix: ${{ needs.checkout_and_config.outputs.hetero_train_test_matrix }}
@@ -225,7 +249,7 @@ jobs:
       container_options: ${{ needs.checkout_and_config.outputs.container_options }}
       pkg_mgr: ${{ needs.checkout_and_config.outputs.pkg_mgr }}
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
-      env_path: ${{ needs.checkout_and_config.outputs.env_path }}
+      env_path: ${{ needs.checkout_and_config.outputs.env_path_hetero_train }}
 
   functional_tests_inference:
     needs:
@@ -234,6 +258,7 @@ jobs:
       - unit_tests
     if: fromJson(needs.checkout_and_config.outputs.inference_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_inference.yml
+    secrets: inherit
     with:
       platform: ${{ inputs.platform }}
       test_matrix: ${{ needs.checkout_and_config.outputs.inference_test_matrix }}
@@ -243,7 +268,7 @@ jobs:
       container_options: ${{ needs.checkout_and_config.outputs.container_options }}
       pkg_mgr: ${{ needs.checkout_and_config.outputs.pkg_mgr }}
       env_name: ${{ needs.checkout_and_config.outputs.env_name_inference }}
-      env_path: ${{ needs.checkout_and_config.outputs.env_path }}
+      env_path: ${{ needs.checkout_and_config.outputs.env_path_inference }}
 
   functional_tests_serve:
     needs:
@@ -252,6 +277,7 @@ jobs:
       - unit_tests
     if: fromJson(needs.checkout_and_config.outputs.serve_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_serve.yml
+    secrets: inherit
     with:
       platform: ${{ inputs.platform }}
       test_matrix: ${{ needs.checkout_and_config.outputs.serve_test_matrix }}
@@ -261,7 +287,7 @@ jobs:
       container_options: ${{ needs.checkout_and_config.outputs.container_options }}
       pkg_mgr: ${{ needs.checkout_and_config.outputs.pkg_mgr }}
       env_name: ${{ needs.checkout_and_config.outputs.env_name_serve }}
-      env_path: ${{ needs.checkout_and_config.outputs.env_path }}
+      env_path: ${{ needs.checkout_and_config.outputs.env_path_serve }}
 
   # NOTE: rl functional tests are temporarily disabled
   # functional_tests_rl:
@@ -279,7 +305,7 @@ jobs:
   #     container_options: ${{ needs.checkout_and_config.outputs.container_options }}
   #     pkg_mgr: ${{ needs.checkout_and_config.outputs.pkg_mgr }}
   #     env_name: ${{ needs.checkout_and_config.outputs.env_name_rl }}
-  #     env_path: ${{ needs.checkout_and_config.outputs.env_path }}
+  #     env_path: ${{ needs.checkout_and_config.outputs.env_path_rl }}
 
   functional_tests_benchmark:
     needs:
@@ -288,6 +314,7 @@ jobs:
       - unit_tests
     if: fromJson(needs.checkout_and_config.outputs.benchmark_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_benchmark.yml
+    secrets: inherit
     with:
       platform: ${{ inputs.platform }}
       test_matrix: ${{ needs.checkout_and_config.outputs.benchmark_test_matrix }}
@@ -297,7 +324,7 @@ jobs:
       container_options: ${{ needs.checkout_and_config.outputs.container_options }}
       pkg_mgr: ${{ needs.checkout_and_config.outputs.pkg_mgr }}
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
-      env_path: ${{ needs.checkout_and_config.outputs.env_path }}
+      env_path: ${{ needs.checkout_and_config.outputs.env_path_benchmark }}
 
   all_tests_complete:
     defaults:

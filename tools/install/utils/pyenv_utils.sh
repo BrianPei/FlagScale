@@ -1,4 +1,19 @@
 #!/bin/bash
+
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # =============================================================================
 # Python Environment Utilities
 # =============================================================================
@@ -43,6 +58,25 @@ activate_uv_env() {
     export UV_PROJECT_ENVIRONMENT="$venv_path"
     log_info "Activated UV env: $venv_path"
     return 0
+}
+
+# Activate an image-provided pip runtime when one is configured. Plain pip
+# images can leave env_path empty and continue using their system Python.
+activate_pip_env() {
+    local env_path="${1:-}"
+
+    if [ -z "$env_path" ]; then
+        log_info "Using system Python with pip"
+        return 0
+    fi
+
+    if [ -f "$env_path/activate.sh" ]; then
+        source "$env_path/activate.sh"
+        log_info "Activated pip runtime: $env_path"
+        return 0
+    fi
+
+    log_info "Pip runtime not present in this image, using system Python: $env_path"
 }
 
 # =============================================================================
