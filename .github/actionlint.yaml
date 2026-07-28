@@ -1,0 +1,6 @@
+self-hosted-runner:
+  labels:
+    - flagscale-musa-s5000-gpu2-8c-256g
+    - flagscale-nvidia-a100-gpu2-32c-128g
+    - nvidia-0
+    - gpus-8

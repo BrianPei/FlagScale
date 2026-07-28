@@ -15,61 +15,56 @@
 name: Build Docker Images - MThreads
 
 on:
-  workflow_dispatch:
-    inputs:
-      task:
-        description: 'Task to build'
-        required: true
-        type: choice
-        options:
-          - train
-        default: 'train'
-      target:
-        description: 'Build target stage (dev includes dev tools, release is production)'
-        required: true
-        type: choice
-        options:
-          - dev
-          - release
-        default: 'dev'
-      push:
-        description: 'Push image to registry'
-        type: boolean
-        default: true
-      no_cache:
-        description: 'Build without Docker cache'
-        type: boolean
-        default: false
-      pkg_mgr:
-        description: 'Package manager to use'
-        required: true
-        type: choice
-        options:
-          - conda
-        default: 'conda'
-      tar_dir:
-        description: 'Directory to store image tar files (default: from .github/configs/musa.yml)'
-        type: string
-        default: ''
-      base_image:
-        description: 'Override base image (default: ci_train_image from .github/configs/musa.yml)'
-        type: string
-        default: ''
-      runs_on:
-        required: false
-        type: string
-        description: Override runs_on. Falls back to platform config if not set.
-        default: '["flagscale-musa-s5000-gpu2-8c-256g"]'
-
-  pull_request_target:
+  pull_request:
     branches: [main]
     paths:
       - 'docker/musa/**'
-      - 'docker/build.sh'
-      - 'tools/install/**'
-      - 'requirements/**'
+      - 'tools/install/musa/**'
+      - 'tools/install/utils/**'
+      - 'tools/install/install.sh'
+      - 'requirements/musa/**'
+      - 'flagscale/platforms/**'
+      - 'tests/test_utils/config/platforms/musa.yaml'
+      - 'tests/test_utils/runners/parse_config.py'
       - '.github/configs/musa.yml'
       - '.github/workflows/build_image_musa.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docker/musa/**'
+      - 'tools/install/musa/**'
+      - 'tools/install/utils/**'
+      - 'tools/install/install.sh'
+      - 'requirements/musa/**'
+      - 'flagscale/platforms/**'
+      - 'tests/test_utils/config/platforms/musa.yaml'
+      - 'tests/test_utils/runners/parse_config.py'
+      - '.github/configs/musa.yml'
+      - '.github/workflows/build_image_musa.yml'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Docker build target
+        required: true
+        type: choice
+        options: [dev, release]
+        default: dev
+      push:
+        description: Push the candidate image to Harbor
+        type: boolean
+        default: true
+      run_tests:
+        description: Run CLI and unit tests after publishing
+        type: boolean
+        default: true
+      no_cache:
+        description: Build without Docker cache
+        type: boolean
+        default: false
+      base_image:
+        description: Optional trusted override for the pinned S5000 base image
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -79,132 +74,138 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: harbor.baai.ac.cn/flagscale
-  PYTHON_VERSION: '3.12'
-  UV_VERSION: '0.7.2'
-  PKG_MGR: ${{ inputs.pkg_mgr || 'conda' }}
+  REGISTRY: harbor.baai.ac.cn
+  REGISTRY_NAMESPACE: flagscale
+  MUSA_BASE_IMAGE: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
+  PYTHON_VERSION: '3.10'
+  PKG_MGR: pip
 
 jobs:
   prepare:
-    name: Prepare build parameters
+    name: Prepare trusted build parameters
     runs-on: ubuntu-latest
     outputs:
       target: ${{ steps.params.outputs.target }}
-      push: ${{ steps.params.outputs.push }}
+      publish: ${{ steps.params.outputs.publish }}
+      run_tests: ${{ steps.params.outputs.run_tests }}
       no_cache: ${{ steps.params.outputs.no_cache }}
-      tar_dir: ${{ steps.config.outputs.tar_dir }}
-      base_image: ${{ steps.config.outputs.base_image }}
-      runs_on: ${{ steps.config.outputs.runs_on }}
+      base_image: ${{ steps.params.outputs.base_image }}
+      train_image: ${{ steps.params.outputs.train_image }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          sparse-checkout: .github/configs
-
-      - name: Load platform config
-        id: config
+      - name: Compute parameters
+        id: params
+        shell: bash
         run: |
           set -euo pipefail
 
-          TAR_DIR=$(grep '^tar_dir:' .github/configs/musa.yml | awk '{print $2}')
-          BASE_IMAGE=$(grep '^ci_train_image:' .github/configs/musa.yml | awk '{print $2}')
-          RUNS_ON=$(python3 - <<'PY'
-          import ast
-          import re
-          text = open(".github/configs/musa.yml", encoding="utf-8").read()
-          match = re.search(r"^runner_labels:\s*(\[.*\])\s*$", text, re.M)
-          print(match.group(1) if match else '["flagscale-musa-s5000-gpu2-8c-256g"]')
-          PY
-          )
+          TARGET="${{ inputs.target || 'dev' }}"
+          PUBLISH=false
+          RUN_TESTS=false
+          NO_CACHE=false
+          BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
 
-          TAR_OVERRIDE="${{ inputs.tar_dir }}"
-          BASE_OVERRIDE="${{ inputs.base_image }}"
-          RUNS_ON_OVERRIDE="${{ inputs.runs_on }}"
-
-          if [ -n "$TAR_OVERRIDE" ]; then
-            TAR_DIR="$TAR_OVERRIDE"
-          fi
-          if [ -n "$BASE_OVERRIDE" ]; then
-            BASE_IMAGE="$BASE_OVERRIDE"
-          fi
-          if [ -n "$RUNS_ON_OVERRIDE" ]; then
-            RUNS_ON="$RUNS_ON_OVERRIDE"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            PUBLISH=true
+            RUN_TESTS=true
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PUBLISH="${{ inputs.push }}"
+            RUN_TESTS="${{ inputs.run_tests }}"
+            NO_CACHE="${{ inputs.no_cache }}"
+            if [ -n "${{ inputs.base_image }}" ]; then
+              BASE_IMAGE="${{ inputs.base_image }}"
+            fi
+            if [ "$RUN_TESTS" = "true" ] && [ "$PUBLISH" != "true" ]; then
+              echo "::error::run_tests=true requires push=true so reusable jobs can pull the image"
+              exit 1
+            fi
           fi
 
-          echo "tar_dir=${TAR_DIR}" >> $GITHUB_OUTPUT
-          echo "base_image=${BASE_IMAGE}" >> $GITHUB_OUTPUT
-          echo "runs_on=${RUNS_ON}" >> $GITHUB_OUTPUT
+          SHORT_SHA="${GITHUB_SHA::12}"
+          TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
 
-      - name: Set build parameters
-        id: params
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
+          echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
+          echo "base_image=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+
+  validate_pr:
+    name: Validate untrusted MUSA PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate MUSA integration
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
-            echo "target=dev" >> $GITHUB_OUTPUT
-            echo "push=true" >> $GITHUB_OUTPUT
-            echo "no_cache=false" >> $GITHUB_OUTPUT
-          else
-            echo "target=${{ inputs.target || 'dev' }}" >> $GITHUB_OUTPUT
-            echo "push=${{ inputs.push }}" >> $GITHUB_OUTPUT
-            echo "no_cache=${{ inputs.no_cache }}" >> $GITHUB_OUTPUT
-          fi
+          set -euo pipefail
+
+          test -f docker/musa/Dockerfile.train
+          test -f requirements/musa/base.txt
+          test -f requirements/musa/train.txt
+          test -f tests/test_utils/config/platforms/musa.yaml
+          bash -n tools/install/musa/env.sh
+          bash -n tools/install/musa/install_base.sh
+          bash -n tools/install/musa/install_train.sh
+          python -m py_compile tests/test_utils/runners/parse_config.py
+          python tests/test_utils/runners/parse_config.py \
+            --platform musa --type device_types | grep -q 's5000'
+          python tests/test_utils/runners/parse_config.py \
+            --platform s5000 --type unit | grep -q 'include'
 
   build:
-    name: Build train
+    name: Build MUSA train
     needs: prepare
-    runs-on: ${{ fromJson(needs.prepare.outputs.runs_on) }}
+    if: github.event_name != 'pull_request'
+    runs-on: flagscale-musa-s5000-gpu2-8c-256g
     outputs:
-      train_tag: ${{ steps.export.outputs.train_tag }}
-      train_tar: ${{ steps.export.outputs.train_tar }}
+      train_image: ${{ needs.prepare.outputs.train_image }}
     steps:
       - name: Clean workspace
         run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
 
-      - name: Checkout code
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Detect runner proxy
+        id: proxy
+        shell: bash
+        run: |
+          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker
 
-      - name: Compute build metadata
-        id: meta
-        run: |
-          set -euo pipefail
+      - name: Log in to Harbor
+        if: needs.prepare.outputs.publish == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
 
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          IMAGE_NAME="flagscale-train"
-          TAG="${{ needs.prepare.outputs.target }}-musa-s5000-py${{ env.PYTHON_VERSION }}-${TIMESTAMP}"
-          BUILD_TAG="${{ env.REGISTRY }}/${IMAGE_NAME}:${TAG}"
-
-          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
-          echo "build_tag=${BUILD_TAG}" >> $GITHUB_OUTPUT
-
-      - name: Detect proxy from runner environment
-        id: proxy
-        run: |
-          HTTP_PROXY_VAL="${http_proxy:-${HTTP_PROXY:-}}"
-          HTTPS_PROXY_VAL="${https_proxy:-${HTTPS_PROXY:-}}"
-          NO_PROXY_VAL="${no_proxy:-${NO_PROXY:-}}"
-          echo "http_proxy=${HTTP_PROXY_VAL}" >> $GITHUB_OUTPUT
-          echo "https_proxy=${HTTPS_PROXY_VAL}" >> $GITHUB_OUTPUT
-          echo "no_proxy=${NO_PROXY_VAL}" >> $GITHUB_OUTPUT
-
-      - name: Build Docker image
+      - name: Build MUSA train image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/musa/Dockerfile.train
           target: ${{ needs.prepare.outputs.target }}
           load: true
-          tags: ${{ steps.meta.outputs.build_tag }}
+          tags: ${{ needs.prepare.outputs.train_image }}
+          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
           build-args: |
             BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
-            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
-            UV_VERSION=${{ env.UV_VERSION }}
             PKG_MGR=${{ env.PKG_MGR }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
@@ -212,75 +213,87 @@ jobs:
             http_proxy=${{ steps.proxy.outputs.http_proxy }}
             https_proxy=${{ steps.proxy.outputs.https_proxy }}
             no_proxy=${{ steps.proxy.outputs.no_proxy }}
-          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}
 
-      - name: Save image as tar
-        id: save_tar
+      - name: Validate MUSA runtime on S5000
+        shell: bash
         run: |
           set -euo pipefail
 
-          TAR_DIR="${{ needs.prepare.outputs.tar_dir }}"
-          sudo mkdir -p "$TAR_DIR"
-          IMAGE_TAG="${{ steps.meta.outputs.build_tag }}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          if [ -n "$PR_NUMBER" ]; then
-            SUFFIX="pr${PR_NUMBER}"
-          else
-            SHA="${{ github.sha }}"
-            SUFFIX="${SHA:0:7}"
-          fi
-          TAR_NAME=$(echo "$IMAGE_TAG" | tr '/: ' '---')-${SUFFIX}.tar
-          sudo docker save "$IMAGE_TAG" -o "${TAR_DIR}/${TAR_NAME}"
-          echo "tar_path=${TAR_DIR}/${TAR_NAME}" >> $GITHUB_OUTPUT
+          docker run --rm \
+            --privileged \
+            --network=host \
+            --env MTHREADS_VISIBLE_DEVICES=all \
+            --env MTHREADS_DRIVER_CAPABILITIES=all \
+            "${{ needs.prepare.outputs.train_image }}" \
+            python -c '
+          import torch
+          import torch_musa
 
-      - name: Export image tag
-        id: export
+          assert torch.musa.is_available(), "MUSA device is not available"
+          assert torch.musa.device_count() > 0, "No MUSA devices detected"
+          x = torch.arange(8, dtype=torch.float32, device="musa")
+          y = (x * 2).cpu()
+          assert y.tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
+          print(f"MUSA smoke passed on {torch.musa.device_count()} device(s)")
+          '
+
+      - name: Push candidate image with retry
+        if: needs.prepare.outputs.publish == 'true'
+        shell: bash
         run: |
-          echo "train_tag=${{ steps.meta.outputs.build_tag }}" >> $GITHUB_OUTPUT
-          echo "train_tar=${{ steps.save_tar.outputs.tar_path }}" >> $GITHUB_OUTPUT
+          set -euo pipefail
+
+          for attempt in 1 2 3; do
+            if docker push "${{ needs.prepare.outputs.train_image }}"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              break
+            fi
+            sleep $((attempt * 15))
+          done
+          echo "::error::Failed to push MUSA image after 3 attempts"
+          exit 1
+
+  musa_tests:
+    name: Test MUSA candidate
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/all_tests_common.yml
+    with:
+      platform: musa
+      ci_train_image: ${{ needs.prepare.outputs.train_image }}
+      ci_inference_image: ${{ needs.prepare.outputs.train_image }}
 
   summary:
-    name: Build summary
-    needs: build
-    runs-on: ubuntu-latest
+    name: MUSA pipeline summary
+    needs: [prepare, validate_pr, build, musa_tests]
     if: always()
+    runs-on: ubuntu-latest
     steps:
-      - name: Verify build results
-        run: |
-          if [ "${{ needs.build.result }}" != "success" ]; then
-            echo "::error::MThreads image build failed"
-            exit 1
-          fi
-
-  load_image:
-    name: Load and push image
-    needs: [build, summary, prepare]
-    runs-on: ${{ fromJson(needs.prepare.outputs.runs_on) }}
-    if: needs.prepare.outputs.push == 'true'
-    steps:
-      - name: Login to Harbor registry
-        if: github.event_name == 'pull_request_target'
-        uses: docker/login-action@v3
-        with:
-          registry: harbor.baai.ac.cn
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.CONTAINER_REGISTRY }}
-
-      - name: Load train image from tar and push
+      - name: Verify pipeline result
+        shell: bash
         run: |
           set -euo pipefail
 
-          TAR="${{ needs.build.outputs.train_tar }}"
-          TAG="${{ needs.build.outputs.train_tag }}"
-          sudo docker load -i "$TAR"
-          sudo docker push "$TAG"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            test "${{ needs.validate_pr.result }}" = "success"
+            exit 0
+          fi
 
-      - name: Update build summary
-        run: |
+          test "${{ needs.build.result }}" = "success"
+          if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
+            test "${{ needs.musa_tests.result }}" = "success"
+          fi
+
           {
-            echo "### MThreads Image"
+            echo "### MThreads MUSA image"
             echo ""
-            echo "| Task | Image |"
-            echo "|---|---|"
-            echo "| train | \`${{ needs.build.outputs.train_tag }}\` |"
-          } >> $GITHUB_STEP_SUMMARY
+            echo "- Image: \`${{ needs.prepare.outputs.train_image }}\`"
+            echo "- Target: \`${{ needs.prepare.outputs.target }}\`"
+            echo "- Published: \`${{ needs.prepare.outputs.publish }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

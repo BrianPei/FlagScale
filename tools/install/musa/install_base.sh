@@ -16,6 +16,8 @@
 
 # Base phase (MUSA): requirements/musa/base.txt
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../utils/utils.sh"
 source "$SCRIPT_DIR/../utils/pkg_utils.sh"
@@ -34,13 +36,13 @@ install_pip() {
     if is_phase_enabled base; then
         [ ! -f "$REQ_FILE" ] && { log_info "base.txt not found"; return 0; }
         set_step "Installing MUSA base requirements"
-        retry_pip_install -d $DEBUG "$REQ_FILE" "$RETRY_COUNT" || return 1
+        retry_pip_install -d "$DEBUG" "$REQ_FILE" "$RETRY_COUNT" || return 1
         log_success "MUSA base requirements installed"
     else
         local pkgs=$(get_pip_deps_for_requirements "$REQ_FILE")
         [ -z "$pkgs" ] && return 0
         set_step "Installing MUSA base pip packages (override)"
-        run_cmd -d $DEBUG $(get_pip_cmd) install --root-user-action=ignore $pkgs || return 1
+        run_cmd -d "$DEBUG" "$(get_pip_cmd)" install --root-user-action=ignore $pkgs || return 1
         log_success "MUSA base pip packages installed"
     fi
 }

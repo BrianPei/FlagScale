@@ -18,15 +18,12 @@
 hardware_name: musa
 display_name: "MThreads MUSA Tests"
 
-# Docker images for MThreads MUSA.
-# The build workflow uses ci_train_image as the default BASE_IMAGE and allows
-# workflow_dispatch to override it while the runtime image is being stabilized.
-ci_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:latest
-ci_train_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:latest
-ci_inference_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:latest
-
-# Directory to store image tar files (shared between build and push workflows)
-tar_dir: /mnt/airs-business/cicd/image_tar
+# Official S5000 base, pinned to avoid an accidental MUSA/PyTorch upgrade when
+# the vendor moves a mutable tag. The build workflow overrides ci_train_image
+# with the freshly built candidate before running tests.
+ci_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
+ci_train_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
+ci_inference_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
 
 # Runner labels for MThreads MUSA hardware
 runner_labels: ["flagscale-musa-s5000-gpu2-8c-256g"]
@@ -39,31 +36,27 @@ container_volumes:
 # Container options for MThreads MUSA runtime
 container_options: >-
   --hostname=flagscale-ci
+  --privileged
+  --network=host
   --ipc=host
   --shm-size=100g
   --ulimit memlock=-1
-  --security-opt seccomp=unconfined
-  --security-opt apparmor=unconfined
-  --device=/dev/dri
-  --device=/dev/infiniband
+  --env MTHREADS_VISIBLE_DEVICES=all
+  --env MTHREADS_DRIVER_CAPABILITIES=all
   --user root
   --ulimit nofile=65535:65535
-  --cap-add SYS_ADMIN
-  --cap-add SYS_PTRACE
-  --cap-add IPC_LOCK
-  --cap-add NET_ADMIN
 
 # =============================================================================
 # Package Manager Configuration
 # =============================================================================
-pkg_mgr: "conda"
+pkg_mgr: "pip"
 
 # Environment path (conda installation path)
-env_path: "/opt/conda"
+env_path: ""
 
 # Conda environment names
 env_names:
-  train: "base"
+  train: ""
   hetero_train: ""
   inference: ""
   rl: ""

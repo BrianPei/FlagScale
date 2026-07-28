@@ -16,6 +16,8 @@
 
 # Train task (MUSA): requirements/musa/train.txt
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../utils/utils.sh"
 source "$SCRIPT_DIR/../utils/pkg_utils.sh"
@@ -34,19 +36,28 @@ install_pip() {
     if is_phase_enabled task; then
         [ ! -f "$REQ_FILE" ] && { log_info "train.txt not found"; return 0; }
         set_step "Installing MUSA train requirements"
-        retry_pip_install -d $DEBUG "$REQ_FILE" "$RETRY_COUNT" || return 1
+        retry_pip_install -d "$DEBUG" "$REQ_FILE" "$RETRY_COUNT" || return 1
         log_success "MUSA train requirements installed"
     else
         local pkgs=$(get_pip_deps_for_requirements "$REQ_FILE")
         [ -z "$pkgs" ] && return 0
         set_step "Installing MUSA train pip packages (override)"
-        run_cmd -d $DEBUG $(get_pip_cmd) install --root-user-action=ignore $pkgs || return 1
+        run_cmd -d "$DEBUG" "$(get_pip_cmd)" install --root-user-action=ignore $pkgs || return 1
         log_success "MUSA train pip packages installed"
     fi
 }
 
+verify_musa_runtime() {
+    set_step "Validating torch_musa runtime"
+    "$(get_pip_cmd)" show torch-musa >/dev/null 2>&1 || \
+        python -c "import torch_musa" || return 1
+    python -c "import torch, torch_musa; assert hasattr(torch, 'musa')" || return 1
+    log_success "torch_musa runtime is importable"
+}
+
 main() {
     install_pip || die "MUSA train pip failed"
+    verify_musa_runtime || die "MUSA runtime validation failed"
 }
 
 main

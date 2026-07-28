@@ -14,15 +14,13 @@
 
 # FlagScale Training Dockerfile for MThreads MUSA Platform
 
-ARG BASE_IMAGE=registry.mthreads.com/mcconline/musa-pytorch-release-public:latest
-ARG PKG_MGR=conda
+ARG BASE_IMAGE=registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
+ARG PKG_MGR=pip
 ARG FLAGSCALE_HOME=/opt/flagscale
-ARG FLAGSCALE_CONDA=/opt/conda
 
 FROM ${BASE_IMAGE} AS base
 
 ARG FLAGSCALE_HOME
-ARG FLAGSCALE_CONDA
 
 ARG PIP_INDEX_URL
 ARG PIP_EXTRA_INDEX_URL
@@ -36,18 +34,12 @@ ARG https_proxy=${HTTPS_PROXY}
 ARG no_proxy=${NO_PROXY}
 
 ENV FLAGSCALE_HOME=${FLAGSCALE_HOME}
-ENV FLAGSCALE_CONDA=${FLAGSCALE_CONDA}
-ENV UV_PROJECT_ENVIRONMENT=${FLAGSCALE_HOME}/venv
-ENV VIRTUAL_ENV=${FLAGSCALE_HOME}/venv
 ENV FLAGSCALE_DEPS=${FLAGSCALE_HOME}/deps
 ENV FLAGSCALE_DOWNLOADS=${FLAGSCALE_HOME}/downloads
-ENV UV_HTTP_TIMEOUT=500
-ENV UV_INDEX_STRATEGY=unsafe-best-match
-ENV UV_LINK_MODE=copy
-ENV MPI_HOME=/usr/local/mpi
 ENV MUSA_HOME=/usr/local/musa
-ENV PATH="${FLAGSCALE_HOME}/venv/bin:${FLAGSCALE_CONDA}/bin:/root/.local/bin:/usr/local/mpi/bin:${MUSA_HOME}/bin:$PATH"
-ENV LD_LIBRARY_PATH="${MUSA_HOME}/lib:${MUSA_HOME}/lib64:/usr/local/mpi/lib64:/usr/local/mpi/lib:/usr/local/lib:$LD_LIBRARY_PATH"
+ENV MPI_HOME=/usr/local/openmpi
+ENV PATH="${MUSA_HOME}/bin:${MPI_HOME}/bin:/root/.local/bin:$PATH"
+ENV LD_LIBRARY_PATH="${MUSA_HOME}/lib:${MPI_HOME}/lib:/usr/local/lib:$LD_LIBRARY_PATH"
 
 COPY tools/install/musa/env.sh /etc/profile.d/flagscale-env.sh
 
@@ -57,7 +49,6 @@ FROM base AS deps
 
 ARG PKG_MGR
 ARG FLAGSCALE_HOME
-ARG FLAGSCALE_CONDA
 
 ARG PIP_INDEX_URL
 ARG PIP_EXTRA_INDEX_URL
@@ -79,15 +70,14 @@ COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=cache,target=/opt/conda/pkgs \
     . /etc/profile.d/flagscale-env.sh && \
     chmod +x /workspace/tools/install/*.sh && \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/musa/*.sh && \
     cd /workspace && \
-    FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_CONDA=${FLAGSCALE_CONDA} \
+    FLAGSCALE_HOME=${FLAGSCALE_HOME} \
     ./tools/install/install.sh --platform musa --task train --pkg-mgr ${PKG_MGR} --no-system && \
+    python -c "import torch, torch_musa; assert hasattr(torch, 'musa'); print('torch_musa import: OK')" && \
     rm -rf /workspace
 
 FROM deps AS dev
@@ -98,7 +88,6 @@ FROM base AS release
 
 ARG PKG_MGR
 ARG FLAGSCALE_HOME
-ARG FLAGSCALE_CONDA
 
 ARG PIP_INDEX_URL
 ARG PIP_EXTRA_INDEX_URL
@@ -120,15 +109,14 @@ COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=cache,target=/opt/conda/pkgs \
     . /etc/profile.d/flagscale-env.sh && \
     chmod +x /workspace/tools/install/*.sh && \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/musa/*.sh && \
     cd /workspace && \
-    FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_CONDA=${FLAGSCALE_CONDA} \
+    FLAGSCALE_HOME=${FLAGSCALE_HOME} \
     ./tools/install/install.sh --platform musa --task train --pkg-mgr ${PKG_MGR} --no-system --no-dev && \
+    python -c "import torch, torch_musa; assert hasattr(torch, 'musa'); print('torch_musa import: OK')" && \
     rm -rf /workspace
 
 CMD ["/bin/bash"]

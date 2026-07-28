@@ -49,7 +49,7 @@ def get_platform_config(platform, device=None):
     """
     if not platform:
         raise ValueError(
-            "Platform must be specified. Available platforms: cuda, ascend. See template.yaml for creating new platforms."
+            "Platform must be specified. Available platforms: cuda, ascend, metax, musa. See template.yaml for creating new platforms."
         )
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -64,12 +64,22 @@ def get_platform_config(platform, device=None):
         "ascend910": "ascend.yaml",
         "metax": "metax.yaml",
         "c550": "metax.yaml",
+        "musa": "musa.yaml",
+        "s5000": "musa.yaml",
     }
 
-    # If platform is a device type (a100, a800, h100) and no device specified
-    if platform in ["a100", "a800", "h100"] and device is None:
+    # Resolve device aliases while retaining the selected device type.
+    device_aliases = {
+        "a100": "cuda",
+        "a800": "cuda",
+        "h100": "cuda",
+        "ascend910": "ascend",
+        "c550": "metax",
+        "s5000": "musa",
+    }
+    if platform in device_aliases and device is None:
         device = platform
-        platform = "cuda"
+        platform = device_aliases[platform]
 
     yaml_file = platform_file_map.get(platform, f"{platform}.yaml")
     config_file = os.path.join(script_dir, "../config/platforms", yaml_file)
@@ -128,13 +138,14 @@ def get_device_types(platform):
         ValueError: If platform is not specified
     """
     if not platform:
-        raise ValueError("Platform must be specified. Available platforms: cuda, ascend")
+        raise ValueError("Platform must be specified. Available platforms: cuda, ascend, metax, musa")
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     platform_file_map = {
         "cuda": "cuda.yaml",
         "ascend": "ascend.yaml",
         "metax": "metax.yaml",
+        "musa": "musa.yaml",
     }
 
     yaml_file = platform_file_map.get(platform, f"{platform}.yaml")
