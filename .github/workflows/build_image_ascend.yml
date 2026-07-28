@@ -220,7 +220,23 @@ jobs:
       - name: Clean workspace
         run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
 
-      - name: Checkout source
+      - name: Checkout source (attempt 1)
+        id: checkout_attempt_1
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Checkout source (attempt 2)
+        id: checkout_attempt_2
+        if: steps.checkout_attempt_1.outcome == 'failure'
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Checkout source (attempt 3)
+        if: steps.checkout_attempt_2.outcome == 'failure'
         uses: actions/checkout@v4
         with:
           persist-credentials: false
