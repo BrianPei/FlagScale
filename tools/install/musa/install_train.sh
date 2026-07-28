@@ -53,14 +53,14 @@ install_pip() {
 }
 
 megatron_lm_ready() {
-    python -c '
+    TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c '
 import megatron.core
 from megatron.plugin.platform import get_platform
 ' &>/dev/null
 }
 
 validate_megatron_lm() {
-    python -c '
+    TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c '
 import megatron.core
 from megatron.plugin.platform import get_platform
 print("Megatron-LM-FL import validation passed")
@@ -104,8 +104,12 @@ install_src() {
 
 verify_musa_runtime() {
     set_step "Validating torch_musa runtime"
-    "$(get_pip_cmd)" show torch-musa >/dev/null 2>&1 || \
-        python -c "import torch_musa" || return 1
+    "$(get_pip_cmd)" show torch-musa >/dev/null 2>&1 || return 1
+    if [ "${FLAGSCALE_MUSA_BUILD_NO_DEVICE:-false}" = true ]; then
+        TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c "import torch" || return 1
+        log_success "torch_musa package is installed; device validation deferred to runtime"
+        return 0
+    fi
     python -c "import torch, torch_musa; assert hasattr(torch, 'musa')" || return 1
     log_success "torch_musa runtime is importable"
 }

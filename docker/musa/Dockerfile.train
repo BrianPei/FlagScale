@@ -89,9 +89,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/musa/*.sh && \
     cd /workspace && \
-    FLAGSCALE_HOME=${FLAGSCALE_HOME} \
+    FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_MUSA_BUILD_NO_DEVICE=true \
     ./tools/install/install.sh --platform musa --task train --pkg-mgr ${PKG_MGR} --no-system && \
-    python -c "import torch, torch_musa; assert hasattr(torch, 'musa'); print('torch_musa import: OK')" && \
+    python -m pip show torch-musa >/dev/null && \
     rm -rf /workspace
 
 FROM deps AS dev
@@ -134,9 +134,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/musa/*.sh && \
     cd /workspace && \
-    FLAGSCALE_HOME=${FLAGSCALE_HOME} \
+    FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_MUSA_BUILD_NO_DEVICE=true \
     ./tools/install/install.sh --platform musa --task train --pkg-mgr ${PKG_MGR} --no-system --no-dev && \
-    python -c "import torch, torch_musa; assert hasattr(torch, 'musa'); print('torch_musa import: OK')" && \
+    python -m pip show torch-musa >/dev/null && \
     rm -rf /workspace
 
 CMD ["/bin/bash"]
