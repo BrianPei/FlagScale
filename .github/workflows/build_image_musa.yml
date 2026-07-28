@@ -79,6 +79,7 @@ env:
   MUSA_BASE_IMAGE: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
   PYTHON_VERSION: '3.10'
   PKG_MGR: pip
+  PIP_INDEX_URL: https://pypi.org/simple
 
 jobs:
   prepare:
@@ -207,6 +208,7 @@ jobs:
           build-args: |
             BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
             PKG_MGR=${{ env.PKG_MGR }}
+            PIP_INDEX_URL=${{ env.PIP_INDEX_URL }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
