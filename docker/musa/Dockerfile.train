@@ -14,7 +14,10 @@
 
 # FlagScale Training Dockerfile for MThreads MUSA Platform
 
-ARG BASE_IMAGE=registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
+# The vendor's PyTorch 2.9.1 image requires a newer host driver for MCCL than
+# the current S5000 CI fleet provides. Keep the verified PyTorch 2.7.1 base
+# immutable until the fleet driver and vendor image are upgraded together.
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha256:ef0c9a4d3df15c077ffcc589e66debbb8fd3a53248f384151d896e45a08894d0
 ARG PKG_MGR=pip
 ARG FLAGSCALE_HOME=/opt/flagscale
 ARG PIP_DEFAULT_TIMEOUT=300

@@ -29,6 +29,9 @@ on:
       - 'tests/test_utils/runners/check_env.sh'
       - 'tests/test_utils/runners/utils.sh'
       - 'tests/unit_tests/test_utilities.py'
+      - 'tests/unit_tests/test_cli.py'
+      - 'tests/unit_tests/runner/test_config_validation.py'
+      - 'tests/unit_tests/test_spiky_loss_detector.py'
       - '.github/configs/musa.yml'
       - '.github/workflows/build_image_musa.yml'
   push:
@@ -45,6 +48,9 @@ on:
       - 'tests/test_utils/runners/check_env.sh'
       - 'tests/test_utils/runners/utils.sh'
       - 'tests/unit_tests/test_utilities.py'
+      - 'tests/unit_tests/test_cli.py'
+      - 'tests/unit_tests/runner/test_config_validation.py'
+      - 'tests/unit_tests/test_spiky_loss_detector.py'
       - '.github/configs/musa.yml'
       - '.github/workflows/build_image_musa.yml'
   workflow_dispatch:
@@ -82,7 +88,10 @@ concurrency:
 env:
   REGISTRY: harbor.baai.ac.cn
   REGISTRY_NAMESPACE: flagscale
-  MUSA_BASE_IMAGE: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
+  # PyTorch 2.7.1/MCCL is the newest base verified with the S5000 fleet's
+  # 3.3.5-server driver. The vendor PyTorch 2.9.1 image passes tensor smoke but
+  # fails communicator creation, so upgrading it must be coupled with drivers.
+  MUSA_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha256:ef0c9a4d3df15c077ffcc589e66debbb8fd3a53248f384151d896e45a08894d0
   MUSA_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
   MUSA_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
   PYTHON_VERSION: '3.10'
@@ -333,6 +342,45 @@ jobs:
           y = (x * 2).cpu()
           assert y.tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
           print(f"MUSA smoke passed on {torch.musa.device_count()} device(s)")
+          '
+
+      - name: Validate MCCL collectives on S5000
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DEVICE_COUNT=$(docker run --rm \
+            --privileged \
+            --network=host \
+            --env MTHREADS_VISIBLE_DEVICES=all \
+            --env MTHREADS_DRIVER_CAPABILITIES=all \
+            "${{ needs.prepare.outputs.train_image }}" \
+            python -c 'import torch, torch_musa; print(torch.musa.device_count())')
+          test "$DEVICE_COUNT" -ge 2
+
+          docker run --rm \
+            --privileged \
+            --network=host \
+            --ipc=host \
+            --env MTHREADS_VISIBLE_DEVICES=all \
+            --env MTHREADS_DRIVER_CAPABILITIES=all \
+            --env EXPECTED_WORLD_SIZE="$DEVICE_COUNT" \
+            "${{ needs.prepare.outputs.train_image }}" \
+            torchrun --standalone --nproc_per_node="$DEVICE_COUNT" \
+              --no-python python -c '
+          import os
+          import torch
+          import torch_musa
+
+          local_rank = int(os.environ["LOCAL_RANK"])
+          world_size = int(os.environ["EXPECTED_WORLD_SIZE"])
+          torch.musa.set_device(local_rank)
+          torch.distributed.init_process_group(backend="mccl")
+          value = torch.tensor([local_rank], dtype=torch.int64, device="musa")
+          torch.distributed.all_reduce(value)
+          assert value.item() == world_size * (world_size - 1) // 2
+          torch.distributed.destroy_process_group()
+          print(f"MCCL smoke passed on rank {local_rank}/{world_size}")
           '
 
       - name: Push candidate image with retry
