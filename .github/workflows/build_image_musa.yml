@@ -1,0 +1,286 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Docker Images - MThreads
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task to build'
+        required: true
+        type: choice
+        options:
+          - train
+        default: 'train'
+      target:
+        description: 'Build target stage (dev includes dev tools, release is production)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - release
+        default: 'dev'
+      push:
+        description: 'Push image to registry'
+        type: boolean
+        default: true
+      no_cache:
+        description: 'Build without Docker cache'
+        type: boolean
+        default: false
+      pkg_mgr:
+        description: 'Package manager to use'
+        required: true
+        type: choice
+        options:
+          - conda
+        default: 'conda'
+      tar_dir:
+        description: 'Directory to store image tar files (default: from .github/configs/musa.yml)'
+        type: string
+        default: ''
+      base_image:
+        description: 'Override base image (default: ci_train_image from .github/configs/musa.yml)'
+        type: string
+        default: ''
+      runs_on:
+        required: false
+        type: string
+        description: Override runs_on. Falls back to platform config if not set.
+        default: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+
+  pull_request_target:
+    branches: [main]
+    paths:
+      - 'docker/musa/**'
+      - 'docker/build.sh'
+      - 'tools/install/**'
+      - 'requirements/**'
+      - '.github/configs/musa.yml'
+      - '.github/workflows/build_image_musa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: harbor.baai.ac.cn/flagscale
+  PYTHON_VERSION: '3.12'
+  UV_VERSION: '0.7.2'
+  PKG_MGR: ${{ inputs.pkg_mgr || 'conda' }}
+
+jobs:
+  prepare:
+    name: Prepare build parameters
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.params.outputs.target }}
+      push: ${{ steps.params.outputs.push }}
+      no_cache: ${{ steps.params.outputs.no_cache }}
+      tar_dir: ${{ steps.config.outputs.tar_dir }}
+      base_image: ${{ steps.config.outputs.base_image }}
+      runs_on: ${{ steps.config.outputs.runs_on }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout: .github/configs
+
+      - name: Load platform config
+        id: config
+        run: |
+          set -euo pipefail
+
+          TAR_DIR=$(grep '^tar_dir:' .github/configs/musa.yml | awk '{print $2}')
+          BASE_IMAGE=$(grep '^ci_train_image:' .github/configs/musa.yml | awk '{print $2}')
+          RUNS_ON=$(python3 - <<'PY'
+          import ast
+          import re
+          text = open(".github/configs/musa.yml", encoding="utf-8").read()
+          match = re.search(r"^runner_labels:\s*(\[.*\])\s*$", text, re.M)
+          print(match.group(1) if match else '["flagscale-musa-s5000-gpu2-8c-256g"]')
+          PY
+          )
+
+          TAR_OVERRIDE="${{ inputs.tar_dir }}"
+          BASE_OVERRIDE="${{ inputs.base_image }}"
+          RUNS_ON_OVERRIDE="${{ inputs.runs_on }}"
+
+          if [ -n "$TAR_OVERRIDE" ]; then
+            TAR_DIR="$TAR_OVERRIDE"
+          fi
+          if [ -n "$BASE_OVERRIDE" ]; then
+            BASE_IMAGE="$BASE_OVERRIDE"
+          fi
+          if [ -n "$RUNS_ON_OVERRIDE" ]; then
+            RUNS_ON="$RUNS_ON_OVERRIDE"
+          fi
+
+          echo "tar_dir=${TAR_DIR}" >> $GITHUB_OUTPUT
+          echo "base_image=${BASE_IMAGE}" >> $GITHUB_OUTPUT
+          echo "runs_on=${RUNS_ON}" >> $GITHUB_OUTPUT
+
+      - name: Set build parameters
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
+            echo "target=dev" >> $GITHUB_OUTPUT
+            echo "push=true" >> $GITHUB_OUTPUT
+            echo "no_cache=false" >> $GITHUB_OUTPUT
+          else
+            echo "target=${{ inputs.target || 'dev' }}" >> $GITHUB_OUTPUT
+            echo "push=${{ inputs.push }}" >> $GITHUB_OUTPUT
+            echo "no_cache=${{ inputs.no_cache }}" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    name: Build train
+    needs: prepare
+    runs-on: ${{ fromJson(needs.prepare.outputs.runs_on) }}
+    outputs:
+      train_tag: ${{ steps.export.outputs.train_tag }}
+      train_tar: ${{ steps.export.outputs.train_tar }}
+    steps:
+      - name: Clean workspace
+        run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Compute build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          IMAGE_NAME="flagscale-train"
+          TAG="${{ needs.prepare.outputs.target }}-musa-s5000-py${{ env.PYTHON_VERSION }}-${TIMESTAMP}"
+          BUILD_TAG="${{ env.REGISTRY }}/${IMAGE_NAME}:${TAG}"
+
+          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "build_tag=${BUILD_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Detect proxy from runner environment
+        id: proxy
+        run: |
+          HTTP_PROXY_VAL="${http_proxy:-${HTTP_PROXY:-}}"
+          HTTPS_PROXY_VAL="${https_proxy:-${HTTPS_PROXY:-}}"
+          NO_PROXY_VAL="${no_proxy:-${NO_PROXY:-}}"
+          echo "http_proxy=${HTTP_PROXY_VAL}" >> $GITHUB_OUTPUT
+          echo "https_proxy=${HTTPS_PROXY_VAL}" >> $GITHUB_OUTPUT
+          echo "no_proxy=${NO_PROXY_VAL}" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/musa/Dockerfile.train
+          target: ${{ needs.prepare.outputs.target }}
+          load: true
+          tags: ${{ steps.meta.outputs.build_tag }}
+          build-args: |
+            BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
+            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
+            UV_VERSION=${{ env.UV_VERSION }}
+            PKG_MGR=${{ env.PKG_MGR }}
+            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
+            http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            no_proxy=${{ steps.proxy.outputs.no_proxy }}
+          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
+
+      - name: Save image as tar
+        id: save_tar
+        run: |
+          set -euo pipefail
+
+          TAR_DIR="${{ needs.prepare.outputs.tar_dir }}"
+          sudo mkdir -p "$TAR_DIR"
+          IMAGE_TAG="${{ steps.meta.outputs.build_tag }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          if [ -n "$PR_NUMBER" ]; then
+            SUFFIX="pr${PR_NUMBER}"
+          else
+            SHA="${{ github.sha }}"
+            SUFFIX="${SHA:0:7}"
+          fi
+          TAR_NAME=$(echo "$IMAGE_TAG" | tr '/: ' '---')-${SUFFIX}.tar
+          sudo docker save "$IMAGE_TAG" -o "${TAR_DIR}/${TAR_NAME}"
+          echo "tar_path=${TAR_DIR}/${TAR_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Export image tag
+        id: export
+        run: |
+          echo "train_tag=${{ steps.meta.outputs.build_tag }}" >> $GITHUB_OUTPUT
+          echo "train_tar=${{ steps.save_tar.outputs.tar_path }}" >> $GITHUB_OUTPUT
+
+  summary:
+    name: Build summary
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify build results
+        run: |
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "::error::MThreads image build failed"
+            exit 1
+          fi
+
+  load_image:
+    name: Load and push image
+    needs: [build, summary, prepare]
+    runs-on: ${{ fromJson(needs.prepare.outputs.runs_on) }}
+    if: needs.prepare.outputs.push == 'true'
+    steps:
+      - name: Login to Harbor registry
+        if: github.event_name == 'pull_request_target'
+        uses: docker/login-action@v3
+        with:
+          registry: harbor.baai.ac.cn
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Load train image from tar and push
+        run: |
+          set -euo pipefail
+
+          TAR="${{ needs.build.outputs.train_tar }}"
+          TAG="${{ needs.build.outputs.train_tag }}"
+          sudo docker load -i "$TAR"
+          sudo docker push "$TAG"
+
+      - name: Update build summary
+        run: |
+          {
+            echo "### MThreads Image"
+            echo ""
+            echo "| Task | Image |"
+            echo "|---|---|"
+            echo "| train | \`${{ needs.build.outputs.train_tag }}\` |"
+          } >> $GITHUB_STEP_SUMMARY

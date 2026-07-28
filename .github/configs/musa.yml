@@ -1,0 +1,69 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# MThreads MUSA S5000 Hardware Configuration
+# This file defines CI/CD settings for MUSA-based testing.
+
+hardware_name: musa
+display_name: "MThreads MUSA Tests"
+
+# Docker images for MThreads MUSA.
+# The build workflow uses ci_train_image as the default BASE_IMAGE and allows
+# workflow_dispatch to override it while the runtime image is being stabilized.
+ci_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:latest
+ci_train_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:latest
+ci_inference_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:latest
+
+# Directory to store image tar files (shared between build and push workflows)
+tar_dir: /mnt/airs-business/cicd/image_tar
+
+# Runner labels for MThreads MUSA hardware
+runner_labels: ["flagscale-musa-s5000-gpu2-8c-256g"]
+
+# Container volumes (hardware-specific paths)
+container_volumes:
+  - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
+  - /mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers
+
+# Container options for MThreads MUSA runtime
+container_options: >-
+  --hostname=flagscale-ci
+  --ipc=host
+  --shm-size=100g
+  --ulimit memlock=-1
+  --security-opt seccomp=unconfined
+  --security-opt apparmor=unconfined
+  --device=/dev/dri
+  --device=/dev/infiniband
+  --user root
+  --ulimit nofile=65535:65535
+  --cap-add SYS_ADMIN
+  --cap-add SYS_PTRACE
+  --cap-add IPC_LOCK
+  --cap-add NET_ADMIN
+
+# =============================================================================
+# Package Manager Configuration
+# =============================================================================
+pkg_mgr: "conda"
+
+# Environment path (conda installation path)
+env_path: "/opt/conda"
+
+# Conda environment names
+env_names:
+  train: "base"
+  hetero_train: ""
+  inference: ""
+  rl: ""
