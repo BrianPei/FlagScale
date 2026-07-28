@@ -241,8 +241,25 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Detect runner proxy
+        id: proxy
+        shell: bash
+        run: |
+          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+            env.http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            env.https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            env.no_proxy=${{ steps.proxy.outputs.no_proxy }}
+            env.HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            env.HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            env.NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
 
       - name: Log in to Harbor for trusted publishing
         if: needs.prepare.outputs.publish == 'true'
@@ -251,14 +268,6 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.CONTAINER_REGISTRY }}
-
-      - name: Detect runner proxy
-        id: proxy
-        shell: bash
-        run: |
-          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
-          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
-          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
       - name: Select task image and base
         id: image
@@ -341,8 +350,25 @@ jobs:
       needs.ascend_all_tests.result == 'success'
     runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
     steps:
+      - name: Detect runner proxy
+        id: proxy
+        shell: bash
+        run: |
+          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+            env.http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            env.https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            env.no_proxy=${{ steps.proxy.outputs.no_proxy }}
+            env.HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            env.HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            env.NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
 
       - name: Log in to Harbor
         uses: docker/login-action@v3
