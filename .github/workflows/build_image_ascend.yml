@@ -250,6 +250,8 @@ jobs:
       github.event_name != 'pull_request' &&
       (github.event_name != 'workflow_dispatch' || inputs.validation_only != true)
     runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
+    env:
+      BUILDKIT_PROGRESS: plain
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -382,6 +384,7 @@ jobs:
         run: sleep 15
 
       - name: Build and optionally push (attempt 2)
+        id: build_attempt_2
         if: steps.build_attempt_1.outcome == 'failure'
         uses: docker/build-push-action@v6
         with:
@@ -408,6 +411,38 @@ jobs:
             no_proxy=${{ steps.proxy.outputs.no_proxy }}
           cache-from: type=gha,scope=ascend-${{ matrix.task }}
           cache-to: type=gha,mode=max,scope=ascend-${{ matrix.task }},ignore-error=true
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Load candidate image into runner Docker
+        if: >-
+          always() &&
+          needs.prepare.outputs.publish == 'true' &&
+          (steps.build_attempt_1.outcome == 'success' ||
+           steps.build_attempt_2.outcome == 'success')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/ascend/Dockerfile.${{ matrix.task }}
+          target: ${{ needs.prepare.outputs.target }}
+          load: true
+          tags: ${{ steps.image.outputs.tag }}
+          build-args: |
+            BASE_IMAGE=${{ steps.image.outputs.base }}
+            TRAIN_BASE_IMAGE=${{ env.ASCEND_TRAIN_BASE_IMAGE }}
+            INFERENCE_BASE_IMAGE=${{ env.ASCEND_INFERENCE_BASE_IMAGE }}
+            PKG_MGR=${{ env.PKG_MGR }}
+            FLAGSCALE_TE_REPO=${{ env.ASCEND_TE_REPO }}
+            FLAGSCALE_TE_REF=${{ env.ASCEND_TE_REF }}
+            FLAGSCALE_MEGATRON_REPO=${{ env.ASCEND_MEGATRON_REPO }}
+            FLAGSCALE_MEGATRON_REF=${{ env.ASCEND_MEGATRON_REF }}
+            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
+            http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            no_proxy=${{ steps.proxy.outputs.no_proxy }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
