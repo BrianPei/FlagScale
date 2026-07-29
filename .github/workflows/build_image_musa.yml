@@ -324,74 +324,6 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}
 
-      - name: Validate MUSA runtime on S5000
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          docker run --rm \
-            --privileged \
-            --network=host \
-            --env MTHREADS_VISIBLE_DEVICES=all \
-            --env MTHREADS_DRIVER_CAPABILITIES=all \
-            "${{ needs.prepare.outputs.train_image }}" \
-            python -c '
-          import torch
-          import torch_musa
-          import megatron.core
-          from megatron.plugin.platform import get_platform
-
-          assert torch.musa.is_available(), "MUSA device is not available"
-          assert torch.musa.device_count() > 0, "No MUSA devices detected"
-          platform = get_platform()
-          assert platform.device_name() == "musa", (
-              f"Megatron selected {platform.device_name()!r}, expected 'musa'"
-          )
-          x = torch.arange(8, dtype=torch.float32, device="musa")
-          y = (x * 2).cpu()
-          assert y.tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
-          print(f"MUSA smoke passed on {torch.musa.device_count()} device(s)")
-          '
-
-      - name: Validate MCCL collectives on S5000
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          DEVICE_COUNT=$(docker run --rm \
-            --privileged \
-            --network=host \
-            --env MTHREADS_VISIBLE_DEVICES=all \
-            --env MTHREADS_DRIVER_CAPABILITIES=all \
-            "${{ needs.prepare.outputs.train_image }}" \
-            python -c 'import torch, torch_musa; print(torch.musa.device_count())')
-          test "$DEVICE_COUNT" -ge 2
-
-          docker run --rm \
-            --privileged \
-            --network=host \
-            --ipc=host \
-            --env MTHREADS_VISIBLE_DEVICES=all \
-            --env MTHREADS_DRIVER_CAPABILITIES=all \
-            --env EXPECTED_WORLD_SIZE="$DEVICE_COUNT" \
-            "${{ needs.prepare.outputs.train_image }}" \
-            torchrun --standalone --nproc_per_node="$DEVICE_COUNT" \
-              --no-python python -c '
-          import os
-          import torch
-          import torch_musa
-
-          local_rank = int(os.environ["LOCAL_RANK"])
-          world_size = int(os.environ["EXPECTED_WORLD_SIZE"])
-          torch.musa.set_device(local_rank)
-          torch.distributed.init_process_group(backend="mccl")
-          value = torch.tensor([local_rank], dtype=torch.int64, device="musa")
-          torch.distributed.all_reduce(value)
-          assert value.item() == world_size * (world_size - 1) // 2
-          torch.distributed.destroy_process_group()
-          print(f"MCCL smoke passed on rank {local_rank}/{world_size}")
-          '
-
       - name: Push candidate image with retry
         if: needs.prepare.outputs.publish == 'true'
         shell: bash
@@ -410,23 +342,135 @@ jobs:
           echo "::error::Failed to push MUSA image after 3 attempts"
           exit 1
 
-  musa_tests:
-    name: Test MUSA candidate
+  musa_runtime:
+    name: MUSA runtime and MCCL
     needs: [prepare, build]
     if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
-    uses: ./.github/workflows/all_tests_common.yml
-    secrets: inherit
+    runs-on: flagscale-musa-s5000-gpu2-8c-256g
+    steps:
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Validate MUSA and MCCL
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="${{ needs.prepare.outputs.train_image }}"
+          docker pull "$IMAGE"
+          DEVICE_COUNT=$(docker run --rm --privileged --network=host \
+            --env MTHREADS_VISIBLE_DEVICES=all \
+            --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" \
+            python -c 'import torch, torch_musa; print(torch.musa.device_count())')
+          test "$DEVICE_COUNT" -ge 2
+
+          docker run --rm --privileged --network=host \
+            --env MTHREADS_VISIBLE_DEVICES=all \
+            --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" python -c '
+          import torch
+          import torch_musa
+          import megatron.core
+          from megatron.plugin.platform import get_platform
+          assert torch.musa.is_available()
+          assert get_platform().device_name() == "musa"
+          x = torch.arange(8, dtype=torch.float32, device="musa")
+          assert (x * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]
+          '
+
+          docker run --rm --privileged --network=host --ipc=host \
+            --env MTHREADS_VISIBLE_DEVICES=all \
+            --env MTHREADS_DRIVER_CAPABILITIES=all \
+            --env EXPECTED_WORLD_SIZE="$DEVICE_COUNT" "$IMAGE" \
+            torchrun --standalone --nproc_per_node="$DEVICE_COUNT" \
+              --no-python python -c '
+          import os
+          import torch
+          import torch_musa
+          rank = int(os.environ["LOCAL_RANK"])
+          world = int(os.environ["EXPECTED_WORLD_SIZE"])
+          torch.musa.set_device(rank)
+          torch.distributed.init_process_group(backend="mccl")
+          value = torch.tensor([rank], dtype=torch.int64, device="musa")
+          torch.distributed.all_reduce(value)
+          assert value.item() == world * (world - 1) // 2
+          torch.distributed.destroy_process_group()
+          '
+
+  musa_cli:
+    name: MUSA CLI
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/functional_tests_cli.yml
     with:
       platform: musa
-      ci_train_image: ${{ needs.prepare.outputs.train_image }}
+      image: ${{ needs.prepare.outputs.train_image }}
+      runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_options: >-
+        --hostname=flagscale-ci --privileged --network=host --ipc=host
+        --shm-size=100g --ulimit memlock=-1
+        --env MTHREADS_VISIBLE_DEVICES=all
+        --env MTHREADS_DRIVER_CAPABILITIES=all
+        --user root --ulimit nofile=65535:65535
+      pkg_mgr: pip
+      env_name: ''
+      env_path: ''
+
+  musa_unit:
+    name: MUSA unit
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/unit_tests_common.yml
+    with:
+      platform: musa
+      device: s5000
+      image: ${{ needs.prepare.outputs.train_image }}
+      runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_options: >-
+        --hostname=flagscale-ci --privileged --network=host --ipc=host
+        --shm-size=100g --ulimit memlock=-1
+        --env MTHREADS_VISIBLE_DEVICES=all
+        --env MTHREADS_DRIVER_CAPABILITIES=all
+        --user root --ulimit nofile=65535:65535
+      pkg_mgr: pip
+      env_name: ''
+      env_path: ''
+
+  musa_train:
+    name: MUSA functional train
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/functional_tests_train.yml
+    with:
+      platform: musa
+      test_matrix: '[{"device":"s5000","task":"train","model":"qwen3","case":"0_6b_musa_smoke"}]'
+      image: ${{ needs.prepare.outputs.train_image }}
+      runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_options: >-
+        --hostname=flagscale-ci --privileged --network=host --ipc=host
+        --shm-size=100g --ulimit memlock=-1
+        --env MTHREADS_VISIBLE_DEVICES=all
+        --env MTHREADS_DRIVER_CAPABILITIES=all
+        --user root --ulimit nofile=65535:65535
+      pkg_mgr: pip
+      env_name: ''
+      env_path: ''
 
   promote:
     name: Promote validated MUSA image
-    needs: [prepare, build, musa_tests]
+    needs: [prepare, build, musa_runtime, musa_cli, musa_unit, musa_train]
     if: >-
       needs.prepare.outputs.publish == 'true' &&
       needs.prepare.outputs.run_tests == 'true' &&
-      needs.musa_tests.result == 'success'
+      needs.musa_runtime.result == 'success' &&
+      needs.musa_cli.result == 'success' &&
+      needs.musa_unit.result == 'success' &&
+      needs.musa_train.result == 'success'
     runs-on: flagscale-musa-s5000-gpu2-8c-256g
     steps:
       - name: Set up Docker Buildx
@@ -464,7 +508,7 @@ jobs:
 
   summary:
     name: MUSA pipeline summary
-    needs: [prepare, validate_pr, build, musa_tests, promote]
+    needs: [prepare, validate_pr, build, musa_runtime, musa_cli, musa_unit, musa_train, promote]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -480,7 +524,10 @@ jobs:
 
           test "${{ needs.build.result }}" = "success"
           if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
-            test "${{ needs.musa_tests.result }}" = "success"
+            test "${{ needs.musa_runtime.result }}" = "success"
+            test "${{ needs.musa_cli.result }}" = "success"
+            test "${{ needs.musa_unit.result }}" = "success"
+            test "${{ needs.musa_train.result }}" = "success"
           fi
           if [ "${{ needs.prepare.outputs.publish }}" = "true" ] && \
              [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
