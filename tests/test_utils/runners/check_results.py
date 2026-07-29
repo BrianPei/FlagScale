@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import math
 import os
 import re
 
@@ -171,6 +172,34 @@ def test_train_equal(path, task, model, case):
 
     with open(result_path, "r", errors="replace") as file:
         lines = file.readlines()
+
+    # Accelerator bring-up cases may explicitly request smoke validation when
+    # no stable, device-specific golden loss curve exists yet. The training
+    # command must already have exited successfully; this additional gate
+    # requires real, finite metrics and never substitutes fabricated gold data.
+    config_path = os.path.join(path, task, model, "conf", case + ".yaml")
+    if os.path.exists(config_path):
+        case_config = OmegaConf.load(config_path)
+        training_smoke = case_config.get("test", {}).get("training_smoke", {})
+        if OmegaConf.is_config(training_smoke):
+            training_smoke = OmegaConf.to_container(training_smoke, resolve=True)
+
+        if training_smoke and training_smoke.get("enabled", False):
+            metric_key = training_smoke.get("metric", "lm loss:")
+            min_values = int(training_smoke.get("min_values", 1))
+            result_values = extract_metrics_from_log(lines, [metric_key])[metric_key]["values"]
+
+            print("\nTraining smoke validation")
+            print(f"Metric: {metric_key}")
+            print(f"Values: {result_values}")
+            assert len(result_values) >= min_values, (
+                f"Expected at least {min_values} values for '{metric_key}', "
+                f"but extracted {len(result_values)}"
+            )
+            assert all(math.isfinite(value) for value in result_values), (
+                f"Non-finite values found for '{metric_key}': {result_values}"
+            )
+            return
 
     # Load gold values first to determine which metrics to extract
     gold_value_path = os.path.join(path, task, model, "gold_values", case + ".json")

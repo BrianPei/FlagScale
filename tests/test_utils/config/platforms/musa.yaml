@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Moore Threads S5000 platform configuration. Functional model cases remain
-# empty until a device-specific golden curve is recorded; image CI still runs
-# the CLI suite, unit tests and an on-device torch_musa smoke test.
+# Moore Threads S5000 platform configuration. The short Qwen3 case validates
+# real Megatron/MCCL training. Golden-value regression remains separate until
+# a stable device-specific loss curve has been recorded.
 
 device_types:
   - s5000
@@ -23,7 +23,8 @@ s5000:
   name: "s5000"
   tests:
     functional:
-      train: {}
+      train:
+        qwen3: ["0_6b_musa_smoke"]
       hetero_train: {}
       benchmark: {}
       inference: {}
