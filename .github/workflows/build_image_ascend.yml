@@ -284,10 +284,14 @@ jobs:
         run: |
           runner_http_proxy="${http_proxy:-${HTTP_PROXY:-}}"
           runner_https_proxy="${https_proxy:-${HTTPS_PROXY:-}}"
+          foreign_http_proxy="${FOREIGN_HTTP_PROXY:-${FOREIGN_PROXY:-$runner_http_proxy}}"
+          foreign_https_proxy="${FOREIGN_HTTPS_PROXY:-${FOREIGN_PROXY:-$runner_https_proxy}}"
           buildkit_proxy="${HARBOR_PROXY:-$runner_http_proxy}"
           echo "::add-mask::$buildkit_proxy"
-          echo "http_proxy=$runner_http_proxy" >> "$GITHUB_OUTPUT"
-          echo "https_proxy=$runner_https_proxy" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$foreign_http_proxy"
+          echo "::add-mask::$foreign_https_proxy"
+          echo "http_proxy=$foreign_http_proxy" >> "$GITHUB_OUTPUT"
+          echo "https_proxy=$foreign_https_proxy" >> "$GITHUB_OUTPUT"
           echo "buildkit_proxy=$buildkit_proxy" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
