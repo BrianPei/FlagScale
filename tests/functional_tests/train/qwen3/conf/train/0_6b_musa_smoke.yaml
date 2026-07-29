@@ -40,7 +40,6 @@ system:
     tensorboard_log_interval: 999999
 
 model:
-  deterministic_mode: true
   transformer_impl: local
   attention_backend: unfused
   no_check_for_nan_in_loss_and_grad: true
