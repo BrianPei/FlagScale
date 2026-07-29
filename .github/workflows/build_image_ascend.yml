@@ -261,8 +261,10 @@ jobs:
 
       - name: Configure Git proxy
         shell: bash
+        env:
+          GIT_PROXY: ${{ secrets.ASCEND_FOREIGN_PROXY }}
         run: |
-          git_proxy="${FOREIGN_PROXY:-${FOREIGN_HTTPS_PROXY:-${https_proxy:-${HTTPS_PROXY:-}}}}"
+          git_proxy="${GIT_PROXY:-${FOREIGN_PROXY:-${FOREIGN_HTTPS_PROXY:-${https_proxy:-${HTTPS_PROXY:-}}}}}"
           if [ -n "$git_proxy" ]; then
             echo "::add-mask::$git_proxy"
             git config --global http.proxy "$git_proxy"
