@@ -25,9 +25,12 @@ experiment:
     entrypoint: flagscale/train/megatron/train_gpt.py
   runner:
     ssh_port: null
+    nnodes: 1
+    nproc_per_node: 8
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1
+    FS_PLATFORM: musa
     MTHREADS_VISIBLE_DEVICES: all
     MTHREADS_DRIVER_CAPABILITIES: all
   cmds:
