@@ -18,12 +18,12 @@
 hardware_name: musa
 display_name: "MThreads MUSA Tests"
 
-# Official S5000 base, pinned to avoid an accidental MUSA/PyTorch upgrade when
-# the vendor moves a mutable tag. The build workflow overrides ci_train_image
-# with the freshly built candidate before running tests.
-ci_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
-ci_train_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
-ci_inference_image: registry.mthreads.com/mcconline/musa-pytorch-release-public:rc5.1.0-v2.9.1-S5000-py310@sha256:780b113070853ecc181cdcb73613ec44b6428f54bb8b9915647d8c32c27ea9a5
+# PyTorch 2.7.1/MCCL is pinned to the digest verified with the S5000 fleet's
+# 3.3.5-server driver. The build workflow overrides ci_train_image with its
+# freshly built candidate. Inference remains disabled in the test matrix.
+ci_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha256:ef0c9a4d3df15c077ffcc589e66debbb8fd3a53248f384151d896e45a08894d0
+ci_train_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha256:ef0c9a4d3df15c077ffcc589e66debbb8fd3a53248f384151d896e45a08894d0
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha256:ef0c9a4d3df15c077ffcc589e66debbb8fd3a53248f384151d896e45a08894d0
 
 # Runner labels for MThreads MUSA hardware
 runner_labels: ["flagscale-musa-s5000-gpu2-8c-256g"]

@@ -149,6 +149,16 @@ setup_ascend_training_env() {
 }
 
 setup_musa_training_env() {
+    if ! TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c 'import megatron.core' >/dev/null 2>&1; then
+        ./tools/install/install.sh \
+            --platform musa \
+            --task train \
+            --pkg-mgr "$PKG_MGR" \
+            --no-system --no-dev --no-base --no-task \
+            --src-deps megatron-lm \
+            --retry-count 3
+    fi
+
     local required_files=(
         /home/gitlab-runner/data/pile_wikipedia_demo/pile_wikipedia_demo.bin
         /home/gitlab-runner/data/pile_wikipedia_demo/pile_wikipedia_demo.idx
