@@ -454,7 +454,9 @@ jobs:
           assert get_platform().device_name() == "musa"
           '
 
-          docker run --rm --privileged --network=host --ipc=host \
+          # Keep torchrun rendezvous inside the container. Sharing the host
+          # network makes concurrent self-hosted jobs contend for c10d ports.
+          docker run --rm --privileged --ipc=host \
             --env MTHREADS_VISIBLE_DEVICES=all \
             --env MTHREADS_DRIVER_CAPABILITIES=all \
             --env EXPECTED_WORLD_SIZE="$DEVICE_COUNT" "$IMAGE" \
@@ -484,7 +486,7 @@ jobs:
       runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
       container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
       container_options: >-
-        --hostname=flagscale-ci --privileged --network=host --ipc=host
+        --hostname=flagscale-ci --privileged --ipc=host
         --shm-size=100g --ulimit memlock=-1
         --env MTHREADS_VISIBLE_DEVICES=all
         --env MTHREADS_DRIVER_CAPABILITIES=all

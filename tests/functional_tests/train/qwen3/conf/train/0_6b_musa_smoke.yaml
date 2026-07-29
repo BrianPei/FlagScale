@@ -16,6 +16,7 @@ defaults:
   - data
 
 system:
+  distributed_backend: mccl
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1
   disable_bias_linear: true
@@ -44,6 +45,8 @@ model:
   attention_backend: unfused
   no_check_for_nan_in_loss_and_grad: true
   no_gradient_accumulation_fusion: true
+  no_masked_softmax_fusion: true
+  no_persist_layer_norm: true
   num_layers: 2
   hidden_size: 256
   ffn_hidden_size: 768

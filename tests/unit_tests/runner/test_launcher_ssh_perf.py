@@ -14,7 +14,15 @@
 
 from omegaconf import OmegaConf
 
-from flagscale.runner.launcher.launcher_ssh import _get_runner_cmd_train
+from flagscale.runner.launcher.launcher_ssh import (
+    _get_runner_cmd_train,
+    _get_visible_device_count,
+)
+
+
+def test_visible_device_count_does_not_treat_all_as_one_device():
+    assert _get_visible_device_count({"MTHREADS_VISIBLE_DEVICES": "all"}) is None
+    assert _get_visible_device_count({"CUDA_VISIBLE_DEVICES": "0,1,2,3"}) == 4
 
 
 def test_get_runner_cmd_train_strips_perf_monitor_runner_keys():
