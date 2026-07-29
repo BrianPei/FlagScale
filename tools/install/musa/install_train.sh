@@ -53,7 +53,11 @@ install_pip() {
 }
 
 megatron_lm_ready() {
-    TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c '
+    # A device-less Docker build must install the pinned source instead of
+    # importing Megatron through an incomplete driver placeholder. At runtime,
+    # validate with torch_musa auto-loading enabled.
+    [ "${FLAGSCALE_MUSA_BUILD_NO_DEVICE:-false}" = true ] && return 1
+    python -c '
 import megatron.core
 from megatron.plugin.platform import get_platform
 ' &>/dev/null
@@ -69,7 +73,7 @@ assert importlib.util.find_spec("megatron") is not None
         log_success "Megatron-LM-FL package is installed; import validation deferred to runtime"
         return 0
     fi
-    TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c '
+    python -c '
 import megatron.core
 from megatron.plugin.platform import get_platform
 print("Megatron-LM-FL import validation passed")

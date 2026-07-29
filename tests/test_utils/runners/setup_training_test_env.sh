@@ -149,7 +149,7 @@ setup_ascend_training_env() {
 }
 
 setup_musa_training_env() {
-    if ! TORCH_DEVICE_BACKEND_AUTOLOAD=0 python -c 'import megatron.core' >/dev/null 2>&1; then
+    if ! python -c 'import torch_musa, megatron.core' >/dev/null 2>&1; then
         ./tools/install/install.sh \
             --platform musa \
             --task train \
