@@ -65,12 +65,22 @@ on:
       - '.github/workflows/build_image_musa.yml'
   workflow_dispatch:
     inputs:
+      task:
+        description: Image task to build
+        required: true
+        type: choice
+        options: [train, inference, all]
+        default: all
       target:
         description: Docker build target
         required: true
         type: choice
         options: [dev, release]
         default: dev
+      build_all_tasks:
+        description: Build train, inference and all-in-one images
+        type: boolean
+        default: true
       push:
         description: Push the candidate image to Harbor
         type: boolean
@@ -115,12 +125,17 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       target: ${{ steps.params.outputs.target }}
+      matrix: ${{ steps.params.outputs.matrix }}
       publish: ${{ steps.params.outputs.publish }}
       run_tests: ${{ steps.params.outputs.run_tests }}
       no_cache: ${{ steps.params.outputs.no_cache }}
       base_image: ${{ steps.params.outputs.base_image }}
       train_image: ${{ steps.params.outputs.train_image }}
+      inference_image: ${{ steps.params.outputs.inference_image }}
+      all_image: ${{ steps.params.outputs.all_image }}
       release_train_image: ${{ steps.params.outputs.release_train_image }}
+      release_inference_image: ${{ steps.params.outputs.release_inference_image }}
+      release_all_image: ${{ steps.params.outputs.release_all_image }}
     steps:
       - name: Compute parameters
         id: params
@@ -133,6 +148,7 @@ jobs:
           RUN_TESTS=false
           NO_CACHE=false
           BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
+          MATRIX='{"task":["train","inference","all"]}'
 
           if [ "${{ github.event_name }}" = "push" ]; then
             PUBLISH=true
@@ -144,23 +160,39 @@ jobs:
             if [ -n "${{ inputs.base_image }}" ]; then
               BASE_IMAGE="${{ inputs.base_image }}"
             fi
+            if [ "${{ inputs.build_all_tasks }}" != "true" ]; then
+              MATRIX='{"task":["${{ inputs.task }}"]}'
+            fi
             if [ "$RUN_TESTS" = "true" ] && [ "$PUBLISH" != "true" ]; then
               echo "::error::run_tests=true requires push=true so reusable jobs can pull the image"
+              exit 1
+            fi
+            if [ "$RUN_TESTS" = "true" ] && [ "${{ inputs.build_all_tasks }}" != "true" ]; then
+              echo "::error::run_tests=true requires build_all_tasks=true"
               exit 1
             fi
           fi
 
           SHORT_SHA="${GITHUB_SHA::12}"
           TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
           RELEASE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          RELEASE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          RELEASE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
 
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
           echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
           echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
           echo "base_image=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
           echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "inference_image=$INFERENCE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "all_image=$ALL_IMAGE" >> "$GITHUB_OUTPUT"
           echo "release_train_image=$RELEASE_TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_inference_image=$RELEASE_INFERENCE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_all_image=$RELEASE_ALL_IMAGE" >> "$GITHUB_OUTPUT"
 
   validate_pr:
     name: Validate untrusted MUSA PR
@@ -194,12 +226,18 @@ jobs:
           set -euo pipefail
 
           test -f docker/musa/Dockerfile.train
+          test -f docker/musa/Dockerfile.inference
+          test -f docker/musa/Dockerfile.all
           test -f requirements/musa/base.txt
           test -f requirements/musa/train.txt
+          test -f requirements/musa/inference.txt
+          test -f requirements/musa/serve.txt
           test -f tests/test_utils/config/platforms/musa.yaml
           bash -n tools/install/musa/env.sh
           bash -n tools/install/musa/install_base.sh
           bash -n tools/install/musa/install_train.sh
+          bash -n tools/install/musa/install_inference.sh
+          bash -n tools/install/musa/install_serve.sh
           bash -n tools/install/utils/retry_utils.sh
           bash -n tests/test_utils/runners/check_env.sh
           bash -n tests/test_utils/runners/utils.sh
@@ -211,12 +249,13 @@ jobs:
             --platform s5000 --type unit | grep -q 'include'
 
   build:
-    name: Build MUSA train
+    name: Build MUSA ${{ matrix.task }}
     needs: prepare
     if: github.event_name != 'pull_request'
     runs-on: flagscale-musa-s5000-gpu2-8c-256g
-    outputs:
-      train_image: ${{ needs.prepare.outputs.train_image }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: Clean workspace
         run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
@@ -262,16 +301,27 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.CONTAINER_REGISTRY }}
 
-      - name: Build MUSA train image (attempt 1)
+      - name: Select image tag
+        id: image
+        shell: bash
+        run: |
+          case "${{ matrix.task }}" in
+            train) echo "tag=${{ needs.prepare.outputs.train_image }}" >> "$GITHUB_OUTPUT" ;;
+            inference) echo "tag=${{ needs.prepare.outputs.inference_image }}" >> "$GITHUB_OUTPUT" ;;
+            all) echo "tag=${{ needs.prepare.outputs.all_image }}" >> "$GITHUB_OUTPUT" ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Build MUSA ${{ matrix.task }} image (attempt 1)
         id: build_attempt_1
         continue-on-error: true
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/musa/Dockerfile.train
+          file: docker/musa/Dockerfile.${{ matrix.task }}
           target: ${{ needs.prepare.outputs.target }}
           load: true
-          tags: ${{ needs.prepare.outputs.train_image }}
+          tags: ${{ steps.image.outputs.tag }}
           no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
           build-args: |
             BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
@@ -296,15 +346,15 @@ jobs:
         shell: bash
         run: sleep 15
 
-      - name: Build MUSA train image (attempt 2)
+      - name: Build MUSA ${{ matrix.task }} image (attempt 2)
         if: steps.build_attempt_1.outcome == 'failure'
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/musa/Dockerfile.train
+          file: docker/musa/Dockerfile.${{ matrix.task }}
           target: ${{ needs.prepare.outputs.target }}
           load: true
-          tags: ${{ needs.prepare.outputs.train_image }}
+          tags: ${{ steps.image.outputs.tag }}
           no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
           build-args: |
             BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
@@ -331,7 +381,7 @@ jobs:
           set -euo pipefail
 
           for attempt in 1 2 3; do
-            if docker push "${{ needs.prepare.outputs.train_image }}"; then
+            if docker push "${{ steps.image.outputs.tag }}"; then
               exit 0
             fi
             if [ "$attempt" -eq 3 ]; then
@@ -343,10 +393,14 @@ jobs:
           exit 1
 
   musa_runtime:
-    name: MUSA runtime and MCCL
+    name: MUSA ${{ matrix.task }} runtime
     needs: [prepare, build]
     if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
     runs-on: flagscale-musa-s5000-gpu2-8c-256g
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [train, inference, all]
     steps:
       - name: Log in to Harbor
         uses: docker/login-action@v3
@@ -355,11 +409,15 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.CONTAINER_REGISTRY }}
 
-      - name: Validate MUSA and MCCL
+      - name: Validate MUSA task runtime
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE="${{ needs.prepare.outputs.train_image }}"
+          case "${{ matrix.task }}" in
+            train) IMAGE="${{ needs.prepare.outputs.train_image }}" ;;
+            inference) IMAGE="${{ needs.prepare.outputs.inference_image }}" ;;
+            all) IMAGE="${{ needs.prepare.outputs.all_image }}" ;;
+          esac
           docker pull "$IMAGE"
           DEVICE_COUNT=$(docker run --rm --privileged --network=host \
             --env MTHREADS_VISIBLE_DEVICES=all \
@@ -372,12 +430,28 @@ jobs:
             --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" python -c '
           import torch
           import torch_musa
-          import megatron.core
-          from megatron.plugin.platform import get_platform
           assert torch.musa.is_available()
-          assert get_platform().device_name() == "musa"
           x = torch.arange(8, dtype=torch.float32, device="musa")
           assert (x * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]
+          '
+
+          if [ "${{ matrix.task }}" != "train" ]; then
+            docker run --rm --privileged --network=host \
+              --env MTHREADS_VISIBLE_DEVICES=all \
+              --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" \
+              python -c 'import torch_musa, vllm; print(vllm.__version__)'
+          fi
+
+          if [ "${{ matrix.task }}" = "inference" ]; then
+            exit 0
+          fi
+
+          docker run --rm --privileged --network=host \
+            --env MTHREADS_VISIBLE_DEVICES=all \
+            --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" python -c '
+          import megatron.core
+          from megatron.plugin.platform import get_platform
+          assert get_platform().device_name() == "musa"
           '
 
           docker run --rm --privileged --network=host --ipc=host \
@@ -461,16 +535,30 @@ jobs:
       env_name: ''
       env_path: ''
 
+  musa_all_tests:
+    name: MUSA all-in-one tests
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: musa
+      ci_train_image: ${{ needs.prepare.outputs.all_image }}
+      ci_inference_image: ${{ needs.prepare.outputs.all_image }}
+      runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+
   promote:
-    name: Promote validated MUSA image
-    needs: [prepare, build, musa_runtime, musa_cli, musa_unit, musa_train]
+    name: Promote validated MUSA images
+    needs: [prepare, build, musa_runtime, musa_cli, musa_unit, musa_train, musa_all_tests]
     if: >-
       needs.prepare.outputs.publish == 'true' &&
       needs.prepare.outputs.run_tests == 'true' &&
       needs.musa_runtime.result == 'success' &&
       needs.musa_cli.result == 'success' &&
       needs.musa_unit.result == 'success' &&
-      needs.musa_train.result == 'success'
+      needs.musa_train.result == 'success' &&
+      needs.musa_all_tests.result == 'success'
     runs-on: flagscale-musa-s5000-gpu2-8c-256g
     steps:
       - name: Set up Docker Buildx
@@ -485,22 +573,25 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.CONTAINER_REGISTRY }}
 
-      - name: Promote candidate manifest
+      - name: Promote candidate manifests
         shell: bash
         run: |
           set -euo pipefail
 
-          docker buildx imagetools create \
-            --tag "${{ needs.prepare.outputs.release_train_image }}" \
-            "${{ needs.prepare.outputs.train_image }}"
-          docker buildx imagetools inspect \
-            "${{ needs.prepare.outputs.release_train_image }}"
+          promote() {
+            docker buildx imagetools create --tag "$2" "$1"
+            docker buildx imagetools inspect "$2"
+          }
+          promote "${{ needs.prepare.outputs.train_image }}" "${{ needs.prepare.outputs.release_train_image }}"
+          promote "${{ needs.prepare.outputs.inference_image }}" "${{ needs.prepare.outputs.release_inference_image }}"
+          promote "${{ needs.prepare.outputs.all_image }}" "${{ needs.prepare.outputs.release_all_image }}"
 
           {
-            echo "### Validated MThreads MUSA image"
+            echo "### Validated MThreads MUSA images"
             echo ""
             echo "- Train: \`${{ needs.prepare.outputs.release_train_image }}\`"
-            echo "- Candidate: \`${{ needs.prepare.outputs.train_image }}\`"
+            echo "- Inference: \`${{ needs.prepare.outputs.release_inference_image }}\`"
+            echo "- All-in-one: \`${{ needs.prepare.outputs.release_all_image }}\`"
             echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
             echo "- FlagScale: \`${{ github.sha }}\`"
             echo "- Megatron-LM-FL: \`${{ env.MUSA_MEGATRON_REF }}\`"
@@ -508,7 +599,7 @@ jobs:
 
   summary:
     name: MUSA pipeline summary
-    needs: [prepare, validate_pr, build, musa_runtime, musa_cli, musa_unit, musa_train, promote]
+    needs: [prepare, validate_pr, build, musa_runtime, musa_cli, musa_unit, musa_train, musa_all_tests, promote]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -528,6 +619,7 @@ jobs:
             test "${{ needs.musa_cli.result }}" = "success"
             test "${{ needs.musa_unit.result }}" = "success"
             test "${{ needs.musa_train.result }}" = "success"
+            test "${{ needs.musa_all_tests.result }}" = "success"
           fi
           if [ "${{ needs.prepare.outputs.publish }}" = "true" ] && \
              [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
@@ -537,7 +629,9 @@ jobs:
           {
             echo "### MThreads MUSA image"
             echo ""
-            echo "- Image: \`${{ needs.prepare.outputs.train_image }}\`"
+            echo "- Train: \`${{ needs.prepare.outputs.train_image }}\`"
+            echo "- Inference: \`${{ needs.prepare.outputs.inference_image }}\`"
+            echo "- All-in-one: \`${{ needs.prepare.outputs.all_image }}\`"
             echo "- Target: \`${{ needs.prepare.outputs.target }}\`"
             echo "- Published: \`${{ needs.prepare.outputs.publish }}\`"
             echo "- Promoted: \`${{ needs.promote.result }}\`"
