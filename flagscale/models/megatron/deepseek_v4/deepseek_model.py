@@ -1,3 +1,17 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import Optional
 
 import torch
@@ -207,15 +221,16 @@ class DeepSeekModel(GPTModel):
         Adaptation of overlap_moe_expert_parallel_comm.
         """
         # Precompute the engram_hash_iput_ids, it will be used to create a TransformerChunkSchedulePlan.
-        engram_hash_input_ids = LazyHashInputIds(
-            hash_mapping=self.engram_hash,
-            input_ids=input_ids,
-            hash_stream=self._hash_stream,
-        )
-        if extra_block_kwargs is None:
-            extra_block_kwargs = {
-                "engram_hash_input_ids": engram_hash_input_ids,
-            }
+        if self.config.use_engram:
+            engram_hash_input_ids = LazyHashInputIds(
+                hash_mapping=self.engram_hash,
+                input_ids=input_ids,
+                hash_stream=self._hash_stream,
+            )
+            if extra_block_kwargs is None:
+                extra_block_kwargs = {
+                    "engram_hash_input_ids": engram_hash_input_ids,
+                }
         return super().build_schedule_plan(
             input_ids,
             position_ids,
@@ -223,7 +238,7 @@ class DeepSeekModel(GPTModel):
             decoder_input,
             labels=labels,
             loss_mask=loss_mask,
-            extra_block_kwargs=extra_block_kwargs
+            extra_block_kwargs=extra_block_kwargs,
         )
     
     def sharded_state_dict(

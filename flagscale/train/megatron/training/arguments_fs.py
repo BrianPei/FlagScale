@@ -1,3 +1,17 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import ast
 import itertools
 import types
@@ -66,7 +80,7 @@ class FSTrainArguments:
                 "timeout": timedelta(minutes=args.distributed_timeout_minutes),
             }
             if args.distributed_backend == "flagcx":
-                init_process_group_kwargs["backend"] = "cpu:gloo,cuda:flagcx"
+                init_process_group_kwargs["backend"] = "cpu:gloo,cuda:flagcx,txda:flagcx"
             # for communication based cpu
             if args.enable_hetero and args.hetero_use_cpu_communication:
                 # if not all(device_type == args.hetero_device_types[0] for device_type in args.hetero_device_types):
@@ -244,8 +258,6 @@ class FSTrainArguments:
                 accumulated_world_size += temp_world_size
                 current_process_mesh_idx += 1
         # DeepSeek-V4 Temporary
-        if self.args.enable_hyper_connections:
-            assert not self.args.overlap_moe_expert_parallel_comm, "Hyper-connection is not supported with overlap_moe_expert_parallel_comm yet!"
         if self.args.experimental_attention_variant == "dsv4_hybrid":
             assert self.args.context_parallel_size == 1, "Context parallelism is not supported with dsv4_hybrid attention variant yet!"
 
@@ -461,11 +473,6 @@ class FSTrainArguments:
             assert (
                 self.args.use_distributed_optimizer
             ), "When use engram, distributed_optimizer must be enabled, because there is a bug caused by allreduce grad norm in model parallel group when do not use distributed_optimizer. We have not found a pretty solution yet, so disable it temporarily."
-        assert not (
-            args.pipeline_model_parallel_size == 1
-            and args.overlap_moe_expert_parallel_comm
-        ), "When no pipeline and enable overlap_moe_expert_parallel_comm, a bug will occur, it will be fixed in a later version."
-
 
 def _add_hetero_args(parser):
     """Add heterogeneous training related arguments (FlagScale specific)."""
@@ -812,11 +819,6 @@ def _add_distributed_args(parser):
         '--no-shared-fs',
         action='store_true',
         help='Indicate whether not running on a shared file system.',
-    )
-    group.add_argument(
-        '--use-padded-layerwise-optimizer',
-        action='store_true',
-        help='Enable pad when use layer-wise optimizer.'
     )
     return parser
 

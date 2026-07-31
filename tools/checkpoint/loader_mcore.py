@@ -1,3 +1,17 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import sys
 import json
@@ -112,11 +126,19 @@ def _load_checkpoint(queue, args):
     _set_arg("q_lora_rank")
     _set_arg("kv_lora_rank")
     _set_arg("q_head_dim")
+    _set_arg("qk_head_dim")
     _set_arg("qk_pos_emb_head_dim")
     _set_arg("v_head_dim")
     _set_arg("multi_latent_attention")
     _set_arg("apply_rope_fusion")
     _set_arg("qk_layernorm")
+    # for dsa (dynamic sparse attention)
+    _set_arg("experimental_attention_variant")
+    _set_arg("dsa_indexer_n_heads")
+    _set_arg("dsa_indexer_head_dim")
+    _set_arg("dsa_indexer_topk")
+    _set_arg("dsa_indexer_loss_coeff")
+    _set_arg("dsa_indexer_use_sparse_loss")
     # for moe
     _set_arg("moe_grouped_gemm")
     _set_arg("moe_router_enable_expert_bias")
