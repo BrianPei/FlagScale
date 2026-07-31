@@ -7,7 +7,7 @@ ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascen
 ARG PKG_MGR=pip
 ARG FLAGSCALE_HOME=/opt/flagscale
 ARG FLAGSCALE_TE_REPO=https://github.com/flagos-ai/TransformerEngine-FL.git
-ARG FLAGSCALE_TE_REF=771a7488fc01c50f7714b8c6162f6bbfe451608a
+ARG FLAGSCALE_TE_REF=711887ef93ca4c8131baf9d59994458a601fe363
 ARG FLAGSCALE_MEGATRON_REPO=https://github.com/flagos-ai/Megatron-LM-FL.git
 ARG FLAGSCALE_MEGATRON_REF=175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
 

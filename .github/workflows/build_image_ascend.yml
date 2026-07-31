@@ -91,7 +91,7 @@ env:
   ASCEND_TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev
   ASCEND_INFERENCE_BASE_IMAGE: quay.io/ascend/vllm-ascend:v0.13.0rc1-a3
   ASCEND_TE_REPO: https://github.com/flagos-ai/TransformerEngine-FL.git
-  ASCEND_TE_REF: 771a7488fc01c50f7714b8c6162f6bbfe451608a
+  ASCEND_TE_REF: 711887ef93ca4c8131baf9d59994458a601fe363
   ASCEND_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
   ASCEND_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
   TRAIN_PYTHON_VERSION: '3.12'
