@@ -229,6 +229,7 @@ jobs:
           bash -n tools/install/ascend/install_train.sh
           bash -n tools/install/ascend/install_inference.sh
           bash -n tools/install/ascend/install_serve.sh
+          bash -n tools/install/ascend/triton_gxx_wrapper.sh
           bash -n tools/install/utils/retry_utils.sh
           bash -n tests/test_utils/runners/setup_training_test_env.sh
           python -m py_compile \
