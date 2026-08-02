@@ -23,11 +23,16 @@ ARG FLAGSCALE_HOME=/opt/flagscale
 ARG PIP_DEFAULT_TIMEOUT=300
 ARG FLAGSCALE_MEGATRON_REPO=https://github.com/flagos-ai/Megatron-LM-FL.git
 ARG FLAGSCALE_MEGATRON_REF=175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
+ARG MUSA_TE_SOURCE_IMAGE=harbor.baai.ac.cn/flagos-dev/transformerengine-fl@sha256:285810557f4fe9d6c64cce19d6b644631ad42966f4beba77742f95932232a8cf
+ARG FLAGSCALE_TE_REF=e73781e85518ab0046007cef69e95bd258a63900
 
+FROM ${MUSA_TE_SOURCE_IMAGE} AS te-source
 FROM ${BASE_IMAGE} AS base
 
 ARG FLAGSCALE_HOME
 ARG FLAGSCALE_MEGATRON_REF
+ARG MUSA_TE_SOURCE_IMAGE
+ARG FLAGSCALE_TE_REF
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG PIP_DEFAULT_TIMEOUT
@@ -51,6 +56,8 @@ ENV PATH="${MUSA_HOME}/bin:${MPI_HOME}/bin:/root/.local/bin:$PATH"
 ENV LD_LIBRARY_PATH="${MUSA_HOME}/lib:${MPI_HOME}/lib:/usr/local/lib:$LD_LIBRARY_PATH"
 
 LABEL io.flagscale.megatron-lm-fl.revision=${FLAGSCALE_MEGATRON_REF}
+LABEL io.flagscale.transformer-engine-fl.revision=${FLAGSCALE_TE_REF}
+LABEL io.flagscale.transformer-engine-fl.source-image=${MUSA_TE_SOURCE_IMAGE}
 
 COPY tools/install/musa/env.sh /etc/profile.d/flagscale-env.sh
 
@@ -62,6 +69,7 @@ ARG PKG_MGR
 ARG FLAGSCALE_HOME
 ARG FLAGSCALE_MEGATRON_REPO
 ARG FLAGSCALE_MEGATRON_REF
+ARG FLAGSCALE_TE_REF
 
 ARG PIP_INDEX_URL
 ARG PIP_DEFAULT_TIMEOUT
@@ -82,12 +90,17 @@ ENV UV_INDEX_URL=${UV_INDEX_URL}
 ENV UV_EXTRA_INDEX_URL=${UV_EXTRA_INDEX_URL}
 ENV FLAGSCALE_MEGATRON_REPO=${FLAGSCALE_MEGATRON_REPO}
 ENV FLAGSCALE_MEGATRON_REF=${FLAGSCALE_MEGATRON_REF}
+ENV FLAGSCALE_TE_REF=${FLAGSCALE_TE_REF}
+ENV FLAGSCALE_MUSA_TE_SOURCE_DIR=${FLAGSCALE_DEPS}/TransformerEngine-MUSA
 
 COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
 
 RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=from=te-source,source=/home/TransformerEngine,target=/mnt/TransformerEngine,ro \
     . /etc/profile.d/flagscale-env.sh && \
+    mkdir -p "${FLAGSCALE_MUSA_TE_SOURCE_DIR}" && \
+    cp -a /mnt/TransformerEngine/. "${FLAGSCALE_MUSA_TE_SOURCE_DIR}/" && \
     chmod +x /workspace/tools/install/*.sh && \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/musa/*.sh && \
@@ -95,6 +108,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_MUSA_BUILD_NO_DEVICE=true \
     ./tools/install/install.sh --platform musa --task train --pkg-mgr ${PKG_MGR} --no-system && \
     python -m pip show torch-musa >/dev/null && \
+    python -m pip show transformer-engine >/dev/null && \
+    rm -rf "${FLAGSCALE_MUSA_TE_SOURCE_DIR}" && \
     rm -rf /workspace
 
 FROM deps AS dev
@@ -107,6 +122,7 @@ ARG PKG_MGR
 ARG FLAGSCALE_HOME
 ARG FLAGSCALE_MEGATRON_REPO
 ARG FLAGSCALE_MEGATRON_REF
+ARG FLAGSCALE_TE_REF
 
 ARG PIP_INDEX_URL
 ARG PIP_DEFAULT_TIMEOUT
@@ -127,12 +143,17 @@ ENV UV_INDEX_URL=${UV_INDEX_URL}
 ENV UV_EXTRA_INDEX_URL=${UV_EXTRA_INDEX_URL}
 ENV FLAGSCALE_MEGATRON_REPO=${FLAGSCALE_MEGATRON_REPO}
 ENV FLAGSCALE_MEGATRON_REF=${FLAGSCALE_MEGATRON_REF}
+ENV FLAGSCALE_TE_REF=${FLAGSCALE_TE_REF}
+ENV FLAGSCALE_MUSA_TE_SOURCE_DIR=${FLAGSCALE_DEPS}/TransformerEngine-MUSA
 
 COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
 
 RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=from=te-source,source=/home/TransformerEngine,target=/mnt/TransformerEngine,ro \
     . /etc/profile.d/flagscale-env.sh && \
+    mkdir -p "${FLAGSCALE_MUSA_TE_SOURCE_DIR}" && \
+    cp -a /mnt/TransformerEngine/. "${FLAGSCALE_MUSA_TE_SOURCE_DIR}/" && \
     chmod +x /workspace/tools/install/*.sh && \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/musa/*.sh && \
@@ -140,6 +161,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_MUSA_BUILD_NO_DEVICE=true \
     ./tools/install/install.sh --platform musa --task train --pkg-mgr ${PKG_MGR} --no-system --no-dev && \
     python -m pip show torch-musa >/dev/null && \
+    python -m pip show transformer-engine >/dev/null && \
+    rm -rf "${FLAGSCALE_MUSA_TE_SOURCE_DIR}" && \
     rm -rf /workspace
 
 CMD ["/bin/bash"]

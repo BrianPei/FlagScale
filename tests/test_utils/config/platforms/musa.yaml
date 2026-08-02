@@ -24,7 +24,7 @@ s5000:
   tests:
     functional:
       train:
-        qwen3: ["0_6b_musa_smoke", "0_6b_musa_reference"]
+        qwen3: ["0_6b_musa_smoke", "0_6b_musa"]
       hetero_train: {}
       benchmark: {}
       inference: {}

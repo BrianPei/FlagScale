@@ -33,6 +33,8 @@ on:
       - 'tests/test_utils/runners/utils.sh'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa_smoke.yaml'
+      - 'tests/functional_tests/train/qwen3/conf/0_6b_musa.yaml'
+      - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa.yaml'
       - 'tests/unit_tests/test_utilities.py'
       - 'tests/unit_tests/test_cli.py'
       - 'tests/unit_tests/runner/test_config_validation.py'
@@ -57,6 +59,8 @@ on:
       - 'tests/test_utils/runners/utils.sh'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa_smoke.yaml'
+      - 'tests/functional_tests/train/qwen3/conf/0_6b_musa.yaml'
+      - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa.yaml'
       - 'tests/unit_tests/test_utilities.py'
       - 'tests/unit_tests/test_cli.py'
       - 'tests/unit_tests/runner/test_config_validation.py'
@@ -114,6 +118,8 @@ env:
   MUSA_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha256:ef0c9a4d3df15c077ffcc589e66debbb8fd3a53248f384151d896e45a08894d0
   MUSA_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
   MUSA_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
+  MUSA_TE_SOURCE_IMAGE: harbor.baai.ac.cn/flagos-dev/transformerengine-fl@sha256:285810557f4fe9d6c64cce19d6b644631ad42966f4beba77742f95932232a8cf
+  MUSA_TE_REF: e73781e85518ab0046007cef69e95bd258a63900
   PYTHON_VERSION: '3.10'
   PKG_MGR: pip
   PIP_INDEX_URL: https://pypi.org/simple
@@ -233,6 +239,7 @@ jobs:
           test -f requirements/musa/inference.txt
           test -f requirements/musa/serve.txt
           test -f tests/test_utils/config/platforms/musa.yaml
+          test -f tools/install/musa/launch_megatron_gpt.py
           bash -n tools/install/musa/env.sh
           bash -n tools/install/musa/install_base.sh
           bash -n tools/install/musa/install_train.sh
@@ -241,6 +248,7 @@ jobs:
           bash -n tools/install/utils/retry_utils.sh
           bash -n tests/test_utils/runners/check_env.sh
           bash -n tests/test_utils/runners/utils.sh
+          python -m py_compile tools/install/musa/launch_megatron_gpt.py
           python -m py_compile tests/test_utils/runners/parse_config.py
           python -m py_compile tests/unit_tests/test_utilities.py
           python tests/test_utils/runners/parse_config.py \
@@ -252,7 +260,7 @@ jobs:
     name: Build MUSA ${{ matrix.task }}
     needs: prepare
     if: github.event_name != 'pull_request'
-    runs-on: flagscale-musa-s5000-gpu2-8c-256g
+    runs-on: flagscale-mthreads-s5000-gpu8
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -330,6 +338,8 @@ jobs:
             PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
             FLAGSCALE_MEGATRON_REPO=${{ env.MUSA_MEGATRON_REPO }}
             FLAGSCALE_MEGATRON_REF=${{ env.MUSA_MEGATRON_REF }}
+            MUSA_TE_SOURCE_IMAGE=${{ env.MUSA_TE_SOURCE_IMAGE }}
+            FLAGSCALE_TE_REF=${{ env.MUSA_TE_REF }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -363,6 +373,8 @@ jobs:
             PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
             FLAGSCALE_MEGATRON_REPO=${{ env.MUSA_MEGATRON_REPO }}
             FLAGSCALE_MEGATRON_REF=${{ env.MUSA_MEGATRON_REF }}
+            MUSA_TE_SOURCE_IMAGE=${{ env.MUSA_TE_SOURCE_IMAGE }}
+            FLAGSCALE_TE_REF=${{ env.MUSA_TE_REF }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -396,7 +408,7 @@ jobs:
     name: MUSA ${{ matrix.task }} runtime
     needs: [prepare, build]
     if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
-    runs-on: flagscale-musa-s5000-gpu2-8c-256g
+    runs-on: flagscale-mthreads-s5000-gpu8
     strategy:
       fail-fast: false
       matrix:
@@ -419,13 +431,13 @@ jobs:
             all) IMAGE="${{ needs.prepare.outputs.all_image }}" ;;
           esac
           docker pull "$IMAGE"
-          DEVICE_COUNT=$(docker run --rm --privileged --network=host \
+          DEVICE_COUNT=$(docker run --rm --privileged \
             --env MTHREADS_VISIBLE_DEVICES=all \
             --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" \
             python -c 'import torch, torch_musa; print(torch.musa.device_count())')
           test "$DEVICE_COUNT" -ge 2
 
-          docker run --rm --privileged --network=host \
+          docker run --rm --privileged \
             --env MTHREADS_VISIBLE_DEVICES=all \
             --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" python -c '
           import torch
@@ -436,21 +448,52 @@ jobs:
           '
 
           if [ "${{ matrix.task }}" != "train" ]; then
-            docker run --rm --privileged --network=host \
+            docker run --rm --privileged \
               --env MTHREADS_VISIBLE_DEVICES=all \
               --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" \
               python -c 'import torch_musa, vllm; print(vllm.__version__)'
+          fi
+
+          if [ "${{ matrix.task }}" != "inference" ]; then
+            docker run --rm --privileged \
+              --env MTHREADS_VISIBLE_DEVICES=all \
+              --env MTHREADS_DRIVER_CAPABILITIES=all \
+              --env TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
+              --env TORCHDYNAMO_DISABLE=1 \
+              --env TORCH_COMPILE_DISABLE=1 \
+              --env NVTE_TORCH_COMPILE=0 "$IMAGE" python -c '
+          import torch
+          import torch_musa
+          import transformer_engine
+          import transformer_engine_torch as tex
+          for symbol in ("generic_gemm", "layernorm_fwd", "layernorm_bwd", "rmsnorm_fwd", "rmsnorm_bwd"):
+              assert hasattr(tex, symbol), symbol
+          from transformer_engine.pytorch import Linear
+          torch.musa.set_device(0)
+          layer = Linear(16, 8).to("musa")
+          value = torch.randn(4, 16, device="musa", requires_grad=True)
+          output = layer(value)
+          output.sum().backward()
+          assert bool(output.isfinite().all().item())
+          assert value.grad is not None and bool(value.grad.isfinite().all().item())
+          assert layer.weight.grad is not None
+          assert bool(layer.weight.grad.isfinite().all().item())
+          print("Native MUSA TransformerEngine:", transformer_engine.__version__)
+          '
           fi
 
           if [ "${{ matrix.task }}" = "inference" ]; then
             exit 0
           fi
 
-          docker run --rm --privileged --network=host \
+          docker run --rm --privileged \
             --env MTHREADS_VISIBLE_DEVICES=all \
             --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" python -c '
+          import torch_musa
+          from megatron.plugin.platform import get_platform, set_platform
+          from megatron.plugin.platform.platform_register import PLATFORMS
+          set_platform(PLATFORMS["musa"])
           import megatron.core
-          from megatron.plugin.platform import get_platform
           assert get_platform().device_name() == "musa"
           '
 
@@ -483,7 +526,7 @@ jobs:
     with:
       platform: musa
       image: ${{ needs.prepare.outputs.train_image }}
-      runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+      runs_on: '["flagscale-mthreads-s5000-gpu8"]'
       container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
       container_options: >-
         --hostname=flagscale-ci --privileged --ipc=host
@@ -504,10 +547,10 @@ jobs:
       platform: musa
       device: s5000
       image: ${{ needs.prepare.outputs.train_image }}
-      runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+      runs_on: '["flagscale-mthreads-s5000-gpu8"]'
       container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
       container_options: >-
-        --hostname=flagscale-ci --privileged --network=host --ipc=host
+        --hostname=flagscale-ci --privileged --ipc=host
         --shm-size=100g --ulimit memlock=-1
         --env MTHREADS_VISIBLE_DEVICES=all
         --env MTHREADS_DRIVER_CAPABILITIES=all
@@ -523,12 +566,12 @@ jobs:
     uses: ./.github/workflows/functional_tests_train.yml
     with:
       platform: musa
-      test_matrix: '[{"device":"s5000","task":"train","model":"qwen3","case":"0_6b_musa_smoke"}]'
+      test_matrix: '[{"device":"s5000","task":"train","model":"qwen3","case":"0_6b_musa_smoke"},{"device":"s5000","task":"train","model":"qwen3","case":"0_6b_musa"}]'
       image: ${{ needs.prepare.outputs.train_image }}
-      runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+      runs_on: '["flagscale-mthreads-s5000-gpu8"]'
       container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
       container_options: >-
-        --hostname=flagscale-ci --privileged --network=host --ipc=host
+        --hostname=flagscale-ci --privileged --ipc=host
         --shm-size=100g --ulimit memlock=-1
         --env MTHREADS_VISIBLE_DEVICES=all
         --env MTHREADS_DRIVER_CAPABILITIES=all
@@ -547,7 +590,7 @@ jobs:
       platform: musa
       ci_train_image: ${{ needs.prepare.outputs.all_image }}
       ci_inference_image: ${{ needs.prepare.outputs.all_image }}
-      runs_on: '["flagscale-musa-s5000-gpu2-8c-256g"]'
+      runs_on: '["flagscale-mthreads-s5000-gpu8"]'
       container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
 
   promote:
@@ -561,7 +604,7 @@ jobs:
       needs.musa_unit.result == 'success' &&
       needs.musa_train.result == 'success' &&
       needs.musa_all_tests.result == 'success'
-    runs-on: flagscale-musa-s5000-gpu2-8c-256g
+    runs-on: flagscale-mthreads-s5000-gpu8
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -597,6 +640,8 @@ jobs:
             echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
             echo "- FlagScale: \`${{ github.sha }}\`"
             echo "- Megatron-LM-FL: \`${{ env.MUSA_MEGATRON_REF }}\`"
+            echo "- MUSA TransformerEngine source: \`${{ env.MUSA_TE_SOURCE_IMAGE }}\`"
+            echo "- MUSA TransformerEngine revision: \`${{ env.MUSA_TE_REF }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   summary:

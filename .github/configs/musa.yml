@@ -26,7 +26,7 @@ ci_train_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha2
 ci_inference_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha256:ef0c9a4d3df15c077ffcc589e66debbb8fd3a53248f384151d896e45a08894d0
 
 # Runner labels for MThreads MUSA hardware
-runner_labels: ["flagscale-musa-s5000-gpu2-8c-256g"]
+runner_labels: ["flagscale-mthreads-s5000-gpu8"]
 
 # Container volumes (hardware-specific paths)
 container_volumes:
@@ -37,7 +37,6 @@ container_volumes:
 container_options: >-
   --hostname=flagscale-ci
   --privileged
-  --network=host
   --ipc=host
   --shm-size=100g
   --ulimit memlock=-1

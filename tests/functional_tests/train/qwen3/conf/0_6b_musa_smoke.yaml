@@ -22,7 +22,7 @@ experiment:
   task:
     type: train
     backend: megatron
-    entrypoint: flagscale/train/megatron/train_gpt.py
+    entrypoint: /opt/flagscale/bin/launch_megatron_gpt.py
   runner:
     ssh_port: null
     nnodes: 1
@@ -31,6 +31,7 @@ experiment:
   envs:
     HYDRA_FULL_ERROR: 1
     FS_PLATFORM: musa
+    TORCH_DEVICE_BACKEND_AUTOLOAD: 0
     MTHREADS_VISIBLE_DEVICES: all
     MTHREADS_DRIVER_CAPABILITIES: all
   cmds:
