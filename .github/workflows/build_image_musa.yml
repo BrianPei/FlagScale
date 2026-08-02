@@ -115,11 +115,11 @@ env:
   # PyTorch 2.7.1/MCCL is the newest base verified with the S5000 fleet's
   # 3.3.5-server driver. The vendor PyTorch 2.9.1 image passes tensor smoke but
   # fails communicator creation, so upgrading it must be coupled with drivers.
-  MUSA_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:29ceebd-musa-ci@sha256:ef0c9a4d3df15c077ffcc589e66debbb8fd3a53248f384151d896e45a08894d0
+  MUSA_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/transformerengine-fl@sha256:fb56b8b2882d20de45954ed0d53fd695ae08a23c808d853dae9e57f4fcae618e
   MUSA_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
   MUSA_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
-  MUSA_TE_SOURCE_IMAGE: harbor.baai.ac.cn/flagos-dev/transformerengine-fl@sha256:285810557f4fe9d6c64cce19d6b644631ad42966f4beba77742f95932232a8cf
   MUSA_TE_REF: e73781e85518ab0046007cef69e95bd258a63900
+  MUSA_TE_VERSION: 2.0.0+e73781e
   PYTHON_VERSION: '3.10'
   PKG_MGR: pip
   PIP_INDEX_URL: https://pypi.org/simple
@@ -338,8 +338,7 @@ jobs:
             PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
             FLAGSCALE_MEGATRON_REPO=${{ env.MUSA_MEGATRON_REPO }}
             FLAGSCALE_MEGATRON_REF=${{ env.MUSA_MEGATRON_REF }}
-            MUSA_TE_SOURCE_IMAGE=${{ env.MUSA_TE_SOURCE_IMAGE }}
-            FLAGSCALE_TE_REF=${{ env.MUSA_TE_REF }}
+            FLAGSCALE_TE_VERSION=${{ env.MUSA_TE_VERSION }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -373,8 +372,7 @@ jobs:
             PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
             FLAGSCALE_MEGATRON_REPO=${{ env.MUSA_MEGATRON_REPO }}
             FLAGSCALE_MEGATRON_REF=${{ env.MUSA_MEGATRON_REF }}
-            MUSA_TE_SOURCE_IMAGE=${{ env.MUSA_TE_SOURCE_IMAGE }}
-            FLAGSCALE_TE_REF=${{ env.MUSA_TE_REF }}
+            FLAGSCALE_TE_VERSION=${{ env.MUSA_TE_VERSION }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -640,8 +638,8 @@ jobs:
             echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
             echo "- FlagScale: \`${{ github.sha }}\`"
             echo "- Megatron-LM-FL: \`${{ env.MUSA_MEGATRON_REF }}\`"
-            echo "- MUSA TransformerEngine source: \`${{ env.MUSA_TE_SOURCE_IMAGE }}\`"
             echo "- MUSA TransformerEngine revision: \`${{ env.MUSA_TE_REF }}\`"
+            echo "- MUSA TransformerEngine version: \`${{ env.MUSA_TE_VERSION }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   summary:
