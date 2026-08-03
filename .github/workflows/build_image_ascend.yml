@@ -117,12 +117,13 @@ env:
 
 jobs:
   prepare:
-    name: Prepare trusted build parameters
+    name: Prepare Ascend build parameters
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.params.outputs.matrix }}
       target: ${{ steps.params.outputs.target }}
       publish: ${{ steps.params.outputs.publish }}
+      candidate_push: ${{ steps.params.outputs.candidate_push }}
       no_cache: ${{ steps.params.outputs.no_cache }}
       train_image: ${{ steps.params.outputs.train_image }}
       inference_image: ${{ steps.params.outputs.inference_image }}
@@ -141,16 +142,19 @@ jobs:
           SHORT_SHA="${GITHUB_SHA::12}"
           TARGET="${{ inputs.target || 'dev' }}"
           PUBLISH=false
+          CANDIDATE_PUSH=false
           RUN_TESTS=false
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # Untrusted PR code never receives Harbor credentials and never pushes.
             MATRIX='{"task":["train","inference","all"]}'
             TARGET=dev
+            CANDIDATE_PUSH=true
+            RUN_TESTS=true
             NO_CACHE=false
           elif [ "${{ github.event_name }}" = "push" ]; then
             MATRIX='{"task":["train","inference","all"]}'
             PUBLISH=true
+            CANDIDATE_PUSH=true
             RUN_TESTS=true
             NO_CACHE=false
           else
@@ -169,6 +173,7 @@ jobs:
               esac
               MATRIX='{"task":[]}'
               PUBLISH=false
+              CANDIDATE_PUSH=false
               NO_CACHE=false
             else
               if [ "${{ inputs.build_all_tasks }}" = "true" ]; then
@@ -177,6 +182,7 @@ jobs:
                 MATRIX='{"task":["${{ inputs.task }}"]}'
               fi
               PUBLISH="${{ inputs.push }}"
+              CANDIDATE_PUSH="$PUBLISH"
               NO_CACHE="${{ inputs.no_cache }}"
               if [ "$PUBLISH" = "true" ] && [ "${{ inputs.build_all_tasks }}" = "true" ]; then
                 RUN_TESTS=true
@@ -184,12 +190,17 @@ jobs:
             fi
           fi
 
+          CANDIDATE_REGISTRY="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CANDIDATE_REGISTRY="localhost:5000"
+          fi
+
           TRAIN_TAG="${TARGET}-ascend-py${{ env.TRAIN_PYTHON_VERSION }}-${SHORT_SHA}"
           INFERENCE_TAG="${TARGET}-ascend-py${{ env.INFERENCE_PYTHON_VERSION }}-${SHORT_SHA}"
           ALL_TAG="${TARGET}-ascend-py${{ env.TRAIN_PYTHON_VERSION }}-py${{ env.INFERENCE_PYTHON_VERSION }}-${SHORT_SHA}"
-          CANDIDATE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TRAIN_TAG}"
-          CANDIDATE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:candidate-${INFERENCE_TAG}"
-          CANDIDATE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:candidate-${ALL_TAG}"
+          CANDIDATE_TRAIN_IMAGE="${CANDIDATE_REGISTRY}/flagscale-train:candidate-${TRAIN_TAG}"
+          CANDIDATE_INFERENCE_IMAGE="${CANDIDATE_REGISTRY}/flagscale-inference:candidate-${INFERENCE_TAG}"
+          CANDIDATE_ALL_IMAGE="${CANDIDATE_REGISTRY}/flagscale-all:candidate-${ALL_TAG}"
           RELEASE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TRAIN_TAG}"
           RELEASE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${INFERENCE_TAG}"
           RELEASE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${ALL_TAG}"
@@ -197,6 +208,7 @@ jobs:
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "candidate_push=$CANDIDATE_PUSH" >> "$GITHUB_OUTPUT"
           echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
           echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
           echo "train_image=$CANDIDATE_TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
@@ -207,7 +219,7 @@ jobs:
           echo "release_all_image=$RELEASE_ALL_IMAGE" >> "$GITHUB_OUTPUT"
 
   validate_pr:
-    name: Validate untrusted Ascend PR
+    name: Validate Ascend PR configuration
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -244,12 +256,7 @@ jobs:
   build:
     name: Build Ascend ${{ matrix.task }}
     needs: prepare
-    # A full Ascend base image build is intentionally limited to trusted
-    # events. Pull requests run validate_pr above without secrets or access to
-    # the private accelerator runner.
-    if: >-
-      github.event_name != 'pull_request' &&
-      (github.event_name != 'workflow_dispatch' || inputs.validation_only != true)
+    if: github.event_name != 'workflow_dispatch' || inputs.validation_only != true
     runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
     env:
       BUILDKIT_PROGRESS: plain
@@ -290,17 +297,53 @@ jobs:
           foreign_http_proxy="${FOREIGN_HTTP_PROXY:-${FOREIGN_PROXY:-$runner_http_proxy}}"
           foreign_https_proxy="${FOREIGN_HTTPS_PROXY:-${FOREIGN_PROXY:-$runner_https_proxy}}"
           buildkit_proxy="${HARBOR_PROXY:-$runner_http_proxy}"
+          runner_no_proxy="${no_proxy:-${NO_PROXY:-}}"
+          runner_no_proxy="${runner_no_proxy:+$runner_no_proxy,}localhost,127.0.0.1"
           echo "::add-mask::$buildkit_proxy"
           echo "::add-mask::$foreign_http_proxy"
           echo "::add-mask::$foreign_https_proxy"
           echo "http_proxy=$foreign_http_proxy" >> "$GITHUB_OUTPUT"
           echo "https_proxy=$foreign_https_proxy" >> "$GITHUB_OUTPUT"
           echo "buildkit_proxy=$buildkit_proxy" >> "$GITHUB_OUTPUT"
-          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "no_proxy=$runner_no_proxy" >> "$GITHUB_OUTPUT"
+
+      - name: Start local candidate registry for PR
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1"
+          export no_proxy="$NO_PROXY"
+
+          if curl -fsS http://localhost:5000/v2/ >/dev/null; then
+            exit 0
+          fi
+
+          registry_id=$(docker ps -aq --filter 'name=^/flagscale-ascend-ci-registry$')
+          if [ -n "$registry_id" ]; then
+            docker start "$registry_id"
+          else
+            docker run -d \
+              --name flagscale-ascend-ci-registry \
+              --restart unless-stopped \
+              -p 5000:5000 \
+              registry:2 || true
+          fi
+
+          for attempt in {1..30}; do
+            curl -fsS http://localhost:5000/v2/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "Local candidate registry did not become ready" >&2
+          exit 1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
+          buildkitd-config-inline: |
+            [registry."localhost:5000"]
+              http = true
+              insecure = true
           driver-opts: |
             network=host
             env.http_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
@@ -310,7 +353,7 @@ jobs:
             env.HTTPS_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
             env.NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
 
-      - name: Log in to Harbor for trusted publishing
+      - name: Log in to Harbor for publishing
         if: needs.prepare.outputs.publish == 'true'
         uses: docker/login-action@v3
         with:
@@ -345,7 +388,7 @@ jobs:
           context: .
           file: docker/ascend/Dockerfile.${{ matrix.task }}
           target: ${{ needs.prepare.outputs.target }}
-          push: ${{ needs.prepare.outputs.publish == 'true' }}
+          push: ${{ needs.prepare.outputs.candidate_push == 'true' }}
           tags: ${{ steps.image.outputs.tag }}
           no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
           build-args: |
@@ -382,7 +425,7 @@ jobs:
           context: .
           file: docker/ascend/Dockerfile.${{ matrix.task }}
           target: ${{ needs.prepare.outputs.target }}
-          push: ${{ needs.prepare.outputs.publish == 'true' }}
+          push: ${{ needs.prepare.outputs.candidate_push == 'true' }}
           tags: ${{ steps.image.outputs.tag }}
           no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
           build-args: |
@@ -402,38 +445,6 @@ jobs:
             no_proxy=${{ steps.proxy.outputs.no_proxy }}
           cache-from: type=gha,scope=ascend-${{ matrix.task }}
           cache-to: type=gha,mode=max,scope=ascend-${{ matrix.task }},ignore-error=true
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-
-      - name: Load candidate image into runner Docker
-        if: >-
-          always() &&
-          needs.prepare.outputs.publish == 'true' &&
-          (steps.build_attempt_1.outcome == 'success' ||
-           steps.build_attempt_2.outcome == 'success')
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/ascend/Dockerfile.${{ matrix.task }}
-          target: ${{ needs.prepare.outputs.target }}
-          load: true
-          tags: ${{ steps.image.outputs.tag }}
-          build-args: |
-            BASE_IMAGE=${{ steps.image.outputs.base }}
-            TRAIN_BASE_IMAGE=${{ env.ASCEND_TRAIN_BASE_IMAGE }}
-            INFERENCE_BASE_IMAGE=${{ env.ASCEND_INFERENCE_BASE_IMAGE }}
-            PKG_MGR=${{ env.PKG_MGR }}
-            FLAGSCALE_TE_REPO=${{ env.ASCEND_TE_REPO }}
-            FLAGSCALE_TE_REF=${{ env.ASCEND_TE_REF }}
-            FLAGSCALE_MEGATRON_REPO=${{ env.ASCEND_MEGATRON_REPO }}
-            FLAGSCALE_MEGATRON_REF=${{ env.ASCEND_MEGATRON_REF }}
-            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
-            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
-            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
-            http_proxy=${{ steps.proxy.outputs.http_proxy }}
-            https_proxy=${{ steps.proxy.outputs.https_proxy }}
-            no_proxy=${{ steps.proxy.outputs.no_proxy }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -737,9 +748,9 @@ jobs:
             exit 0
           fi
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            [ "${{ needs.validate_pr.result }}" = "success" ] || exit 1
-            exit 0
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ needs.validate_pr.result }}" != "success" ]; then
+            exit 1
           fi
 
           [ "${{ needs.build.result }}" = "success" ] || exit 1
