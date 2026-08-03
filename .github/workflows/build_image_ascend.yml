@@ -449,16 +449,95 @@ jobs:
       ci_train_image: ${{ needs.prepare.outputs.train_image }}
       ci_inference_image: ${{ needs.prepare.outputs.inference_image }}
 
-  ascend_all_tests:
-    name: Test Ascend all-in-one image
+  ascend_all_runtime_smoke:
+    name: Validate Ascend all-in-one runtimes
     needs: [prepare, build]
     if: needs.prepare.outputs.run_tests == 'true'
-    uses: ./.github/workflows/all_tests_common.yml
+    runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
+    container:
+      image: ${{ needs.prepare.outputs.all_image }}
+      volumes:
+        - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+        - /usr/local/Ascend/add-ons:/usr/local/Ascend/add-ons:ro
+        - /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro
+      options: >-
+        --device /dev/davinci_manager --device /dev/devmm_svm
+        --device /dev/hisi_hdc --ipc=host --shm-size=500g
+        --hostname flagscale_cicd --user root
+        --ulimit nofile=65535:65535 --cap-add SYS_ADMIN
+        --cap-add SYS_PTRACE --cap-add IPC_LOCK --cap-add NET_ADMIN
+        --cap-add SYS_RAWIO --cap-add SYS_NICE
+        --security-opt seccomp=unconfined
+        --security-opt apparmor=unconfined --privileged
+    steps:
+      - name: Validate train runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /opt/flagscale/runtimes/train/activate.sh
+          test "$FLAGSCALE_RUNTIME" = train
+          python - <<'PY'
+          import sys
+
+          import torch_npu
+          from megatron.core.extensions.transformer_engine import HAVE_TE
+          from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
+          from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
+
+          assert sys.version_info[:2] == (3, 12), sys.version
+          assert torch_npu.npu.is_available()
+          assert HAVE_TE
+          assert TESpecProvider is not None
+          PY
+
+      - name: Validate inference runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /opt/flagscale/runtimes/inference/activate.sh
+          test "$FLAGSCALE_RUNTIME" = inference
+          python - <<'PY'
+          import sys
+
+          import torch_npu
+          import vllm
+          import vllm_fl
+
+          assert sys.version_info[:2] == (3, 11), sys.version
+          assert torch_npu.npu.is_available()
+          PY
+
+      - name: Validate serve runtime alias
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /opt/flagscale/runtimes/serve/activate.sh
+          test "$FLAGSCALE_RUNTIME" = serve
+          python -c 'import sys, vllm, vllm_fl; assert sys.version_info[:2] == (3, 11), sys.version'
+
+  ascend_all_cli:
+    name: Validate Ascend all-in-one CLI
+    needs: [prepare, build, ascend_all_runtime_smoke]
+    if: needs.prepare.outputs.run_tests == 'true'
+    uses: ./.github/workflows/functional_tests_cli.yml
     secrets: inherit
     with:
       platform: ascend
-      ci_train_image: ${{ needs.prepare.outputs.all_image }}
-      ci_inference_image: ${{ needs.prepare.outputs.all_image }}
+      image: ${{ needs.prepare.outputs.all_image }}
+      runs_on: '["flagscale-ascend-ascend910-gpu2-32c-128g"]'
+      container_volumes: '["/public-ks3/cicd/baai_datasets:/home/gitlab-runner/data","/public-ks3/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers","/usr/local/Ascend/driver:/usr/local/Ascend/driver:ro","/usr/local/Ascend/add-ons:/usr/local/Ascend/add-ons:ro","/usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro"]'
+      container_options: >-
+        --device /dev/davinci_manager --device /dev/devmm_svm
+        --device /dev/hisi_hdc --ipc=host --shm-size=500g
+        --hostname flagscale_cicd --user root
+        --ulimit nofile=65535:65535 --cap-add SYS_ADMIN
+        --cap-add SYS_PTRACE --cap-add IPC_LOCK --cap-add NET_ADMIN
+        --cap-add SYS_RAWIO --cap-add SYS_NICE
+        --security-opt seccomp=unconfined
+        --security-opt apparmor=unconfined --privileged
+      pkg_mgr: pip
+      env_name: ""
+      env_path: /opt/flagscale/runtimes/train
 
   targeted_inference:
     name: Targeted Ascend inference
@@ -542,12 +621,13 @@ jobs:
 
   promote:
     name: Promote validated Ascend images
-    needs: [prepare, build, ascend_tests, ascend_all_tests]
+    needs: [prepare, build, ascend_tests, ascend_all_runtime_smoke, ascend_all_cli]
     if: >-
       needs.prepare.outputs.publish == 'true' &&
       needs.prepare.outputs.run_tests == 'true' &&
       needs.ascend_tests.result == 'success' &&
-      needs.ascend_all_tests.result == 'success'
+      needs.ascend_all_runtime_smoke.result == 'success' &&
+      needs.ascend_all_cli.result == 'success'
     runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
     steps:
       - name: Detect runner proxy
@@ -623,7 +703,8 @@ jobs:
       - validate_pr
       - build
       - ascend_tests
-      - ascend_all_tests
+      - ascend_all_runtime_smoke
+      - ascend_all_cli
       - targeted_inference
       - targeted_serve
       - targeted_all_cli
@@ -637,7 +718,8 @@ jobs:
           set -euo pipefail
           echo "Build result: ${{ needs.build.result }}"
           echo "Task image test result: ${{ needs.ascend_tests.result }}"
-          echo "All-in-one image test result: ${{ needs.ascend_all_tests.result }}"
+          echo "All-in-one runtime smoke result: ${{ needs.ascend_all_runtime_smoke.result }}"
+          echo "All-in-one CLI result: ${{ needs.ascend_all_cli.result }}"
           echo "Promotion result: ${{ needs.promote.result }}"
           echo "Candidate publishing enabled: ${{ needs.prepare.outputs.publish }}"
 
@@ -666,7 +748,11 @@ jobs:
             exit 1
           fi
           if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ] && \
-             [ "${{ needs.ascend_all_tests.result }}" != "success" ]; then
+             [ "${{ needs.ascend_all_runtime_smoke.result }}" != "success" ]; then
+            exit 1
+          fi
+          if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ] && \
+             [ "${{ needs.ascend_all_cli.result }}" != "success" ]; then
             exit 1
           fi
           if [ "${{ needs.prepare.outputs.publish }}" = "true" ] && \

@@ -160,7 +160,7 @@ jobs:
               fi
               ;;
             pip)
-              echo "Using system Python with pip"
+              activate_pip_env "$ENV_PATH"
               ;;
           esac
 
@@ -202,7 +202,7 @@ jobs:
               fi
               ;;
             pip)
-              echo "Using system Python with pip"
+              activate_pip_env "$ENV_PATH"
               ;;
           esac
 

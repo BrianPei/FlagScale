@@ -62,8 +62,8 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Guard: skip CUDA tests when PR contains docker-related changes, because
-  # build_image_cuda.yml will handle build + test for those PRs.
+  # Guard: skip platform tests when a PR changes image inputs, because the
+  # corresponding image workflow owns validation for those changes.
   # paths-ignore alone cannot guarantee mutual exclusivity when a PR touches
   # both docker files and non-docker files, so we need this job-level check.
   # ---------------------------------------------------------------------------
@@ -72,6 +72,7 @@ jobs:
     if: github.event_name == 'pull_request'
     outputs:
       has_docker_changes: ${{ steps.check.outputs.has_docker_changes }}
+      has_ascend_image_changes: ${{ steps.check.outputs.has_ascend_image_changes }}
     steps:
       - name: Check for docker-related file changes
         id: check
@@ -83,6 +84,12 @@ jobs:
             echo "has_docker_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_docker_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+          if echo "$CHANGED" | grep -qE '^(docker/ascend/|tools/install/ascend/|tools/install/utils/|tools/install/install\.sh$|requirements/ascend/|\.github/configs/ascend\.yml$|\.github/workflows/build_image_ascend\.yml$|tests/test_utils/config/platforms/ascend\.yaml$|tests/functional_tests/train/qwen3/)'; then
+            echo "has_ascend_image_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_ascend_image_changes=false" >> $GITHUB_OUTPUT
           fi
 
   cuda_tests:
@@ -98,7 +105,11 @@ jobs:
 
   ascend_tests:
     name: Ascend tests
-    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ascend'
+    needs: check_docker_changes
+    if: >-
+      always() &&
+      (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ascend') &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || needs.check_docker_changes.outputs.has_ascend_image_changes != 'true')
     uses: ./.github/workflows/all_tests_common.yml
     secrets: inherit
     with:
