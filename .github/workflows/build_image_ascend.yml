@@ -348,10 +348,8 @@ jobs:
             network=host
             env.http_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
             env.https_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
-            env.no_proxy=${{ steps.proxy.outputs.no_proxy }}
             env.HTTP_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
             env.HTTPS_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
-            env.NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
 
       - name: Log in to Harbor for publishing
         if: needs.prepare.outputs.publish == 'true'
@@ -659,10 +657,8 @@ jobs:
             network=host
             env.http_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
             env.https_proxy=${{ steps.proxy.outputs.buildkit_proxy }}
-            env.no_proxy=${{ steps.proxy.outputs.no_proxy }}
             env.HTTP_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
             env.HTTPS_PROXY=${{ steps.proxy.outputs.buildkit_proxy }}
-            env.NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
 
       - name: Log in to Harbor
         uses: docker/login-action@v3
