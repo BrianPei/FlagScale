@@ -18,7 +18,7 @@ data:
   mock_data: true
   tokenizer:
     tokenizer_type: QwenTokenizerFS
-    tokenizer_path: /home/gitlab-runner/tokenizers/qwentokenizer
+    tokenizer_path: /home/gitlab-runner/data/Qwen3-4B
     vocab_size: 151936
     make_vocab_size_divisible_by: 64
 
