@@ -23,7 +23,8 @@ data:
     make_vocab_size_divisible_by: 64
 
 system:
-  distributed_backend: flagcx
+  # torch_npu maps Megatron's supported NCCL choice to HCCL on Ascend.
+  distributed_backend: nccl
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1
   disable_bias_linear: true
