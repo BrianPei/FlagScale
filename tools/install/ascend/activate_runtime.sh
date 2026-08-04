@@ -40,7 +40,7 @@ case "$RUNTIME_NAME" in
         ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit/latest
         NNAL_HOME=/usr/local/Ascend/nnal
         MPI_HOME=/usr/local/mpi
-        export VLLM_PLUGINS=fl
+        export VLLM_PLUGINS=fl,ascend
         export TRITON_ALL_BLOCKS_PARALLEL=1
         ;;
     *)

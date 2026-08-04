@@ -23,7 +23,7 @@ data:
     make_vocab_size_divisible_by: 64
 
 system:
-  distributed_backend: hccl
+  distributed_backend: flagcx
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1
   disable_bias_linear: true

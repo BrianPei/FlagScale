@@ -32,6 +32,7 @@ experiment:
     HCCL_WHITELIST_DISABLE: 1
     CC: ./tools/install/ascend/triton_gxx_wrapper.sh
     VLLM_TARGET_DEVICE: "npu"
+    VLLM_PLUGINS: "fl,ascend"
     no_proxy: "127.0.0.1,localhost"
 
 action: run
