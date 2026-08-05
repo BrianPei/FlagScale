@@ -60,6 +60,7 @@ RUN apt-get update && \
         ninja-build \
         python3-dev && \
     rm -rf /var/lib/apt/lists/* && \
+    git config --system http.version HTTP/1.1 && \
     python -c "import sys; expected='${PYTHON_VERSION}'; actual=f'{sys.version_info.major}.{sys.version_info.minor}'; assert actual == expected, f'expected Python {expected}, found {actual}'"
 
 WORKDIR /workspace
