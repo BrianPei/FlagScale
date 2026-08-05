@@ -29,8 +29,8 @@ runner_labels: ["flagscale-mthreads-s5000-gpu8"]
 
 # Container volumes (hardware-specific paths)
 container_volumes:
-  - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
-  - /mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers
+  - /home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data
+  - /home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers
 
 # Container options for MThreads MUSA runtime
 container_options: >-

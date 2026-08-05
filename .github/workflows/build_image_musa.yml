@@ -525,7 +525,7 @@ jobs:
       platform: musa
       image: ${{ needs.prepare.outputs.train_image }}
       runs_on: '["flagscale-mthreads-s5000-gpu8"]'
-      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
       container_options: >-
         --hostname=flagscale-ci --privileged --ipc=host
         --shm-size=100g --ulimit memlock=-1
@@ -546,7 +546,7 @@ jobs:
       device: s5000
       image: ${{ needs.prepare.outputs.train_image }}
       runs_on: '["flagscale-mthreads-s5000-gpu8"]'
-      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
       container_options: >-
         --hostname=flagscale-ci --privileged --ipc=host
         --shm-size=100g --ulimit memlock=-1
@@ -567,7 +567,7 @@ jobs:
       test_matrix: '[{"device":"s5000","task":"train","model":"qwen3","case":"0_6b_musa_smoke"},{"device":"s5000","task":"train","model":"qwen3","case":"0_6b_musa"}]'
       image: ${{ needs.prepare.outputs.train_image }}
       runs_on: '["flagscale-mthreads-s5000-gpu8"]'
-      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
       container_options: >-
         --hostname=flagscale-ci --privileged --ipc=host
         --shm-size=100g --ulimit memlock=-1
@@ -589,7 +589,7 @@ jobs:
       ci_train_image: ${{ needs.prepare.outputs.all_image }}
       ci_inference_image: ${{ needs.prepare.outputs.all_image }}
       runs_on: '["flagscale-mthreads-s5000-gpu8"]'
-      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
 
   promote:
     name: Promote validated MUSA images
