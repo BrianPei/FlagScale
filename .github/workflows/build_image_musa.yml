@@ -24,6 +24,9 @@ on:
       - 'tools/install/install.sh'
       - 'requirements/musa/**'
       - 'flagscale/platforms/**'
+      - 'flagscale/runner/**'
+      - 'flagscale/train/megatron/plugin_flagscale/**'
+      - 'flagscale/train/megatron/training/config/**'
       - 'tests/test_utils/config/platforms/musa.yaml'
       - 'tests/test_utils/runners/parse_config.py'
       - 'tests/test_utils/runners/check_env.sh'
@@ -33,6 +36,11 @@ on:
       - 'tests/test_utils/runners/utils.sh'
       - '.github/workflows/functional_tests_inference.yml'
       - '.github/workflows/functional_tests_serve.yml'
+      - '.github/workflows/functional_tests_train.yml'
+      - '.github/workflows/functional_tests_cli.yml'
+      - '.github/workflows/unit_tests_common.yml'
+      - '.github/workflows/all_tests_common.yml'
+      - '.github/workflows/all_tests.yml'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa.yaml'
@@ -58,6 +66,9 @@ on:
       - 'tools/install/install.sh'
       - 'requirements/musa/**'
       - 'flagscale/platforms/**'
+      - 'flagscale/runner/**'
+      - 'flagscale/train/megatron/plugin_flagscale/**'
+      - 'flagscale/train/megatron/training/config/**'
       - 'tests/test_utils/config/platforms/musa.yaml'
       - 'tests/test_utils/runners/parse_config.py'
       - 'tests/test_utils/runners/check_env.sh'
@@ -67,6 +78,11 @@ on:
       - 'tests/test_utils/runners/utils.sh'
       - '.github/workflows/functional_tests_inference.yml'
       - '.github/workflows/functional_tests_serve.yml'
+      - '.github/workflows/functional_tests_train.yml'
+      - '.github/workflows/functional_tests_cli.yml'
+      - '.github/workflows/unit_tests_common.yml'
+      - '.github/workflows/all_tests_common.yml'
+      - '.github/workflows/all_tests.yml'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa.yaml'
@@ -143,15 +159,17 @@ env:
 
 jobs:
   prepare:
-    name: Prepare trusted build parameters
+    name: Prepare MUSA build parameters
     runs-on: ubuntu-latest
     outputs:
       target: ${{ steps.params.outputs.target }}
       matrix: ${{ steps.params.outputs.matrix }}
       publish: ${{ steps.params.outputs.publish }}
+      candidate_push: ${{ steps.params.outputs.candidate_push }}
       run_tests: ${{ steps.params.outputs.run_tests }}
       no_cache: ${{ steps.params.outputs.no_cache }}
       base_image: ${{ steps.params.outputs.base_image }}
+      candidate_registry: ${{ steps.params.outputs.candidate_registry }}
       train_image: ${{ steps.params.outputs.train_image }}
       inference_image: ${{ steps.params.outputs.inference_image }}
       all_image: ${{ steps.params.outputs.all_image }}
@@ -167,16 +185,23 @@ jobs:
 
           TARGET="${{ inputs.target || 'dev' }}"
           PUBLISH=false
+          CANDIDATE_PUSH=false
           RUN_TESTS=false
           NO_CACHE=false
           BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
           MATRIX='{"task":["train","inference","all"]}'
 
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CANDIDATE_PUSH=true
+            RUN_TESTS=true
+            NO_CACHE=false
+          elif [ "${{ github.event_name }}" = "push" ]; then
             PUBLISH=true
+            CANDIDATE_PUSH=true
             RUN_TESTS=true
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PUBLISH="${{ inputs.push }}"
+            CANDIDATE_PUSH="$PUBLISH"
             RUN_TESTS="${{ inputs.run_tests }}"
             NO_CACHE="${{ inputs.no_cache }}"
             if [ -n "${{ inputs.base_image }}" ]; then
@@ -196,9 +221,13 @@ jobs:
           fi
 
           SHORT_SHA="${GITHUB_SHA::12}"
-          TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
-          INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
-          ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          CANDIDATE_REGISTRY="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CANDIDATE_REGISTRY="localhost:5000"
+          fi
+          TRAIN_IMAGE="${CANDIDATE_REGISTRY}/flagscale-train:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          INFERENCE_IMAGE="${CANDIDATE_REGISTRY}/flagscale-inference:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          ALL_IMAGE="${CANDIDATE_REGISTRY}/flagscale-all:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
           RELEASE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
           RELEASE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
           RELEASE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
@@ -206,9 +235,11 @@ jobs:
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "candidate_push=$CANDIDATE_PUSH" >> "$GITHUB_OUTPUT"
           echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
           echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
           echo "base_image=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "candidate_registry=$CANDIDATE_REGISTRY" >> "$GITHUB_OUTPUT"
           echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
           echo "inference_image=$INFERENCE_IMAGE" >> "$GITHUB_OUTPUT"
           echo "all_image=$ALL_IMAGE" >> "$GITHUB_OUTPUT"
@@ -217,7 +248,7 @@ jobs:
           echo "release_all_image=$RELEASE_ALL_IMAGE" >> "$GITHUB_OUTPUT"
 
   validate_pr:
-    name: Validate untrusted MUSA PR
+    name: Validate MUSA PR configuration
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -283,7 +314,6 @@ jobs:
   build:
     name: Build MUSA ${{ matrix.task }}
     needs: prepare
-    if: github.event_name != 'pull_request'
     runs-on: flagscale-mthreads-s5000-gpu8
     strategy:
       fail-fast: false
@@ -321,12 +351,43 @@ jobs:
           echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
+      - name: Start local candidate registry for PR
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1"
+          export no_proxy="$NO_PROXY"
+
+          if curl -fsS http://localhost:5000/v2/ >/dev/null; then
+            exit 0
+          fi
+
+          registry_id=$(docker ps -aq --filter 'name=^/flagscale-musa-ci-registry$')
+          if [ -n "$registry_id" ]; then
+            docker start "$registry_id"
+          else
+            docker run -d \
+              --name flagscale-musa-ci-registry \
+              --restart unless-stopped \
+              -p 5000:5000 \
+              registry:2 || true
+          fi
+
+          for attempt in {1..30}; do
+            curl -fsS http://localhost:5000/v2/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "Local candidate registry did not become ready" >&2
+          exit 1
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker
 
       - name: Log in to Harbor
+        if: needs.prepare.outputs.candidate_registry != 'localhost:5000'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -409,7 +470,7 @@ jobs:
             org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}
 
       - name: Push candidate image with retry
-        if: needs.prepare.outputs.publish == 'true'
+        if: needs.prepare.outputs.candidate_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -437,6 +498,7 @@ jobs:
         task: [train, inference, all]
     steps:
       - name: Log in to Harbor
+        if: needs.prepare.outputs.candidate_registry != 'localhost:5000'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -621,9 +683,7 @@ jobs:
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             test "${{ needs.validate_pr.result }}" = "success"
-            exit 0
           fi
-
           test "${{ needs.build.result }}" = "success"
           if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
             test "${{ needs.musa_runtime.result }}" = "success"
