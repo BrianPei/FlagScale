@@ -79,28 +79,24 @@ ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    set -eux; \
+RUN set -eux; \
     mkdir -p "${FLAGSCALE_DEPS}"; \
     git clone --filter=blob:none --no-checkout "${MEGATRON_REPO}" "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
     git -C "${FLAGSCALE_DEPS}/Megatron-LM-FL" checkout --detach "${MEGATRON_REF}"; \
     python -c "from pathlib import Path; p=Path('${FLAGSCALE_DEPS}/Megatron-LM-FL/pyproject.toml'); s=p.read_text(); q=chr(34); old='requires-python = '+q+'>=3.12'+q; new='requires-python = '+q+'>=3.10'+q; assert s.count(old) == 1, 'unexpected Megatron-LM-FL Python constraint'; p.write_text(s.replace(old, new))"; \
     python -m pip install --no-build-isolation -e "${FLAGSCALE_DEPS}/Megatron-LM-FL"
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    set -eux; \
+RUN set -eux; \
     git clone --filter=blob:none --no-checkout "${FLAGGEMS_REPO}" "${FLAGSCALE_DEPS}/FlagGems"; \
     git -C "${FLAGSCALE_DEPS}/FlagGems" checkout --detach "${FLAGGEMS_REF}"; \
     python -m pip install --no-build-isolation -e "${FLAGSCALE_DEPS}/FlagGems"
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    set -eux; \
+RUN set -eux; \
     git clone --filter=blob:none --no-checkout "${TRANSFORMER_ENGINE_REPO}" "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
     git -C "${FLAGSCALE_DEPS}/TransformerEngine-FL" checkout --detach "${TRANSFORMER_ENGINE_REF}"; \
     TE_FL_SKIP_CUDA=1 python -m pip install --no-build-isolation -e "${FLAGSCALE_DEPS}/TransformerEngine-FL"
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    set -eux; \
+RUN set -eux; \
     git clone --filter=blob:none --no-checkout "${FLAGCX_REPO}" "${FLAGSCALE_DEPS}/FlagCX"; \
     git -C "${FLAGSCALE_DEPS}/FlagCX" checkout --detach "${FLAGCX_REF}"; \
     git -C "${FLAGSCALE_DEPS}/FlagCX" submodule update --init --recursive; \
