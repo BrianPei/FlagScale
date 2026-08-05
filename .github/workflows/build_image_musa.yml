@@ -31,10 +31,18 @@ on:
       - 'tests/test_utils/runners/run_functional_tests.sh'
       - 'tests/test_utils/runners/setup_training_test_env.sh'
       - 'tests/test_utils/runners/utils.sh'
+      - '.github/workflows/functional_tests_inference.yml'
+      - '.github/workflows/functional_tests_serve.yml'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa.yaml'
       - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa.yaml'
+      - 'tests/functional_tests/inference/qwen3/conf/4b_tp2_musa.yaml'
+      - 'tests/functional_tests/inference/qwen3/conf/inference/4b_tp2_musa.yaml'
+      - 'tests/functional_tests/inference/qwen3/results_gold/4b_tp2_musa'
+      - 'tests/functional_tests/serve/qwen2_5/conf/0.5b_musa.yaml'
+      - 'tests/functional_tests/serve/qwen2_5/conf/serve/0.5b_musa.yaml'
+      - 'tests/functional_tests/serve/qwen2_5/gold_values/0.5b_musa.json'
       - 'tests/unit_tests/test_utilities.py'
       - 'tests/unit_tests/test_cli.py'
       - 'tests/unit_tests/runner/test_config_validation.py'
@@ -57,10 +65,18 @@ on:
       - 'tests/test_utils/runners/run_functional_tests.sh'
       - 'tests/test_utils/runners/setup_training_test_env.sh'
       - 'tests/test_utils/runners/utils.sh'
+      - '.github/workflows/functional_tests_inference.yml'
+      - '.github/workflows/functional_tests_serve.yml'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa_smoke.yaml'
       - 'tests/functional_tests/train/qwen3/conf/0_6b_musa.yaml'
       - 'tests/functional_tests/train/qwen3/conf/train/0_6b_musa.yaml'
+      - 'tests/functional_tests/inference/qwen3/conf/4b_tp2_musa.yaml'
+      - 'tests/functional_tests/inference/qwen3/conf/inference/4b_tp2_musa.yaml'
+      - 'tests/functional_tests/inference/qwen3/results_gold/4b_tp2_musa'
+      - 'tests/functional_tests/serve/qwen2_5/conf/0.5b_musa.yaml'
+      - 'tests/functional_tests/serve/qwen2_5/conf/serve/0.5b_musa.yaml'
+      - 'tests/functional_tests/serve/qwen2_5/gold_values/0.5b_musa.json'
       - 'tests/unit_tests/test_utilities.py'
       - 'tests/unit_tests/test_cli.py'
       - 'tests/unit_tests/runner/test_config_validation.py'
@@ -90,7 +106,7 @@ on:
         type: boolean
         default: true
       run_tests:
-        description: Run CLI and unit tests after publishing
+        description: Run the common test suite with the built train and inference images
         type: boolean
         default: true
       no_cache:
@@ -239,7 +255,10 @@ jobs:
           test -f requirements/musa/inference.txt
           test -f requirements/musa/serve.txt
           test -f tests/test_utils/config/platforms/musa.yaml
+          test -f tests/functional_tests/inference/qwen3/conf/4b_tp2_musa.yaml
+          test -f tests/functional_tests/serve/qwen2_5/conf/0.5b_musa.yaml
           test -f tools/install/musa/launch_megatron_gpt.py
+          test -f tools/install/musa/sitecustomize.py
           bash -n tools/install/musa/env.sh
           bash -n tools/install/musa/install_base.sh
           bash -n tools/install/musa/install_train.sh
@@ -249,12 +268,17 @@ jobs:
           bash -n tests/test_utils/runners/check_env.sh
           bash -n tests/test_utils/runners/utils.sh
           python -m py_compile tools/install/musa/launch_megatron_gpt.py
+          python -m py_compile tools/install/musa/sitecustomize.py
           python -m py_compile tests/test_utils/runners/parse_config.py
           python -m py_compile tests/unit_tests/test_utilities.py
           python tests/test_utils/runners/parse_config.py \
             --platform musa --type device_types | grep -q 's5000'
           python tests/test_utils/runners/parse_config.py \
             --platform s5000 --type unit | grep -q 'include'
+          python tests/test_utils/runners/parse_config.py \
+            --platform musa --type functional --task inference | grep -q '4b_tp2_musa'
+          python tests/test_utils/runners/parse_config.py \
+            --platform musa --type functional --task serve | grep -q '0.5b_musa'
 
   build:
     name: Build MUSA ${{ matrix.task }}
@@ -449,7 +473,14 @@ jobs:
             docker run --rm --privileged \
               --env MTHREADS_VISIBLE_DEVICES=all \
               --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" \
-              python -c 'import torch_musa, vllm; print(vllm.__version__)'
+              python -c '
+          import sys
+          assert "torch_musa" in sys.modules
+          import vllm
+          import torch_musa
+          assert hasattr(torch_musa, "_MUSAC")
+          print(vllm.__version__)
+          '
           fi
 
           if [ "${{ matrix.task }}" != "inference" ]; then
@@ -516,92 +547,27 @@ jobs:
           torch.distributed.destroy_process_group()
           '
 
-  musa_cli:
-    name: MUSA CLI
-    needs: [prepare, build]
-    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
-    uses: ./.github/workflows/functional_tests_cli.yml
-    with:
-      platform: musa
-      image: ${{ needs.prepare.outputs.train_image }}
-      runs_on: '["flagscale-mthreads-s5000-gpu8"]'
-      container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
-      container_options: >-
-        --hostname=flagscale-ci --privileged --ipc=host
-        --shm-size=100g --ulimit memlock=-1
-        --env MTHREADS_VISIBLE_DEVICES=all
-        --env MTHREADS_DRIVER_CAPABILITIES=all
-        --user root --ulimit nofile=65535:65535
-      pkg_mgr: pip
-      env_name: ''
-      env_path: ''
-
-  musa_unit:
-    name: MUSA unit
-    needs: [prepare, build]
-    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
-    uses: ./.github/workflows/unit_tests_common.yml
-    with:
-      platform: musa
-      device: s5000
-      image: ${{ needs.prepare.outputs.train_image }}
-      runs_on: '["flagscale-mthreads-s5000-gpu8"]'
-      container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
-      container_options: >-
-        --hostname=flagscale-ci --privileged --ipc=host
-        --shm-size=100g --ulimit memlock=-1
-        --env MTHREADS_VISIBLE_DEVICES=all
-        --env MTHREADS_DRIVER_CAPABILITIES=all
-        --user root --ulimit nofile=65535:65535
-      pkg_mgr: pip
-      env_name: ''
-      env_path: ''
-
-  musa_train:
-    name: MUSA functional train
-    needs: [prepare, build]
-    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
-    uses: ./.github/workflows/functional_tests_train.yml
-    with:
-      platform: musa
-      test_matrix: '[{"device":"s5000","task":"train","model":"qwen3","case":"0_6b_musa_smoke"},{"device":"s5000","task":"train","model":"qwen3","case":"0_6b_musa"}]'
-      image: ${{ needs.prepare.outputs.train_image }}
-      runs_on: '["flagscale-mthreads-s5000-gpu8"]'
-      container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
-      container_options: >-
-        --hostname=flagscale-ci --privileged --ipc=host
-        --shm-size=100g --ulimit memlock=-1
-        --env MTHREADS_VISIBLE_DEVICES=all
-        --env MTHREADS_DRIVER_CAPABILITIES=all
-        --user root --ulimit nofile=65535:65535
-      pkg_mgr: pip
-      env_name: ''
-      env_path: ''
-
-  musa_all_tests:
-    name: MUSA all-in-one tests
+  run_musa_tests:
+    name: Run MUSA tests
     needs: [prepare, build]
     if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
     uses: ./.github/workflows/all_tests_common.yml
     secrets: inherit
     with:
       platform: musa
-      ci_train_image: ${{ needs.prepare.outputs.all_image }}
-      ci_inference_image: ${{ needs.prepare.outputs.all_image }}
+      ci_train_image: ${{ needs.prepare.outputs.train_image }}
+      ci_inference_image: ${{ needs.prepare.outputs.inference_image }}
       runs_on: '["flagscale-mthreads-s5000-gpu8"]'
       container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
 
   promote:
     name: Promote validated MUSA images
-    needs: [prepare, build, musa_runtime, musa_cli, musa_unit, musa_train, musa_all_tests]
+    needs: [prepare, build, musa_runtime, run_musa_tests]
     if: >-
       needs.prepare.outputs.publish == 'true' &&
       needs.prepare.outputs.run_tests == 'true' &&
       needs.musa_runtime.result == 'success' &&
-      needs.musa_cli.result == 'success' &&
-      needs.musa_unit.result == 'success' &&
-      needs.musa_train.result == 'success' &&
-      needs.musa_all_tests.result == 'success'
+      needs.run_musa_tests.result == 'success'
     runs-on: flagscale-mthreads-s5000-gpu8
     steps:
       - name: Set up Docker Buildx
@@ -644,7 +610,7 @@ jobs:
 
   summary:
     name: MUSA pipeline summary
-    needs: [prepare, validate_pr, build, musa_runtime, musa_cli, musa_unit, musa_train, musa_all_tests, promote]
+    needs: [prepare, validate_pr, build, musa_runtime, run_musa_tests, promote]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -661,10 +627,7 @@ jobs:
           test "${{ needs.build.result }}" = "success"
           if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
             test "${{ needs.musa_runtime.result }}" = "success"
-            test "${{ needs.musa_cli.result }}" = "success"
-            test "${{ needs.musa_unit.result }}" = "success"
-            test "${{ needs.musa_train.result }}" = "success"
-            test "${{ needs.musa_all_tests.result }}" = "success"
+            test "${{ needs.run_musa_tests.result }}" = "success"
           fi
           if [ "${{ needs.prepare.outputs.publish }}" = "true" ] && \
              [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then

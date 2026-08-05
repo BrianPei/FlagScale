@@ -27,8 +27,10 @@ s5000:
         qwen3: ["0_6b_musa_smoke", "0_6b_musa", "0_6b_musa_benchmark"]
       hetero_train: {}
       benchmark: {}
-      inference: {}
-      serve: {}
+      inference:
+        qwen3: ["4b_tp2_musa"]
+      serve:
+        qwen2_5: ["0.5b_musa"]
       rl: {}
     unit:
       include: "*"
