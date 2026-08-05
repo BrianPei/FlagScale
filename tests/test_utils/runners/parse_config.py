@@ -138,7 +138,9 @@ def get_device_types(platform):
         ValueError: If platform is not specified
     """
     if not platform:
-        raise ValueError("Platform must be specified. Available platforms: cuda, ascend, metax, musa")
+        raise ValueError(
+            "Platform must be specified. Available platforms: cuda, ascend, metax, musa"
+        )
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     platform_file_map = {

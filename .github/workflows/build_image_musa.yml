@@ -465,7 +465,7 @@ jobs:
           import torch
           import torch_musa
           assert torch.musa.is_available()
-          x = torch.arange(8, dtype=torch.float32, device="musa")
+          x = torch.tensor(range(8), dtype=torch.float32, device="musa")
           assert (x * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]
           '
 

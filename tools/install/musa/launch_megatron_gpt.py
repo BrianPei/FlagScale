@@ -27,10 +27,11 @@ os.environ.setdefault(
 
 import torch
 import torch_musa  # noqa: F401
-import flagscale
+
 from megatron.plugin.platform import get_platform, set_platform
 from megatron.plugin.platform.platform_register import PLATFORMS
 
+import flagscale
 
 if "musa" not in PLATFORMS:
     raise RuntimeError(f"Megatron-LM-FL did not register MUSA: {list(PLATFORMS)}")
@@ -46,9 +47,7 @@ if not torch.musa.is_available():
 
 print("Megatron-LM-FL Platform: musa Selected")
 
-train_script = (
-    Path(flagscale.__file__).resolve().parent / "train" / "megatron" / "train_gpt.py"
-)
+train_script = Path(flagscale.__file__).resolve().parent / "train" / "megatron" / "train_gpt.py"
 if not train_script.is_file():
     raise RuntimeError(f"FlagScale training entrypoint not found: {train_script}")
 sys.path.insert(0, str(train_script.parent))

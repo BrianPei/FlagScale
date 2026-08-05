@@ -16,7 +16,6 @@
 
 import os
 
-
 if (
     os.environ.get("FS_PLATFORM") == "musa"
     and os.environ.get("FLAGSCALE_MUSA_BUILD_NO_DEVICE", "false").lower() != "true"
