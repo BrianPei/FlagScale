@@ -34,14 +34,6 @@ experiment:
   cmds:
     before_start: ''
 
-# No Ascend golden curve is checked until one has been recorded on the target
-# runner. The case still fails unless training produces finite loss values.
-test:
-  training_smoke:
-    enabled: true
-    metric: "lm loss:"
-    min_values: 3
-
 action: run
 
 hydra:

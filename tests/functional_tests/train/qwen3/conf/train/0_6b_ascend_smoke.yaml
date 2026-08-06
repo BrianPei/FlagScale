@@ -12,15 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-data:
-  # Keep the accelerator smoke test independent of runner-local .idx/.bin files.
-  # MockGPTDataset still exercises tokenization, forward/backward, HCCL, and the optimizer.
-  mock_data: true
-  tokenizer:
-    tokenizer_type: QwenTokenizerFS
-    tokenizer_path: /home/gitlab-runner/data/Qwen3-4B
-    vocab_size: 151936
-    make_vocab_size_divisible_by: 64
+defaults:
+  - data
 
 system:
   # torch_npu maps Megatron's supported NCCL choice to HCCL on Ascend.
@@ -49,7 +42,9 @@ system:
     tensorboard_log_interval: 999999
 
 model:
+  deterministic_mode: true
   transformer_impl: transformer_engine
+  attention_backend: unfused
   te_fl_prefer: reference
   te_fl_per_op: "rmsnorm_fwd=reference"
   te_fl_allow_vendors: "npu"
@@ -80,7 +75,7 @@ model:
   attention_dropout: 0.0
   hidden_dropout: 0.0
   clip_grad: 1.0
-  train_iters: 3
+  train_iters: 10
   eval_iters: 0
   eval_interval: 1000
   micro_batch_size: 1

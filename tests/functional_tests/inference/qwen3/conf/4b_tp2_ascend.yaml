@@ -37,6 +37,7 @@ experiment:
     MKL_NUM_THREADS: 1
     OMP_NUM_THREADS: 1
     NUMEXPR_NUM_THREADS: 1
+    # Serialize Triton launcher compilation to avoid concurrent .gch writes.
     CC: ./tools/install/ascend/triton_gxx_wrapper.sh
     VLLM_TARGET_DEVICE: "npu"
     VLLM_PLUGINS: "fl"
