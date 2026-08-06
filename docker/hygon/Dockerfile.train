@@ -93,7 +93,7 @@ RUN set -eux; \
     mkdir -p "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
     curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
         --output /tmp/megatron-lm-fl.tar.gz \
-        "${MEGATRON_REPO%.git}/archive/${MEGATRON_REF}.tar.gz"; \
+        "https://codeload.github.com/flagos-ai/Megatron-LM-FL/tar.gz/${MEGATRON_REF}"; \
     tar -xzf /tmp/megatron-lm-fl.tar.gz --strip-components=1 \
         -C "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
     rm /tmp/megatron-lm-fl.tar.gz; \
@@ -104,7 +104,7 @@ RUN set -eux; \
     mkdir -p "${FLAGSCALE_DEPS}/FlagGems"; \
     curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
         --output /tmp/flag-gems.tar.gz \
-        "${FLAGGEMS_REPO%.git}/archive/${FLAGGEMS_REF}.tar.gz"; \
+        "https://codeload.github.com/flagos-ai/FlagGems/tar.gz/${FLAGGEMS_REF}"; \
     tar -xzf /tmp/flag-gems.tar.gz --strip-components=1 \
         -C "${FLAGSCALE_DEPS}/FlagGems"; \
     rm /tmp/flag-gems.tar.gz; \
@@ -120,7 +120,7 @@ RUN set -eux; \
     mkdir -p "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
     curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
         --output /tmp/transformer-engine-fl.tar.gz \
-        "${TRANSFORMER_ENGINE_REPO%.git}/archive/${TRANSFORMER_ENGINE_REF}.tar.gz"; \
+        "https://codeload.github.com/flagos-ai/TransformerEngine-FL/tar.gz/${TRANSFORMER_ENGINE_REF}"; \
     tar -xzf /tmp/transformer-engine-fl.tar.gz --strip-components=1 \
         -C "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
     rm /tmp/transformer-engine-fl.tar.gz; \
@@ -133,13 +133,13 @@ RUN set -eux; \
         "${FLAGSCALE_DEPS}/FlagCX/third-party/json"; \
     curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
         --output /tmp/flagcx.tar.gz \
-        "${FLAGCX_REPO%.git}/archive/${FLAGCX_REF}.tar.gz"; \
+        "https://codeload.github.com/flagos-ai/FlagCX/tar.gz/${FLAGCX_REF}"; \
     curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
         --output /tmp/googletest.tar.gz \
-        "https://github.com/google/googletest/archive/${GOOGLETEST_REF}.tar.gz"; \
+        "https://codeload.github.com/google/googletest/tar.gz/${GOOGLETEST_REF}"; \
     curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
         --output /tmp/json.tar.gz \
-        "https://github.com/nlohmann/json/archive/${JSON_REF}.tar.gz"; \
+        "https://codeload.github.com/nlohmann/json/tar.gz/${JSON_REF}"; \
     tar -xzf /tmp/flagcx.tar.gz --strip-components=1 \
         -C "${FLAGSCALE_DEPS}/FlagCX"; \
     tar -xzf /tmp/googletest.tar.gz --strip-components=1 \
