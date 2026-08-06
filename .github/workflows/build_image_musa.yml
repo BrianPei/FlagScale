@@ -15,7 +15,7 @@
 name: Build Docker Images - Musa
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
     paths:
       - 'docker/musa/**'
@@ -190,7 +190,7 @@ jobs:
           BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
           MATRIX='{"task":["train","inference","all"]}'
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
             CANDIDATE_PUSH=true
             RUN_TESTS=true
           elif [ "${{ github.event_name }}" = "push" ]; then
@@ -218,7 +218,8 @@ jobs:
             fi
           fi
 
-          SHORT_SHA="${GITHUB_SHA::12}"
+          SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          SHORT_SHA="${SOURCE_SHA::12}"
           TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
           INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
           ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:candidate-${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
@@ -242,7 +243,7 @@ jobs:
 
   validate_pr:
     name: Validate MUSA PR configuration
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source (attempt 1)
@@ -310,17 +311,15 @@ jobs:
           python tests/test_utils/runners/parse_config.py \
             --platform musa --type functional --task serve | grep -q '0.5b_musa'
 
-      - name: Validate Harbor credentials for fork PR
-        # Fork pull_request workflows cannot read repository secrets. The base
-        # repository deliberately exposes these credentials as Actions Variables.
+      - name: Validate Harbor credentials
         env:
-          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USERNAME }}
-          REGISTRY_PASSWORD: ${{ secrets.CONTAINER_REGISTRY || vars.CONTAINER_REGISTRY }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.CONTAINER_REGISTRY }}
         shell: bash
         run: |
           set -euo pipefail
           if [ -z "$REGISTRY_USERNAME" ] || [ -z "$REGISTRY_PASSWORD" ]; then
-            echo "::error::Set REGISTRY_USERNAME and CONTAINER_REGISTRY as Actions Variables in the base repository so fork PRs can publish MUSA candidate images"
+            echo "::error::REGISTRY_USERNAME and CONTAINER_REGISTRY secrets are required to publish MUSA candidate images"
             exit 1
           fi
 
@@ -379,8 +378,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USERNAME }}
-          password: ${{ secrets.CONTAINER_REGISTRY || vars.CONTAINER_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
 
       - name: Select image tag
         id: image
@@ -420,7 +419,7 @@ jobs:
             no_proxy=${{ steps.proxy.outputs.no_proxy }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
             org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}
 
       - name: Wait before build retry
@@ -454,7 +453,7 @@ jobs:
             no_proxy=${{ steps.proxy.outputs.no_proxy }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
             org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}
 
       - name: Push candidate image with retry
@@ -489,8 +488,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USERNAME }}
-          password: ${{ secrets.CONTAINER_REGISTRY || vars.CONTAINER_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
 
       - name: Validate MUSA task runtime
         shell: bash
@@ -628,8 +627,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USERNAME }}
-          password: ${{ secrets.CONTAINER_REGISTRY || vars.CONTAINER_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
 
       - name: Promote candidate manifests
         shell: bash
@@ -668,7 +667,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
             test "${{ needs.validate_pr.result }}" = "success"
           fi
           test "${{ needs.build.result }}" = "success"
