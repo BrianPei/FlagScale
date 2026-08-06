@@ -15,7 +15,7 @@
 name: Build Docker Images - Musa
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
     paths:
       - 'docker/musa/**'
@@ -190,7 +190,7 @@ jobs:
           BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
           MATRIX='{"task":["train","inference","all"]}'
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
             CANDIDATE_PUSH=true
             RUN_TESTS=true
             NO_CACHE=false
@@ -243,7 +243,7 @@ jobs:
 
   validate_pr:
     name: Validate MUSA PR configuration
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source (attempt 1)
@@ -251,6 +251,8 @@ jobs:
         uses: actions/checkout@v4
         continue-on-error: true
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Checkout source (attempt 2)
@@ -259,12 +261,16 @@ jobs:
         uses: actions/checkout@v4
         continue-on-error: true
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Checkout source (attempt 3)
         if: steps.checkout_attempt_2.outcome == 'failure'
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Validate MUSA integration
@@ -321,6 +327,8 @@ jobs:
         uses: actions/checkout@v4
         continue-on-error: true
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Checkout source (attempt 2)
@@ -329,12 +337,16 @@ jobs:
         uses: actions/checkout@v4
         continue-on-error: true
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Checkout source (attempt 3)
         if: steps.build_checkout_attempt_2.outcome == 'failure'
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Detect runner proxy
@@ -643,7 +655,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
             test "${{ needs.validate_pr.result }}" = "success"
           fi
           test "${{ needs.build.result }}" = "success"
