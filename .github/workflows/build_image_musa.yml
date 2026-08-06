@@ -564,7 +564,7 @@ jobs:
       ci_train_image: ${{ needs.prepare.outputs.train_image }}
       ci_inference_image: ${{ needs.prepare.outputs.inference_image }}
       runs_on: '["flagscale-mthreads-s5000-gpu8"]'
-      container_volumes: '["/home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data","/home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
 
   promote:
     name: Promote validated MUSA images
