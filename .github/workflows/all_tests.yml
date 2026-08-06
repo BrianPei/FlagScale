@@ -105,9 +105,9 @@ jobs:
 
   musa_tests:
     name: MThreads MUSA tests
-    # MUSA image changes are validated by build_image_musa.yml. Keep the
-    # repository-wide suite opt-in so unrelated PRs do not consume S5000 time.
-    if: github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'musa')
+    # Use the verified MUSA image from the platform config for PR/push tests.
+    # New image builds remain an explicit concern of build_image_musa.yml.
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'musa'
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: musa
