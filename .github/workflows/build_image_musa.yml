@@ -31,6 +31,10 @@ on:
         type: choice
         options: [dev, release]
         default: dev
+      build_images:
+        description: Build new MUSA images before running tests
+        type: boolean
+        default: false
       build_all_tasks:
         description: Build train, inference and all-in-one images
         type: boolean
@@ -70,6 +74,7 @@ env:
   # 3.3.5-server driver. The vendor PyTorch 2.9.1 image passes tensor smoke but
   # fails communicator creation, so upgrading it must be coupled with drivers.
   MUSA_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/transformerengine-fl@sha256:fb56b8b2882d20de45954ed0d53fd695ae08a23c808d853dae9e57f4fcae618e
+  MUSA_VALIDATED_IMAGE: harbor.baai.ac.cn/flagos-dev/transformerengine-fl@sha256:fb56b8b2882d20de45954ed0d53fd695ae08a23c808d853dae9e57f4fcae618e
   MUSA_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
   MUSA_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
   MUSA_TE_REF: e73781e85518ab0046007cef69e95bd258a63900
@@ -89,6 +94,7 @@ jobs:
       publish: ${{ steps.params.outputs.publish }}
       candidate_push: ${{ steps.params.outputs.candidate_push }}
       run_tests: ${{ steps.params.outputs.run_tests }}
+      build_images: ${{ steps.params.outputs.build_images }}
       no_cache: ${{ steps.params.outputs.no_cache }}
       base_image: ${{ steps.params.outputs.base_image }}
       train_image: ${{ steps.params.outputs.train_image }}
@@ -108,6 +114,7 @@ jobs:
           PUBLISH=false
           CANDIDATE_PUSH=false
           RUN_TESTS=false
+          BUILD_IMAGES=true
           NO_CACHE=false
           BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
           MATRIX='{"task":["train","inference","all"]}'
@@ -120,6 +127,10 @@ jobs:
             CANDIDATE_PUSH=true
             RUN_TESTS=true
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BUILD_IMAGES="${{ inputs.build_images }}"
+            if [ -z "$BUILD_IMAGES" ]; then
+              BUILD_IMAGES=false
+            fi
             PUBLISH="${{ inputs.promote }}"
             CANDIDATE_PUSH="${{ inputs.push }}"
             RUN_TESTS="${{ inputs.run_tests }}"
@@ -142,6 +153,13 @@ jobs:
               echo "::error::promote=true requires run_tests=true"
               exit 1
             fi
+            if [ "$BUILD_IMAGES" != "true" ]; then
+              if [ "$PUBLISH" = "true" ]; then
+                echo "::error::promote=true requires build_images=true"
+                exit 1
+              fi
+              CANDIDATE_PUSH=false
+            fi
           fi
 
           SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
@@ -153,11 +171,18 @@ jobs:
           RELEASE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
           RELEASE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
 
+          if [ "$BUILD_IMAGES" != "true" ]; then
+            TRAIN_IMAGE="${{ env.MUSA_VALIDATED_IMAGE }}"
+            INFERENCE_IMAGE="${{ env.MUSA_VALIDATED_IMAGE }}"
+            ALL_IMAGE="${{ env.MUSA_VALIDATED_IMAGE }}"
+          fi
+
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
           echo "candidate_push=$CANDIDATE_PUSH" >> "$GITHUB_OUTPUT"
           echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
+          echo "build_images=$BUILD_IMAGES" >> "$GITHUB_OUTPUT"
           echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
           echo "base_image=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
           echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
@@ -252,6 +277,7 @@ jobs:
   build:
     name: Build MUSA ${{ matrix.task }}
     needs: prepare
+    if: needs.prepare.outputs.build_images == 'true'
     runs-on: flagscale-mthreads-s5000-gpu8
     strategy:
       fail-fast: false
@@ -403,7 +429,10 @@ jobs:
   musa_runtime:
     name: MUSA ${{ matrix.task }} runtime
     needs: [prepare, build]
-    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    if: >-
+      always() &&
+      needs.prepare.outputs.run_tests == 'true' &&
+      (needs.build.result == 'success' || needs.prepare.outputs.build_images == 'false')
     runs-on: flagscale-mthreads-s5000-gpu8
     strategy:
       fail-fast: false
@@ -524,7 +553,10 @@ jobs:
   run_musa_tests:
     name: Run MUSA tests
     needs: [prepare, build]
-    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    if: >-
+      always() &&
+      needs.prepare.outputs.run_tests == 'true' &&
+      (needs.build.result == 'success' || needs.prepare.outputs.build_images == 'false')
     uses: ./.github/workflows/all_tests_common.yml
     secrets: inherit
     with:
@@ -538,6 +570,7 @@ jobs:
     name: Promote validated MUSA images
     needs: [prepare, build, musa_runtime, run_musa_tests]
     if: >-
+      needs.prepare.outputs.build_images == 'true' &&
       needs.prepare.outputs.publish == 'true' &&
       needs.prepare.outputs.run_tests == 'true' &&
       needs.musa_runtime.result == 'success' &&
@@ -596,7 +629,9 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request_target" ]; then
             test "${{ needs.validate_pr.result }}" = "success"
           fi
-          test "${{ needs.build.result }}" = "success"
+          if [ "${{ needs.prepare.outputs.build_images }}" = "true" ]; then
+            test "${{ needs.build.result }}" = "success"
+          fi
           if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
             test "${{ needs.musa_runtime.result }}" = "success"
             test "${{ needs.run_musa_tests.result }}" = "success"
