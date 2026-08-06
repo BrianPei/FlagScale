@@ -190,7 +190,10 @@ jobs:
           BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
           MATRIX='{"task":["train","inference","all"]}'
 
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CANDIDATE_PUSH=true
+            RUN_TESTS=true
+          elif [ "${{ github.event_name }}" = "push" ]; then
             PUBLISH=true
             CANDIDATE_PUSH=true
             RUN_TESTS=true
@@ -307,12 +310,23 @@ jobs:
           python tests/test_utils/runners/parse_config.py \
             --platform musa --type functional --task serve | grep -q '0.5b_musa'
 
+      - name: Validate Harbor credentials for fork PR
+        # Fork pull_request workflows cannot read repository secrets. The base
+        # repository deliberately exposes these credentials as Actions Variables.
+        env:
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.CONTAINER_REGISTRY || vars.CONTAINER_REGISTRY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$REGISTRY_USERNAME" ] || [ -z "$REGISTRY_PASSWORD" ]; then
+            echo "::error::Set REGISTRY_USERNAME and CONTAINER_REGISTRY as Actions Variables in the base repository so fork PRs can publish MUSA candidate images"
+            exit 1
+          fi
+
   build:
     name: Build MUSA ${{ matrix.task }}
     needs: prepare
-    # Fork PRs cannot receive Harbor credentials, and MUSA runners do not
-    # share a Docker daemon. Full image validation runs via workflow_dispatch.
-    if: github.event_name != 'pull_request'
     runs-on: flagscale-mthreads-s5000-gpu8
     strategy:
       fail-fast: false
@@ -365,8 +379,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.CONTAINER_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY || vars.CONTAINER_REGISTRY }}
 
       - name: Select image tag
         id: image
@@ -475,8 +489,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.CONTAINER_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY || vars.CONTAINER_REGISTRY }}
 
       - name: Validate MUSA task runtime
         shell: bash
@@ -614,8 +628,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.CONTAINER_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY || vars.CONTAINER_REGISTRY }}
 
       - name: Promote candidate manifests
         shell: bash
@@ -656,7 +670,6 @@ jobs:
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             test "${{ needs.validate_pr.result }}" = "success"
-            exit 0
           fi
           test "${{ needs.build.result }}" = "success"
           if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
