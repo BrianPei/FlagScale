@@ -121,6 +121,10 @@ on:
         description: Push the candidate image to Harbor
         type: boolean
         default: true
+      promote:
+        description: Promote validated candidate images to release tags
+        type: boolean
+        default: false
       run_tests:
         description: Run the common test suite with the built train and inference images
         type: boolean
@@ -198,8 +202,8 @@ jobs:
             CANDIDATE_PUSH=true
             RUN_TESTS=true
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            PUBLISH="${{ inputs.push }}"
-            CANDIDATE_PUSH="$PUBLISH"
+            PUBLISH="${{ inputs.promote }}"
+            CANDIDATE_PUSH="${{ inputs.push }}"
             RUN_TESTS="${{ inputs.run_tests }}"
             NO_CACHE="${{ inputs.no_cache }}"
             if [ -n "${{ inputs.base_image }}" ]; then
@@ -208,12 +212,16 @@ jobs:
             if [ "${{ inputs.build_all_tasks }}" != "true" ]; then
               MATRIX='{"task":["${{ inputs.task }}"]}'
             fi
-            if [ "$RUN_TESTS" = "true" ] && [ "$PUBLISH" != "true" ]; then
+            if [ "$RUN_TESTS" = "true" ] && [ "$CANDIDATE_PUSH" != "true" ]; then
               echo "::error::run_tests=true requires push=true so reusable jobs can pull the image"
               exit 1
             fi
             if [ "$RUN_TESTS" = "true" ] && [ "${{ inputs.build_all_tasks }}" != "true" ]; then
               echo "::error::run_tests=true requires build_all_tasks=true"
+              exit 1
+            fi
+            if [ "$PUBLISH" = "true" ] && [ "$RUN_TESTS" != "true" ]; then
+              echo "::error::promote=true requires run_tests=true"
               exit 1
             fi
           fi
