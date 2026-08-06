@@ -15,7 +15,7 @@
 name: Build Docker Images - Musa
 
 on:
-  pull_request_target:
+  pull_request:
     branches: [main]
     paths:
       - 'docker/musa/**'
@@ -190,11 +190,7 @@ jobs:
           BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
           MATRIX='{"task":["train","inference","all"]}'
 
-          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
-            CANDIDATE_PUSH=true
-            RUN_TESTS=true
-            NO_CACHE=false
-          elif [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "push" ]; then
             PUBLISH=true
             CANDIDATE_PUSH=true
             RUN_TESTS=true
@@ -243,7 +239,7 @@ jobs:
 
   validate_pr:
     name: Validate MUSA PR configuration
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source (attempt 1)
@@ -314,6 +310,9 @@ jobs:
   build:
     name: Build MUSA ${{ matrix.task }}
     needs: prepare
+    # Fork PRs cannot receive Harbor credentials, and MUSA runners do not
+    # share a Docker daemon. Full image validation runs via workflow_dispatch.
+    if: github.event_name != 'pull_request'
     runs-on: flagscale-mthreads-s5000-gpu8
     strategy:
       fail-fast: false
@@ -655,8 +654,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
             test "${{ needs.validate_pr.result }}" = "success"
+            exit 0
           fi
           test "${{ needs.build.result }}" = "success"
           if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
