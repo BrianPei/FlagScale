@@ -24,9 +24,11 @@ experiment:
     backend: megatron
     entrypoint: /opt/flagscale/bin/launch_megatron_gpt.py
   runner:
-    ssh_port: null
+    backend: torchrun
     nnodes: 1
     nproc_per_node: 8
+    rdzv_backend: static
+    no_shared_fs: false
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1
