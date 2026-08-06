@@ -108,6 +108,12 @@ RUN set -eux; \
     tar -xzf /tmp/flag-gems.tar.gz --strip-components=1 \
         -C "${FLAGSCALE_DEPS}/FlagGems"; \
     rm /tmp/flag-gems.tar.gz; \
+    python -m pip install \
+        "setuptools>=64.0,<80.0" \
+        "cmake>=3.20,<4.0" \
+        "ninja==1.13.0" \
+        "scikit-build-core==0.12.2" \
+        "pybind11==3.0.3"; \
     python -m pip install --no-build-isolation -e "${FLAGSCALE_DEPS}/FlagGems"
 
 RUN set -eux; \
