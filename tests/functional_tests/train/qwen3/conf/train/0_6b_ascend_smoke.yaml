@@ -15,6 +15,10 @@
 defaults:
   - data
 
+data:
+  tokenizer:
+    tokenizer_path: /home/gitlab-runner/data/Qwen3-4B
+
 system:
   # torch_npu maps Megatron's supported NCCL choice to HCCL on Ascend.
   distributed_backend: nccl
