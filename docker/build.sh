@@ -47,7 +47,6 @@ log_error() {
 # =============================================================================
 # Default versions (same as tools/install, override via environment variables)
 # =============================================================================
-PYTHON_VERSION_WAS_SET="${PYTHON_VERSION+x}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 UV_VERSION="${UV_VERSION:-0.7.2}"
 OPENMPI_VERSION="${OPENMPI_VERSION:-4.1.6}"
@@ -264,11 +263,6 @@ build_image() {
 # =============================================================================
 main() {
     parse_args "$@"
-
-    # The validated Hygon DTK base image provides Python 3.10.
-    if [ "$PLATFORM" = "hygon" ] && [ -z "$PYTHON_VERSION_WAS_SET" ]; then
-        PYTHON_VERSION=3.10
-    fi
 
     # Validate platform
     validate_platform "$PLATFORM"
