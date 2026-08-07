@@ -169,8 +169,10 @@ RUN set -eux; \
 
 FROM deps AS dev
 
+ENTRYPOINT []
 CMD ["/bin/bash"]
 
 FROM deps AS release
 
+ENTRYPOINT []
 CMD ["/bin/bash"]
