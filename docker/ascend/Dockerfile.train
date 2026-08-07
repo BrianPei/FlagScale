@@ -32,6 +32,14 @@ RUN apt-get update && \
         build-essential ca-certificates curl git ninja-build && \
     rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /opt/flagscale/test_data && \
+    curl -fL --retry 5 --retry-delay 5 \
+        -o /opt/flagscale/test_data/pile_wikipedia_demo.idx \
+        https://baai-flagscale.ks3-cn-beijing.ksyuncs.com/datasets/pile_wikipedia_demo/pile_wikipedia_demo.idx && \
+    curl -fL --retry 5 --retry-delay 5 \
+        -o /opt/flagscale/test_data/pile_wikipedia_demo.bin \
+        https://baai-flagscale.ks3-cn-beijing.ksyuncs.com/datasets/pile_wikipedia_demo/pile_wikipedia_demo.bin
+
 COPY tools/install/ascend/env.sh /etc/profile.d/flagscale-env.sh
 WORKDIR /workspace
 

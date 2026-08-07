@@ -16,6 +16,7 @@ defaults:
   - data
 
 data:
+  data_path: /opt/flagscale/test_data/pile_wikipedia_demo
   tokenizer:
     tokenizer_path: /home/gitlab-runner/data/Qwen3-4B
 
