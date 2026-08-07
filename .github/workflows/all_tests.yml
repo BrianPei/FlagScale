@@ -113,8 +113,9 @@ jobs:
     name: Hygon BW1000 tests
     needs: check_docker_changes
     if: >-
-      (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'hygon')) ||
-      (github.event_name == 'pull_request' && needs.check_docker_changes.outputs.has_hygon_changes == 'true')
+      always() &&
+      ((github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'hygon')) ||
+      (github.event_name == 'pull_request' && needs.check_docker_changes.outputs.has_hygon_changes == 'true'))
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: hygon
