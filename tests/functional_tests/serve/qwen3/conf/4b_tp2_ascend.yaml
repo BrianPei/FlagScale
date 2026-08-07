@@ -28,7 +28,7 @@ experiment:
       port: 6703
       use_fs_serve: false
   envs:
-    ASCEND_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
+    ASCEND_VISIBLE_DEVICES: "4,5"
     HCCL_WHITELIST_DISABLE: 1
     # Serialize Triton launcher compilation to avoid concurrent .gch writes.
     CC: ./tools/install/ascend/triton_gxx_wrapper.sh
