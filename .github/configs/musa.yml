@@ -29,9 +29,11 @@ ci_inference_image: harbor.baai.ac.cn/flagscale/flagscale-inference:dev-musa-s50
 runner_labels: ["flagscale-mthreads-s5000-gpu8"]
 
 # Container volumes (hardware-specific paths)
+# KS3 is network-backed and caused incomplete safetensors reads and slow
+# random-access training. Stage data on every MUSA runner host.
 container_volumes:
-  - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
-  - /mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers
+  - /home/secure/cicd_dev/flagscale-data/baai_datasets:/home/gitlab-runner/data
+  - /home/secure/cicd_dev/flagscale-data/baai_tokenizers:/home/gitlab-runner/tokenizers
 
 # Container options for MThreads MUSA runtime
 container_options: >-
