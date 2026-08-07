@@ -32,6 +32,7 @@ experiment:
     ASCEND_RT_VISIBLE_DEVICES: "0,1"
     HCCL_CONNECT_TIMEOUT: "1800"
     NCCL_ALGO: "Ring"
+    NVTE_ALLOW_NONDETERMINISTIC_ALGO: "0"
   cmds:
     before_start: ''
 
