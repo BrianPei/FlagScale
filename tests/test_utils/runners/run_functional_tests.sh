@@ -204,12 +204,22 @@ run_test() {
 
             if [ $ready -eq 0 ]; then
                 log_error "Service did not become ready within ${max_wait}s on port $serve_port"
+                local serve_log
+                for serve_log in "$exp_dir"/serve_logs/host*.output; do
+                    [ -f "$serve_log" ] || continue
+                    log_error "Serve output: $serve_log"
+                    tail -n 200 "$serve_log" || true
+                done
+                flagscale serve "$model" --config "$config_file" --stop || true
                 return 1
             fi
         fi
 
         if ! "${validator_cmd[@]}"; then
             log_error "Validation failed for $task/$model/$config"
+            if [ "$task" = "serve" ]; then
+                flagscale serve "$model" --config "$config_file" --stop || true
+            fi
             return 1
         fi
 
