@@ -207,9 +207,8 @@ class Utils:
         if torch.distributed.is_initialized():
             Utils.distributed_barrier()
         ps.destroy_model_parallel()
-        if torch.distributed.is_initialized():
-            torch.distributed.destroy_process_group()
-        Utils.store = None
+        # Keep torchrun's default group alive across tests, matching Megatron's
+        # unit-test lifecycle. Per-test teardown can race accelerator subgroups.
         Utils.inited = False
 
     @staticmethod
