@@ -16,8 +16,6 @@ import os
 from datetime import timedelta
 
 import torch
-from torch._C._distributed_c10d import PrefixStore
-from torch.distributed import rendezvous
 
 import megatron.core.parallel_state as ps
 
@@ -72,7 +70,6 @@ class Utils:
     world_size = int(os.environ["WORLD_SIZE"])
     rank = int(os.environ["LOCAL_RANK"])
     inited = False
-    store = None
 
     @staticmethod
     def platform():
@@ -156,26 +153,14 @@ class Utils:
             set_device = getattr(accelerator, "set_device", None)
             if callable(set_device):
                 set_device(Utils.rank % Utils.accelerator_device_count())
-            init_method = "tcp://"
-            master_ip = os.getenv("MASTER_ADDR", "localhost")
-            master_port = os.getenv("MASTER_PORT", "6000")
-            init_method += master_ip + ":" + master_port
-            rendezvous_iterator = rendezvous(
-                init_method, Utils.rank, Utils.world_size, timeout=timedelta(minutes=1)
-            )
-            store, rank, world_size = next(rendezvous_iterator)
-            store.set_timeout(timedelta(minutes=1))
-
-            # Use a PrefixStore to avoid accidental overrides of keys used by
-            # different systems (e.g. RPC) in case the store is multi-tenant.
-            store = PrefixStore("default_pg", store)
-            Utils.store = store
-
+            os.environ.setdefault("MASTER_ADDR", "localhost")
+            os.environ.setdefault("MASTER_PORT", "6000")
             torch.distributed.init_process_group(
                 backend=Utils.dist_backend(),
+                init_method="env://",
                 world_size=Utils.world_size,
                 rank=Utils.rank,
-                store=store,
+                timeout=timedelta(minutes=5),
             )
 
             Utils.distributed_barrier()
