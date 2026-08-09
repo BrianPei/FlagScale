@@ -33,6 +33,7 @@ s5000:
         qwen2_5: ["0.5b_musa"]
       rl: {}
     unit:
+      nproc_per_node: 2
       include: "*"
       exclude:
         - tests/unit_tests/runner/test_parse_hostfile.py

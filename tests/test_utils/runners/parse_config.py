@@ -181,7 +181,7 @@ def get_unit_tests_config(platform, device=None):
         device: Device type (e.g., 'a100', 'a800')
 
     Returns:
-        Dict with 'include' and 'exclude' patterns
+        Dict with unit test selection and process count settings
 
     Raises:
         ValueError: If platform is not specified
@@ -193,10 +193,14 @@ def get_unit_tests_config(platform, device=None):
         config, device = get_platform_config(platform, device)
         platform_data = get_platform_data(config, device)
         unit_tests = platform_data.get("tests", {}).get("unit", {})
-        return {"include": unit_tests.get("include", "*"), "exclude": unit_tests.get("exclude", [])}
+        return {
+            "include": unit_tests.get("include", "*"),
+            "exclude": unit_tests.get("exclude", []),
+            "nproc_per_node": unit_tests.get("nproc_per_node"),
+        }
     except Exception as e:
         print(f"Error getting unit test config: {e}", file=sys.stderr)
-        return {"include": "*", "exclude": []}
+        return {"include": "*", "exclude": [], "nproc_per_node": None}
 
 
 def get_functional_tests(platform, device=None, task=None, model=None, test_list=None):
