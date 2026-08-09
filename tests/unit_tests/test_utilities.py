@@ -134,6 +134,14 @@ class Utils:
         return torch.device(f"{Utils.torch_device_type()}:{index}")
 
     @staticmethod
+    def distributed_barrier():
+        if Utils.has_accelerator():
+            device_index = Utils.rank % Utils.accelerator_device_count()
+            torch.distributed.barrier(device_ids=[device_index])
+        else:
+            torch.distributed.barrier()
+
+    @staticmethod
     def initialize_distributed():
         os.environ.pop("NVTE_FLASH_ATTN", None)
         os.environ.pop("NVTE_FUSED_ATTN", None)
@@ -170,7 +178,7 @@ class Utils:
                 store=store,
             )
 
-            torch.distributed.barrier()
+            Utils.distributed_barrier()
         Utils.inited = True
 
     @staticmethod
@@ -197,7 +205,7 @@ class Utils:
         if not Utils.inited:
             return
         if torch.distributed.is_initialized():
-            torch.distributed.barrier()
+            Utils.distributed_barrier()
         ps.destroy_model_parallel()
         if torch.distributed.is_initialized():
             torch.distributed.destroy_process_group()
