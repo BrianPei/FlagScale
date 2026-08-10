@@ -27,4 +27,6 @@ bw1000:
       serve: {}
     unit:
       include: []
-      exclude: []
+      exclude:
+        # The vendor Python 3.10 runtime has no stdlib tomllib module.
+        - tests/unit_tests/test_init.py::test_get_version_fallback_to_default
