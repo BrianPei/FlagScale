@@ -19,6 +19,9 @@ llm:
   tensor_parallel_size: 2
   pipeline_parallel_size: 1
   gpu_memory_utilization: 0.5
+  # KS3-backed checkpoints must be read sequentially. Lazy mmap loading can
+  # trigger slow random reads and native worker crashes on MUSA.
+  safetensors_load_strategy: eager
   max_model_len: 1024
   seed: 1234
   enforce_eager: true

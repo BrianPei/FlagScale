@@ -19,6 +19,8 @@
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     gpu_memory_utilization: 0.5
+    # Avoid lazy mmap reads from the network-backed model volume.
+    safetensors_load_strategy: eager
     max_model_len: 1024
     max_num_seqs: 16
     enforce_eager: true
