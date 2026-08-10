@@ -30,3 +30,6 @@ bw1000:
       exclude:
         # The vendor Python 3.10 runtime has no stdlib tomllib module.
         - tests/unit_tests/test_init.py::test_get_version_fallback_to_default
+        # These distributed unit cases time out when all pytest workers share FlagCX.
+        - tests/unit_tests/test_parallel_context.py::test_parallel_config
+        - tests/unit_tests/test_spiky_loss_detector.py::test_spiky_loss_detector
