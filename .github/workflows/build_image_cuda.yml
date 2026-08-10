@@ -165,7 +165,7 @@ jobs:
   build:
     name: Build ${{ matrix.task }}
     needs: prepare
-    runs-on: [flagscale-nvidia-a100-gpu2-32c-128g]
+    runs-on: flagscale-nvidia-a100-gpu2-32c-128g
     env:
       HTTP_PROXY: ${{ vars.HTTP_PROXY }}
       HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
@@ -330,7 +330,7 @@ jobs:
   load_images:
     name: Load and push images
     needs: ['build', 'summary']
-    runs-on: [flagscale-nvidia-a100-gpu2-32c-128g]
+    runs-on: flagscale-nvidia-a100-gpu2-32c-128g
     steps:
       - name: Load train image from tar and push
         run: |
