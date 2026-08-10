@@ -20,9 +20,8 @@ on:
     paths-ignore:
       - 'docs/**'
       - 'docker/cuda/**'
-      - 'docker/build.sh'
-      - 'tools/install/**'
-      - 'requirements/**'
+      - 'tools/install/cuda/**'
+      - 'requirements/cuda/**'
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/push_image_harbor.yml'
   pull_request:
@@ -30,9 +29,8 @@ on:
     paths-ignore:
       - 'docs/**'
       - 'docker/cuda/**'
-      - 'docker/build.sh'
-      - 'tools/install/**'
-      - 'requirements/**'
+      - 'tools/install/cuda/**'
+      - 'requirements/cuda/**'
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/push_image_harbor.yml'
   workflow_dispatch:
@@ -73,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           CHANGED=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files --paginate --jq '.[].filename')
-          if echo "$CHANGED" | grep -qE '^(docker/cuda/|docker/build\.sh$|tools/install/|requirements/|\.github/workflows/build_image_cuda\.yml$)'; then
+          if echo "$CHANGED" | grep -qE '^(docker/cuda/|tools/install/cuda/|requirements/cuda/|\.github/workflows/build_image_cuda\.yml$)'; then
             echo "has_docker_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_docker_changes=false" >> $GITHUB_OUTPUT
