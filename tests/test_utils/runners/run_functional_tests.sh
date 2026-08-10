@@ -170,7 +170,7 @@ run_test() {
             serve_port=$(grep -oP 'port:\s*\K[0-9]+' "$config_file" | head -1)
 
             local max_wait=600   # ascend: 10 min
-            [ "$PLATFORM" != "ascend" ] && max_wait=180   # others: 1 min
+            [ "$PLATFORM" != "ascend" ] && max_wait="${FS_SERVE_READY_TIMEOUT:-180}"
             local interval=10
             local elapsed=0
             local ready=0

@@ -315,7 +315,9 @@ jobs:
 
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           exit $exit_code
-        timeout-minutes: 15
+        # MUSA reads the real Qwen3 checkpoint from network-backed KS3 storage.
+        # Eager loading avoids mmap crashes but needs a longer startup window.
+        timeout-minutes: ${{ inputs.platform == 'musa' && 45 || 15 }}
 
       - name: Upload Functional Test Logs
         if: always() && steps.functional_test.outcome == 'failure'

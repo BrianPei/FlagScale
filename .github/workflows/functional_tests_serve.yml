@@ -250,6 +250,8 @@ jobs:
         id: functional_test
         env:
           no_proxy: "localhost"
+          # The MUSA service loads real weights from network-backed storage.
+          FS_SERVE_READY_TIMEOUT: ${{ inputs.platform == 'musa' && '600' || '' }}
         run: |
           set -euo pipefail
           cd $PROJECT_ROOT
