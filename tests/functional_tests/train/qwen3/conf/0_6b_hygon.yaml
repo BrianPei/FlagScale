@@ -30,6 +30,9 @@ experiment:
     HYDRA_FULL_ERROR: 1
     CUDA_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7"
     CUDA_DEVICE_MAX_CONNECTIONS: 1
+    # Override the base image's vendor-specific setting with an algorithm
+    # accepted by the DTK NCCL compatibility layer on BW1000.
+    NCCL_ALGO: "Ring"
     GEMS_VENDOR: amd
     TORCHINDUCTOR_WORKER_START: spawn
   cmds:
