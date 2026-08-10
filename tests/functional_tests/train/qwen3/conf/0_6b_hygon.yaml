@@ -33,6 +33,9 @@ experiment:
     # Override the base image's vendor-specific setting with an algorithm
     # accepted by the DTK NCCL compatibility layer on BW1000.
     NCCL_ALGO: "Ring"
+    # Megatron deterministic mode requires Transformer Engine to reject
+    # nondeterministic attention implementations.
+    NVTE_ALLOW_NONDETERMINISTIC_ALGO: 0
     GEMS_VENDOR: amd
     TORCHINDUCTOR_WORKER_START: spawn
   cmds:
