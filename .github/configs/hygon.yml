@@ -35,7 +35,6 @@ container_options: >-
   --device=/dev/dri
   --group-add video
   --ipc=host
-  --network=host
   --shm-size=64g
   --user root
   --ulimit nofile=1048576:1048576
