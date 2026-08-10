@@ -32,9 +32,6 @@ experiment:
     CUDA_DEVICE_MAX_CONNECTIONS: 1
     GEMS_VENDOR: amd
     TORCHINDUCTOR_WORKER_START: spawn
-    # DTK exposes CUDA-compatible libraries while device management stays in
-    # the host-mounted Hygon HAL directories.
-    LD_LIBRARY_PATH: /opt/dtk/cuda/cuda-12/lib64:/opt/hyhal/lib:/opt/hyhal/lib64
   cmds:
     before_start: ulimit -n 1048576
 action: run
