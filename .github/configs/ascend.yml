@@ -20,9 +20,9 @@ hardware_name: ascend
 display_name: "Ascend NPU Tests"
 
 # Docker image for this hardware
-ci_image: harbor.baai.ac.cn/flagscale/vllm-plugin-fl:v0.1.0-ascend-ci
+ci_image: harbor.baai.ac.cn/flagos-dev/flagscale:d93a965-ascend-dev
 ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260724-ascend-train-426ad116-te771a7488
-ci_inference_image: harbor.baai.ac.cn/flagscale/vllm-plugin-fl:v0.1.0-ascend-ci
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:d93a965-ascend-dev
 
 # Runner labels for this hardware
 runner_labels: ["flagscale-ascend-ascend910-gpu2-32c-128g"]

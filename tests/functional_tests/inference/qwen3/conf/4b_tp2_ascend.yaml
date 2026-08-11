@@ -37,10 +37,8 @@ experiment:
     MKL_NUM_THREADS: 1
     OMP_NUM_THREADS: 1
     NUMEXPR_NUM_THREADS: 1
-    # Avoid a Triton launcher .gch race between the two vLLM workers.
-    CC: ./tests/test_utils/runners/triton_gxx_wrapper.sh
-    VLLM_TARGET_DEVICE: "npu"
-    VLLM_PLATFORM_PLUGINS: "ascend"
+    VLLM_PLUGINS: "fl"
+    VLLM_FL_PLATFORM: "ascend"
 
 action: run
 

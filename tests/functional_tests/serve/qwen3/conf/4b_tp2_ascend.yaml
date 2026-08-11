@@ -30,10 +30,8 @@ experiment:
   envs:
     ASCEND_VISIBLE_DEVICES: "4,5"
     HCCL_WHITELIST_DISABLE: 1
-    # Avoid a Triton launcher .gch race between the two vLLM workers.
-    CC: ./tests/test_utils/runners/triton_gxx_wrapper.sh
-    VLLM_TARGET_DEVICE: "npu"
-    VLLM_PLATFORM_PLUGINS: "ascend"
+    VLLM_PLUGINS: "fl"
+    VLLM_FL_PLATFORM: "ascend"
     no_proxy: "127.0.0.1,localhost"
 
 action: run
