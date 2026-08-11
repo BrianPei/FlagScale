@@ -84,6 +84,8 @@ jobs:
     name: Build ${{ inputs.platform }} ${{ inputs.task }} image
     needs: prepare
     runs-on: ${{ fromJSON(needs.prepare.outputs.runs_on) }}
+    # GitHub treats environment keys case-insensitively; uppercase proxy names
+    # are also honored by Docker and pip, so do not duplicate lowercase forms.
     env:
       HTTP_PROXY: ${{ vars.HTTP_PROXY }}
       HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
