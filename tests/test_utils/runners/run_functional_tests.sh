@@ -206,6 +206,7 @@ run_test() {
                             if [ -n "$serve_log_file" ] && [ -r "$serve_log_file" ]; then
                                 tail -n 80 "$serve_log_file"
                             fi
+                            flagscale serve "$model" --config "$config_file" --stop || true
                             return 1
                         fi
                     fi
@@ -236,12 +237,16 @@ run_test() {
                 if [ -n "$serve_log_file" ] && [ -r "$serve_log_file" ]; then
                     tail -n 80 "$serve_log_file"
                 fi
+                flagscale serve "$model" --config "$config_file" --stop || true
                 return 1
             fi
         fi
 
         if ! "${validator_cmd[@]}"; then
             log_error "Validation failed for $task/$model/$config"
+            if [ "$task" = "serve" ]; then
+                flagscale serve "$model" --config "$config_file" --stop || true
+            fi
             return 1
         fi
 

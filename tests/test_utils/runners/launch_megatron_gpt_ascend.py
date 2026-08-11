@@ -12,7 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Initialize the Ascend training stack before running Megatron GPT training."""
+"""Initialize the pinned Ascend training stack before Megatron imports.
+
+The current CI image imports ``transfer_to_npu`` while Megatron registers its
+platform. TransformerEngine must select and then restore its NPU compatibility
+layer around that import. Remove this launcher after the pinned TE/Megatron
+runtime can execute FlagScale's standard training entrypoint directly.
+"""
 
 import runpy
 import sys
@@ -28,7 +34,6 @@ if transformer_engine.te_device_type() != "npu":
         f"TransformerEngine selected {transformer_engine.te_device_type()}, expected npu"
     )
 
-# Select TE's NPU backend before Megatron imports transfer_to_npu.
 from megatron.plugin.platform import get_platform
 
 platform = get_platform()

@@ -30,7 +30,7 @@ experiment:
   envs:
     ASCEND_VISIBLE_DEVICES: "4,5"
     HCCL_WHITELIST_DISABLE: 1
-    # Serialize Triton launcher compilation to avoid concurrent .gch writes.
+    # Avoid a Triton launcher .gch race between the two vLLM workers.
     CC: ./tests/test_utils/runners/triton_gxx_wrapper.sh
     VLLM_TARGET_DEVICE: "npu"
     VLLM_PLATFORM_PLUGINS: "ascend"

@@ -24,7 +24,11 @@ experiment:
     backend: megatron
     entrypoint: tests/test_utils/runners/launch_megatron_gpt_ascend.py
   runner:
-    ssh_port: null
+    backend: torchrun
+    nnodes: 1
+    nproc_per_node: 2
+    rdzv_backend: static
+    no_shared_fs: false
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1

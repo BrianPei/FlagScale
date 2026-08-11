@@ -15,9 +15,8 @@
 
 set -euo pipefail
 
-# Triton Ascend can compile the same precompiled launcher header from several
-# vLLM workers at once. Serialize those compiler calls until upstream cache
-# creation is process-safe.
+# Triton workers can compile the same precompiled launcher header concurrently.
+# Serialize these short compiler calls so GCC never consumes a partial .gch.
 compiler="${FLAGSCALE_TRITON_CXX:-/usr/bin/g++}"
 lock_file="${FLAGSCALE_TRITON_CXX_LOCK:-/tmp/flagscale-triton-gxx.lock}"
 
