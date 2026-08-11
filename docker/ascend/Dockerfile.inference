@@ -43,30 +43,21 @@ RUN git clone https://github.com/flagos-ai/vllm-plugin-FL.git /tmp/vllm-plugin-F
 
 # Validate the installed stack through vLLM's standard plugin entry point.
 # This check is read-only and must not apply compatibility patches.
-RUN python -m pip check && python - <<'PY'
-import importlib.metadata as metadata
-
-vllm_version = metadata.version("vllm")
-plugin_version = metadata.version("vllm-plugin-fl")
-print("vllm:", vllm_version)
-print("plugin:", plugin_version)
-if not vllm_version.startswith("0.20.2"):
-    raise RuntimeError(f"Expected vLLM 0.20.2, got {vllm_version}")
-
-from vllm.platforms import current_platform
-
-platform_type = type(current_platform)
-print("platform:", platform_type.__module__, platform_type.__name__)
-print("device_type:", current_platform.device_type)
-print("dist_backend:", current_platform.dist_backend)
-
-if platform_type.__module__ != "vllm_fl.platform" or platform_type.__name__ != "PlatformFL":
-    raise RuntimeError(f"Unexpected platform plugin: {platform_type}")
-if current_platform.device_type != "npu":
-    raise RuntimeError(f"Expected NPU device type, got {current_platform.device_type}")
-if current_platform.dist_backend != "hccl":
-    raise RuntimeError(f"Expected HCCL backend, got {current_platform.dist_backend}")
-PY
+RUN python -m pip check && \
+    python -c 'import importlib.metadata as metadata; \
+from vllm.platforms import current_platform; \
+vllm_version = metadata.version("vllm"); \
+plugin_version = metadata.version("vllm-plugin-fl"); \
+platform_type = type(current_platform); \
+print("vllm:", vllm_version); \
+print("plugin:", plugin_version); \
+print("platform:", platform_type.__module__, platform_type.__name__); \
+print("device_type:", current_platform.device_type); \
+print("dist_backend:", current_platform.dist_backend); \
+assert vllm_version.startswith("0.20.2"), vllm_version; \
+assert platform_type.__module__ == "vllm_fl.platform", platform_type; \
+assert platform_type.__name__ == "PlatformFL", platform_type; \
+assert current_platform.device_type == "npu", current_platform.device_type; \
+assert current_platform.dist_backend == "hccl", current_platform.dist_backend'
 
 WORKDIR /workspace
-
