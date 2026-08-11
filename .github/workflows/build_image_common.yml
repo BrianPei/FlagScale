@@ -88,9 +88,6 @@ jobs:
       HTTP_PROXY: ${{ vars.HTTP_PROXY }}
       HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
       NO_PROXY: ${{ vars.NO_PROXY }}
-      http_proxy: ${{ vars.HTTP_PROXY }}
-      https_proxy: ${{ vars.HTTPS_PROXY }}
-      no_proxy: ${{ vars.NO_PROXY }}
     steps:
       - uses: actions/checkout@v4
 
