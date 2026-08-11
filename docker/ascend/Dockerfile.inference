@@ -1,0 +1,72 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+ARG BASE_IMAGE=quay.io/ascend/vllm-ascend:v0.20.2rc1-a3
+
+FROM ${BASE_IMAGE}
+
+ARG VLLM_PLUGIN_FL_REF=43edeb601f4b8f616f56109de64836529e758deb
+ARG FLAGGEMS_REF=3e6528cf04f5f964a7b0fa6628de6f0410dbfd02
+
+LABEL io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF} \
+      io.flagscale.flaggems.revision=${FLAGGEMS_REF}
+
+ENV VLLM_PLUGINS=fl \
+    VLLM_FL_PLATFORM=ascend \
+    TRITON_ALL_BLOCKS_PARALLEL=1
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/flagos-ai/FlagGems.git /tmp/FlagGems && \
+    git -C /tmp/FlagGems checkout "${FLAGGEMS_REF}" && \
+    python -m pip install --no-cache-dir --no-build-isolation /tmp/FlagGems && \
+    rm -rf /tmp/FlagGems
+
+RUN git clone https://github.com/flagos-ai/vllm-plugin-FL.git /tmp/vllm-plugin-FL && \
+    git -C /tmp/vllm-plugin-FL checkout "${VLLM_PLUGIN_FL_REF}" && \
+    python -m pip install --no-cache-dir --no-build-isolation --no-deps \
+        /tmp/vllm-plugin-FL && \
+    rm -rf /tmp/vllm-plugin-FL
+
+# Validate the installed stack through vLLM's standard plugin entry point.
+# This check is read-only and must not apply compatibility patches.
+RUN python -m pip check && python - <<'PY'
+import importlib.metadata as metadata
+
+vllm_version = metadata.version("vllm")
+plugin_version = metadata.version("vllm-plugin-fl")
+print("vllm:", vllm_version)
+print("plugin:", plugin_version)
+if not vllm_version.startswith("0.20.2"):
+    raise RuntimeError(f"Expected vLLM 0.20.2, got {vllm_version}")
+
+from vllm.platforms import current_platform
+
+platform_type = type(current_platform)
+print("platform:", platform_type.__module__, platform_type.__name__)
+print("device_type:", current_platform.device_type)
+print("dist_backend:", current_platform.dist_backend)
+
+if platform_type.__module__ != "vllm_fl.platform" or platform_type.__name__ != "PlatformFL":
+    raise RuntimeError(f"Unexpected platform plugin: {platform_type}")
+if current_platform.device_type != "npu":
+    raise RuntimeError(f"Expected NPU device type, got {current_platform.device_type}")
+if current_platform.dist_backend != "hccl":
+    raise RuntimeError(f"Expected HCCL backend, got {current_platform.dist_backend}")
+PY
+
+WORKDIR /workspace
+

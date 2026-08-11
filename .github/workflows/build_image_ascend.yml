@@ -1,0 +1,134 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Docker Images - Ascend
+
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: Push the validated candidate image to Harbor
+        type: boolean
+        default: true
+      tag:
+        description: Optional image tag override
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-image-ascend-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: harbor.baai.ac.cn
+  IMAGE_REPOSITORY: flagscale/flagscale-inference
+  VLLM_PLUGIN_FL_REF: 43edeb601f4b8f616f56109de64836529e758deb
+  FLAGGEMS_REF: 3e6528cf04f5f964a7b0fa6628de6f0410dbfd02
+
+jobs:
+  build:
+    name: Build Ascend vLLM 0.20.2 candidate
+    runs-on: flagscale-ascend-ascend910-gpu2-32c-128g
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve candidate tag
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+          tag='${{ inputs.tag }}'
+          if [ -z "$tag" ]; then
+            tag="ascend-vllm0.20.2-fl-43edeb6-${short_sha}"
+          fi
+          image="${REGISTRY}/${IMAGE_REPOSITORY}:${tag}"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Candidate image: $image"
+
+      - name: Log in to Harbor
+        if: inputs.push
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Build candidate image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull \
+            --file docker/ascend/Dockerfile.inference \
+            --build-arg VLLM_PLUGIN_FL_REF="$VLLM_PLUGIN_FL_REF" \
+            --build-arg FLAGGEMS_REF="$FLAGGEMS_REF" \
+            --tag '${{ steps.image.outputs.image }}' \
+            .
+
+      - name: Verify installed versions and platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -i --entrypoint python '${{ steps.image.outputs.image }}' - <<'PY'
+          import importlib.metadata as metadata
+          from vllm.platforms import current_platform
+          from vllm_fl.version import git_version
+
+          packages = ("vllm", "vllm-plugin-fl", "vllm-ascend", "torch", "torch-npu")
+          for package in packages:
+              try:
+                  print(package, metadata.version(package))
+              except metadata.PackageNotFoundError:
+                  print(package, "MISSING")
+                  raise
+
+          platform_type = type(current_platform)
+          print("plugin_commit:", git_version)
+          print("platform:", platform_type.__module__, platform_type.__name__)
+          print("device_type:", current_platform.device_type)
+          print("dist_backend:", current_platform.dist_backend)
+          assert metadata.version("vllm").startswith("0.20.2")
+          assert git_version.startswith("43edeb6")
+          assert platform_type.__module__ == "vllm_fl.platform"
+          assert platform_type.__name__ == "PlatformFL"
+          assert current_platform.device_type == "npu"
+          assert current_platform.dist_backend == "hccl"
+          PY
+
+      - name: Push candidate image
+        if: inputs.push
+        shell: bash
+        run: docker push '${{ steps.image.outputs.image }}'
+
+      - name: Record image digest and dependency revisions
+        if: inputs.push
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest=$(docker image inspect \
+            --format '{{index .RepoDigests 0}}' \
+            '${{ steps.image.outputs.image }}')
+          {
+            echo '### Ascend candidate image'
+            echo
+            echo "- Image: \`${{ steps.image.outputs.image }}\`"
+            echo "- Digest: \`${digest}\`"
+            echo "- vllm-plugin-FL: \`${VLLM_PLUGIN_FL_REF}\`"
+            echo "- FlagGems: \`${FLAGGEMS_REF}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
