@@ -34,10 +34,9 @@ experiment:
     HYDRA_FULL_ERROR: 1
     FS_PLATFORM: musa
     MG_FL_PREFER: musa
+    TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD: 1
     # The pinned S5000 TransformerEngine build is validated in eager mode.
     # Disable torch/TE compilation to avoid unsupported Triton lowering paths.
-    TORCH_DEVICE_BACKEND_AUTOLOAD: 0
-    TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD: 1
     TORCHDYNAMO_DISABLE: 1
     TORCH_COMPILE_DISABLE: 1
     NVTE_TORCH_COMPILE: 0
