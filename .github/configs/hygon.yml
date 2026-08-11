@@ -24,6 +24,30 @@ ci_inference_image: localhost:5000/flagscale-hygon-train:8b5c7f1-finalized
 
 runner_labels: ["flagscale-hygon-bw1000-gpu8"]
 
+# Image construction is consumed by build_image_common.yml. FlagCX must be
+# finalized on a BW1000 host because its native extension probes DTK devices.
+build:
+  tasks:
+    train:
+      dockerfile: docker/hygon/Dockerfile.train
+      image: localhost:5000/flagscale-hygon-train:8b5c7f1-finalized
+      target: dev
+      buildkit: false
+      finalize_options: >-
+        --device=/dev/kfd
+        --device=/dev/dri
+        --group-add video
+        --ipc=host
+        --volume /opt/hyhal:/opt/hyhal:ro
+        --cap-add SYS_PTRACE
+        --security-opt seccomp=unconfined
+      finalize_command: /usr/local/bin/flagscale-hygon-finalize-flagcx
+      verify_command: >-
+        python -c 'import torch; import flag_gems; import transformer_engine;
+        import flagcx; from flagcx import _C;
+        assert torch.cuda.device_count() == 8;
+        print("Hygon training stack: OK")'
+
 container_volumes:
   - /opt/hyhal:/opt/hyhal:ro
   - /public-flash/lihongyang/data:/home/gitlab-runner/data:ro

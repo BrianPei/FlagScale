@@ -1,0 +1,172 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build vendor image
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        description: Platform config name under .github/configs
+        required: true
+        type: string
+      task:
+        description: Image task from the platform build config
+        required: false
+        default: train
+        type: string
+      target:
+        description: Optional Docker target override
+        required: false
+        default: ''
+        type: string
+      push:
+        description: Push the completed image to its configured registry
+        required: false
+        default: false
+        type: boolean
+      no_cache:
+        description: Build without Docker layer cache
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Load ${{ inputs.platform }} build config
+    runs-on: ubuntu-latest
+    outputs:
+      config: ${{ steps.config.outputs.config }}
+      runs_on: ${{ steps.config.outputs.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/configs
+
+      - name: Read vendor build settings
+        id: config
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          TASK: ${{ inputs.task }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          ruby <<'RUBY'
+          require "json"
+          require "yaml"
+
+          platform = ENV.fetch("PLATFORM")
+          config = YAML.safe_load_file(".github/configs/#{platform}.yml")
+          task = config.dig("build", "tasks", ENV.fetch("TASK"))
+          abort "missing build.tasks.#{ENV.fetch('TASK')} in #{platform}.yml" unless task
+          task["target"] = ENV["TARGET"] unless ENV["TARGET"].to_s.empty?
+
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
+            output.puts "config=#{JSON.generate(task)}"
+            output.puts "runs_on=#{JSON.generate(config.fetch('runner_labels'))}"
+          end
+          RUBY
+
+  build:
+    name: Build ${{ inputs.platform }} ${{ inputs.task }} image
+    needs: prepare
+    runs-on: ${{ fromJSON(needs.prepare.outputs.runs_on) }}
+    env:
+      HTTP_PROXY: ${{ vars.HTTP_PROXY }}
+      HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
+      NO_PROXY: ${{ vars.NO_PROXY }}
+      http_proxy: ${{ vars.HTTP_PROXY }}
+      https_proxy: ${{ vars.HTTPS_PROXY }}
+      no_proxy: ${{ vars.NO_PROXY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        env:
+          CONFIG: ${{ needs.prepare.outputs.config }}
+          NO_CACHE: ${{ inputs.no_cache }}
+        run: |
+          mapfile -t values < <(python3 -c '
+          import json, os
+          config = json.loads(os.environ["CONFIG"])
+          for key in ("dockerfile", "image", "target", "buildkit"):
+              print(str(config.get(key, "")).lower())
+          ')
+          dockerfile="${values[0]}"
+          image="${values[1]}"
+          target="${values[2]}"
+          buildkit="${values[3]}"
+
+          args=(--network=host --file "$dockerfile" --tag "$image")
+          [ -n "$target" ] && args+=(--target "$target")
+          [ "$NO_CACHE" = "true" ] && args+=(--no-cache)
+          [ -n "${HTTP_PROXY:-}" ] && args+=(--build-arg "HTTP_PROXY=$HTTP_PROXY")
+          [ -n "${HTTPS_PROXY:-}" ] && args+=(--build-arg "HTTPS_PROXY=$HTTPS_PROXY")
+          [ -n "${NO_PROXY:-}" ] && args+=(--build-arg "NO_PROXY=$NO_PROXY")
+
+          if [ "$buildkit" = "false" ]; then
+            DOCKER_BUILDKIT=0 docker build "${args[@]}" .
+          else
+            docker build "${args[@]}" .
+          fi
+
+      - name: Finalize image on vendor hardware
+        env:
+          CONFIG: ${{ needs.prepare.outputs.config }}
+        run: |
+          image=$(python3 -c 'import json, os; print(json.loads(os.environ["CONFIG"])["image"])')
+          options=$(python3 -c 'import json, os; print(json.loads(os.environ["CONFIG"]).get("finalize_options") or "")')
+          command=$(python3 -c 'import json, os; print(json.loads(os.environ["CONFIG"]).get("finalize_command") or "")')
+          [ -z "$command" ] && exit 0
+
+          read -r -a options_array <<< "$options"
+          container="flagscale-${{ inputs.platform }}-${{ inputs.task }}-finalize-${GITHUB_RUN_ID}"
+          cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run --name "$container" "${options_array[@]}" \
+            --entrypoint bash "$image" -lc "$command"
+          docker commit --change 'ENTRYPOINT ["/bin/bash"]' --change 'CMD []' \
+            "$container" "$image"
+
+      - name: Verify image
+        env:
+          CONFIG: ${{ needs.prepare.outputs.config }}
+        run: |
+          image=$(python3 -c 'import json, os; print(json.loads(os.environ["CONFIG"])["image"])')
+          options=$(python3 -c 'import json, os; print(json.loads(os.environ["CONFIG"]).get("finalize_options") or "")')
+          command=$(python3 -c 'import json, os; print(json.loads(os.environ["CONFIG"]).get("verify_command") or "")')
+          [ -z "$command" ] && exit 0
+          read -r -a options_array <<< "$options"
+          docker run --rm "${options_array[@]}" --entrypoint bash "$image" -lc "$command"
+
+      - name: Push image
+        if: inputs.push
+        env:
+          CONFIG: ${{ needs.prepare.outputs.config }}
+        run: |
+          image=$(python3 -c 'import json, os; print(json.loads(os.environ["CONFIG"])["image"])')
+          docker push "$image"
+
+      - name: Write build summary
+        if: always()
+        env:
+          CONFIG: ${{ needs.prepare.outputs.config }}
+        run: |
+          image=$(python3 -c 'import json, os; print(json.loads(os.environ["CONFIG"])["image"])')
+          echo "### ${{ inputs.platform }} image build" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Task: ${{ inputs.task }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: \`$image\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Push: ${{ inputs.push }}" >> "$GITHUB_STEP_SUMMARY"

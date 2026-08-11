@@ -24,6 +24,11 @@ on:
       - 'requirements/cuda/**'
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/push_image_harbor.yml'
+      - 'docker/hygon/**'
+      - 'tools/install/hygon/**'
+      - 'requirements/hygon/**'
+      - '.github/workflows/build_image_hygon.yml'
+      - '.github/workflows/build_image_common.yml'
   pull_request:
     branches: ["main"]
     paths-ignore:
@@ -33,6 +38,11 @@ on:
       - 'requirements/cuda/**'
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/push_image_harbor.yml'
+      - 'docker/hygon/**'
+      - 'tools/install/hygon/**'
+      - 'requirements/hygon/**'
+      - '.github/workflows/build_image_hygon.yml'
+      - '.github/workflows/build_image_common.yml'
   workflow_dispatch:
     inputs:
       platform:
@@ -76,7 +86,7 @@ jobs:
           else
             echo "has_docker_changes=false" >> $GITHUB_OUTPUT
           fi
-          if echo "$CHANGED" | grep -qE '^(docker/hygon/|\.github/configs/hygon\.yml$|tests/test_utils/config/platforms/hygon\.yaml$|tests/functional_tests/train/qwen3/.+hygon)'; then
+          if echo "$CHANGED" | grep -qE '^(\.github/configs/hygon\.yml$|tests/test_utils/config/platforms/hygon\.yaml$|tests/functional_tests/train/qwen3/.+hygon)'; then
             echo "has_hygon_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_hygon_changes=false" >> $GITHUB_OUTPUT
