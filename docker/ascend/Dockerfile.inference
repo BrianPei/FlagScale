@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG BASE_IMAGE=quay.io/ascend/vllm-ascend:v0.20.2rc1-a3
+# This immutable base was built from quay.io/ascend/vllm-ascend:v0.20.2rc1-a3
+# with FlagGems 3e6528cf04f5f964a7b0fa6628de6f0410dbfd02.
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagscale/vllm-plugin-fl@sha256:5062ac23b8b8247e5b4faa5d2c61b7b8e82e46a9ae7c55fe15c5cdbe3533f4b7
 
 FROM ${BASE_IMAGE}
 
@@ -26,18 +28,9 @@ ENV VLLM_PLUGINS=fl \
     VLLM_FL_PLATFORM=ascend \
     TRITON_ALL_BLOCKS_PARALLEL=1
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates git && \
-    rm -rf /var/lib/apt/lists/*
+COPY vllm-plugin-FL /tmp/vllm-plugin-FL
 
-RUN git clone https://github.com/flagos-ai/FlagGems.git /tmp/FlagGems && \
-    git -C /tmp/FlagGems checkout "${FLAGGEMS_REF}" && \
-    python -m pip install --no-cache-dir --no-build-isolation /tmp/FlagGems && \
-    rm -rf /tmp/FlagGems
-
-RUN git clone https://github.com/flagos-ai/vllm-plugin-FL.git /tmp/vllm-plugin-FL && \
-    git -C /tmp/vllm-plugin-FL checkout "${VLLM_PLUGIN_FL_REF}" && \
-    python -m pip install --no-cache-dir --no-build-isolation --no-deps \
+RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps \
         /tmp/vllm-plugin-FL && \
     rm -rf /tmp/vllm-plugin-FL
 

@@ -48,6 +48,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout pinned vllm-plugin-FL
+        uses: actions/checkout@v4
+        with:
+          repository: flagos-ai/vllm-plugin-FL
+          ref: ${{ env.VLLM_PLUGIN_FL_REF }}
+          path: docker/ascend/vllm-plugin-FL
+          persist-credentials: false
+
       - name: Resolve candidate tag
         id: image
         shell: bash
@@ -79,7 +87,7 @@ jobs:
             --build-arg VLLM_PLUGIN_FL_REF="$VLLM_PLUGIN_FL_REF" \
             --build-arg FLAGGEMS_REF="$FLAGGEMS_REF" \
             --tag '${{ steps.image.outputs.image }}' \
-            .
+            docker/ascend
 
       - name: Verify installed versions and platform
         shell: bash
