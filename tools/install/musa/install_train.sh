@@ -38,6 +38,15 @@ while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac
 done
 
+checkout_megatron_ref() {
+    local target_dir=$1
+    retry -d "$DEBUG" "$RETRY_COUNT" "rm -rf '$target_dir' && \
+        git init -q '$target_dir' && \
+        git -C '$target_dir' remote add origin '$MEGATRON_REPO' && \
+        git -C '$target_dir' fetch --depth 1 origin '$MEGATRON_REF' && \
+        git -C '$target_dir' checkout -q --detach FETCH_HEAD"
+}
+
 install_pip() {
     if is_phase_enabled task; then
         [ ! -f "$REQ_FILE" ] && { log_info "train.txt not found"; return 0; }
@@ -89,8 +98,7 @@ install_megatron_lm() {
 
     set_step "Installing Megatron-LM-FL for MUSA"
     mkdir -p "$FLAGSCALE_DEPS"
-    retry_git_checkout_ref -d "$DEBUG" "$MEGATRON_REPO" "$MEGATRON_REF" \
-        "$FLAGSCALE_DEPS/Megatron-LM-FL" "$RETRY_COUNT" || return 1
+    checkout_megatron_ref "$FLAGSCALE_DEPS/Megatron-LM-FL" || return 1
 
     local pip_cmd
     pip_cmd=$(get_pip_cmd)

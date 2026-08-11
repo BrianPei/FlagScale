@@ -1,6 +1,0 @@
-self-hosted-runner:
-  labels:
-    - flagscale-mthreads-s5000-gpu8
-    - flagscale-nvidia-a100-gpu2-32c-128g
-    - nvidia-0
-    - gpus-8

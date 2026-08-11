@@ -26,13 +26,15 @@ experiment:
   runner:
     backend: torchrun
     nnodes: 1
-    nproc_per_node: 2
+    nproc_per_node: 8
     rdzv_backend: static
     no_shared_fs: false
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1
     FS_PLATFORM: musa
+    # The pinned S5000 TransformerEngine build is validated in eager mode.
+    # Disable torch/TE compilation to avoid unsupported Triton lowering paths.
     TORCH_DEVICE_BACKEND_AUTOLOAD: 0
     TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD: 1
     TORCHDYNAMO_DISABLE: 1
@@ -42,17 +44,11 @@ experiment:
     NVTE_FUSED_ATTN: 0
     NVTE_UNFUSED_ATTN: 0
     ACCELERATOR_BACKEND: musa
-    MUSA_VISIBLE_DEVICES: "0,1"
+    MUSA_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7"
     MTHREADS_VISIBLE_DEVICES: all
     MTHREADS_DRIVER_CAPABILITIES: all
   cmds:
     before_start: ''
-
-test:
-  training_smoke:
-    enabled: true
-    metric: "lm loss:"
-    min_values: 3
 
 action: run
 

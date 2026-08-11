@@ -68,18 +68,10 @@ def get_platform_config(platform, device=None):
         "s5000": "musa.yaml",
     }
 
-    # Resolve device aliases while retaining the selected device type.
-    device_aliases = {
-        "a100": "cuda",
-        "a800": "cuda",
-        "h100": "cuda",
-        "ascend910": "ascend",
-        "c550": "metax",
-        "s5000": "musa",
-    }
-    if platform in device_aliases and device is None:
+    # If platform is a device type and no device specified
+    if platform in ["a100", "a800", "h100", "s5000"] and device is None:
         device = platform
-        platform = device_aliases[platform]
+        platform = "musa" if platform == "s5000" else "cuda"
 
     yaml_file = platform_file_map.get(platform, f"{platform}.yaml")
     config_file = os.path.join(script_dir, "../config/platforms", yaml_file)
@@ -181,7 +173,7 @@ def get_unit_tests_config(platform, device=None):
         device: Device type (e.g., 'a100', 'a800')
 
     Returns:
-        Dict with unit test selection and process count settings
+        Dict with 'include' and 'exclude' patterns
 
     Raises:
         ValueError: If platform is not specified
@@ -193,14 +185,10 @@ def get_unit_tests_config(platform, device=None):
         config, device = get_platform_config(platform, device)
         platform_data = get_platform_data(config, device)
         unit_tests = platform_data.get("tests", {}).get("unit", {})
-        return {
-            "include": unit_tests.get("include", "*"),
-            "exclude": unit_tests.get("exclude", []),
-            "nproc_per_node": unit_tests.get("nproc_per_node"),
-        }
+        return {"include": unit_tests.get("include", "*"), "exclude": unit_tests.get("exclude", [])}
     except Exception as e:
         print(f"Error getting unit test config: {e}", file=sys.stderr)
-        return {"include": "*", "exclude": [], "nproc_per_node": None}
+        return {"include": "*", "exclude": []}
 
 
 def get_functional_tests(platform, device=None, task=None, model=None, test_list=None):

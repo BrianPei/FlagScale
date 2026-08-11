@@ -50,21 +50,6 @@ from flagscale.runner.utils import (
 _MAX_CPU_COUNT = multiprocessing.cpu_count()
 
 
-def _get_visible_device_count(user_envs):
-    visible_devices = next(
-        (value for key, value in user_envs.items() if key.endswith("_VISIBLE_DEVICES")),
-        None,
-    )
-    if not isinstance(visible_devices, str):
-        return None
-
-    visible_devices = visible_devices.strip()
-    if not visible_devices or visible_devices.lower() == "all":
-        return None
-
-    return len([device for device in visible_devices.split(",") if device.strip()])
-
-
 def _get_profile_args(config, backend="vllm"):
     serve_config = config.get("serve", [])
     if not serve_config:
@@ -431,7 +416,14 @@ class SshLauncher(LauncherBase):
         # Read from config if not explicitly provided
         if enable_monitoring is None:
             enable_monitoring = self.config.experiment.runner.get("enable_monitoring", False)
-        num_visible_devices = _get_visible_device_count(self.user_envs)
+        num_visible_devices = None
+        # visible_devices = self.user_envs.get("CUDA_VISIBLE_DEVICES", None)
+        visible_devices = next(
+            (v for k, v in self.user_envs.items() if k.endswith("_VISIBLE_DEVICES")), None
+        )
+        if visible_devices is not None and isinstance(visible_devices, str):
+            visible_devices = visible_devices.split(",")
+            num_visible_devices = len(visible_devices)
 
         runner_config = self.config.experiment.runner
 

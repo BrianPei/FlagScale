@@ -49,8 +49,6 @@ generic:
       hetero_train:
         aquila: ["tp2pp1_tp4pp1_tp2pp1", "tp2dp1pp1_tp2dp2pp1_tp1dp2pp1", "dp2dp4_shared_embedding"]
     unit:
-      # Optional torchrun process count; omit to use all visible accelerators.
-      # nproc_per_node: 2
       # Include patterns: "*" for all, or list specific paths
       include: "*"
       # Exclude patterns: empty list or list paths to exclude

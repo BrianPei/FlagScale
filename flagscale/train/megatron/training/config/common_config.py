@@ -1,8 +1,7 @@
 # Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
-import os
 from dataclasses import dataclass, field
 from typing import Literal
-
+import os
 
 @dataclass(kw_only=True)
 class RNGConfig:
@@ -26,9 +25,7 @@ class RNGConfig:
 class ProfilingConfig:
     """Configuration settings for profiling the training process."""
 
-    use_nsys_profiler: bool = field(
-        default=False, metadata={"argparse_meta": {"arg_names": ["--profile"], "dest": "profile"}}
-    )
+    use_nsys_profiler: bool = field(default=False, metadata={"argparse_meta": {"arg_names": ["--profile"], "dest": "profile"}})
     """Enable nsys profiling. When using this option, nsys options should be specified in
     commandline. An example nsys commandline is
     `nsys profile -s none -t nvtx,cuda -o <path/to/output_file> --force-overwrite true
@@ -74,7 +71,7 @@ class ProfilingConfig:
 class DistributedInitConfig:
     """Configuration settings for distributed training initialization."""
 
-    distributed_backend: Literal["nccl", "gloo", "flagcx", "hccl", "mccl"] = "nccl"
+    distributed_backend: Literal["nccl", "gloo", "flagcx", "mccl"] = "nccl"
     """Which backend to use for distributed training."""
 
     distributed_timeout_minutes: int = 10
@@ -109,9 +106,7 @@ class DistributedInitConfig:
     """If set, distributed ranks initialize order is changed from tp-cp-ep-dp-pp to tp-cp-ep-pp-dp.
     """
 
-    use_gloo_process_groups: bool = field(
-        default=True, metadata={"argparse_meta": {"arg_names": ["--disable-gloo-process-groups"]}}
-    )
+    use_gloo_process_groups: bool = field(default=True, metadata={"argparse_meta": {"arg_names": ["--disable-gloo-process-groups"]}})
     """If enabled, create Gloo process groups for communications."""
 
     use_sharp: bool = False
