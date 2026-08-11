@@ -45,6 +45,11 @@ container_options: >-
   --user root
   --ulimit nofile=65535:65535
 
+# Runtime allowances for models loaded from the shared network volume.
+timeouts:
+  inference_minutes: 45
+  serve_ready_seconds: 600
+
 # =============================================================================
 # Package Manager Configuration
 # =============================================================================

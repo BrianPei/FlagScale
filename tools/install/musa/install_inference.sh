@@ -56,7 +56,7 @@ verify_runtime() {
         log_success "MUSA inference packages installed; device validation deferred to runtime"
         return 0
     fi
-    python -c 'import torch, torch_musa, vllm; assert torch.musa.is_available()' || return 1
+    FS_PLATFORM=musa python -c 'import vllm; import torch, torch_musa; assert torch.musa.is_available()' || return 1
     log_success "MUSA inference runtime is importable"
 }
 

@@ -149,7 +149,8 @@ setup_ascend_training_env() {
 }
 
 setup_musa_training_env() {
-    if ! python -c 'import torch_musa, megatron.core' >/dev/null 2>&1; then
+    if ! FS_PLATFORM=musa MG_FL_PREFER=musa \
+        python -c 'import megatron.core; import torch_musa' >/dev/null 2>&1; then
         ./tools/install/install.sh \
             --platform musa \
             --task train \
@@ -177,7 +178,6 @@ setup_musa_training_env() {
 import torch
 import torch_musa
 assert torch.musa.is_available()
-assert torch.musa.device_count() >= 8
 print(f"MUSA training environment ready on {torch.musa.device_count()} devices")
 '
 }

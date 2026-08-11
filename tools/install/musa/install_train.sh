@@ -136,13 +136,6 @@ print(transformer_engine.__version__)
     log_success "Native MUSA TransformerEngine ready"
 }
 
-install_musa_launcher() {
-    set_step "Installing MUSA training launcher"
-    install -D -m 0755 "$SCRIPT_DIR/launch_megatron_gpt.py" \
-        "$FLAGSCALE_HOME/bin/launch_megatron_gpt.py" || return 1
-    log_success "MUSA training launcher ready"
-}
-
 install_src() {
     if is_only_pip && ! has_src_deps_for_phase $SRC_DEPS_LIST; then
         log_info "Skipping source deps (only-pip mode)"
@@ -171,7 +164,6 @@ main() {
     install_pip || die "MUSA train pip failed"
     install_src
     validate_transformer_engine || die "Native MUSA TransformerEngine validation failed"
-    install_musa_launcher || die "MUSA training launcher failed"
     verify_musa_runtime || die "MUSA runtime validation failed"
 }
 

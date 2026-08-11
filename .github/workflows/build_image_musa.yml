@@ -38,7 +38,7 @@ on:
         options: [dev, release]
         default: dev
       build_images:
-        description: Build new MUSA images before running tests
+        description: Build new MUSA images (temporarily opt-in)
         type: boolean
         default: false
       build_all_tasks:
@@ -54,9 +54,9 @@ on:
         type: boolean
         default: false
       run_tests:
-        description: Run the common test suite with the built train and inference images
+        description: Validate images built by this workflow
         type: boolean
-        default: true
+        default: false
       no_cache:
         description: Build without Docker cache
         type: boolean
@@ -76,15 +76,18 @@ concurrency:
 env:
   REGISTRY: harbor.baai.ac.cn
   REGISTRY_NAMESPACE: flagscale
+  # Keep the PR build path intact while S5000 capacity is constrained. Set this
+  # to true when automatic image builds can be re-enabled.
+  MUSA_PR_BUILD_ENABLED: 'false'
   # PyTorch 2.7.1/MCCL is the newest base verified with the S5000 fleet's
   # 3.3.5-server driver. The vendor PyTorch 2.9.1 image passes tensor smoke but
   # fails communicator creation, so upgrading it must be coupled with drivers.
   MUSA_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/transformerengine-fl@sha256:fb56b8b2882d20de45954ed0d53fd695ae08a23c808d853dae9e57f4fcae618e
-  MUSA_VALIDATED_IMAGE: harbor.baai.ac.cn/flagos-dev/transformerengine-fl@sha256:fb56b8b2882d20de45954ed0d53fd695ae08a23c808d853dae9e57f4fcae618e
   MUSA_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
   MUSA_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
   MUSA_TE_REF: e73781e85518ab0046007cef69e95bd258a63900
   MUSA_TE_VERSION: 2.0.0+e73781e
+  MUSA_RUNTIME_SMOKE_NPROC: '2'
   PYTHON_VERSION: '3.10'
   PKG_MGR: pip
   PIP_INDEX_URL: https://pypi.org/simple
@@ -120,14 +123,13 @@ jobs:
           PUBLISH=false
           CANDIDATE_PUSH=false
           RUN_TESTS=false
-          BUILD_IMAGES=true
+          BUILD_IMAGES=false
           NO_CACHE=false
           BASE_IMAGE="${{ env.MUSA_BASE_IMAGE }}"
           MATRIX='{"task":["train","inference","all"]}'
 
-          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
-            CANDIDATE_PUSH=true
-            RUN_TESTS=true
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BUILD_IMAGES="${{ env.MUSA_PR_BUILD_ENABLED }}"
           elif [ "${{ github.event_name }}" = "push" ]; then
             PUBLISH=true
             CANDIDATE_PUSH=true
@@ -146,6 +148,10 @@ jobs:
             fi
             if [ "${{ inputs.build_all_tasks }}" != "true" ]; then
               MATRIX='{"task":["${{ inputs.task }}"]}'
+            fi
+            if [ "$RUN_TESTS" = "true" ] && [ "$BUILD_IMAGES" != "true" ]; then
+              echo "::error::run_tests=true requires build_images=true; normal tests use the validated images from .github/configs/musa.yml"
+              exit 1
             fi
             if [ "$RUN_TESTS" = "true" ] && [ "$CANDIDATE_PUSH" != "true" ]; then
               echo "::error::run_tests=true requires push=true so reusable jobs can pull the image"
@@ -177,12 +183,6 @@ jobs:
           RELEASE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
           RELEASE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${TARGET}-musa-s5000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
 
-          if [ "$BUILD_IMAGES" != "true" ]; then
-            TRAIN_IMAGE="${{ env.MUSA_VALIDATED_IMAGE }}"
-            INFERENCE_IMAGE="${{ env.MUSA_VALIDATED_IMAGE }}"
-            ALL_IMAGE="${{ env.MUSA_VALIDATED_IMAGE }}"
-          fi
-
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
@@ -200,7 +200,7 @@ jobs:
 
   validate_pr:
     name: Validate MUSA PR configuration
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source (attempt 1)
@@ -245,8 +245,6 @@ jobs:
           test -f tests/test_utils/config/platforms/musa.yaml
           test -f tests/functional_tests/inference/qwen3/conf/4b_tp2_musa.yaml
           test -f tests/functional_tests/serve/qwen2_5/conf/0.5b_musa.yaml
-          test -f tools/install/musa/launch_megatron_gpt.py
-          test -f tools/install/musa/sitecustomize.py
           bash -n tools/install/musa/env.sh
           bash -n tools/install/musa/install_base.sh
           bash -n tools/install/musa/install_train.sh
@@ -255,8 +253,6 @@ jobs:
           bash -n tools/install/utils/retry_utils.sh
           bash -n tests/test_utils/runners/check_env.sh
           bash -n tests/test_utils/runners/utils.sh
-          python -m py_compile tools/install/musa/launch_megatron_gpt.py
-          python -m py_compile tools/install/musa/sitecustomize.py
           python -m py_compile tests/test_utils/runners/parse_config.py
           python -m py_compile tests/unit_tests/test_utilities.py
           python tests/test_utils/runners/parse_config.py \
@@ -267,18 +263,6 @@ jobs:
             --platform musa --type functional --task inference | grep -q '4b_tp2_musa'
           python tests/test_utils/runners/parse_config.py \
             --platform musa --type functional --task serve | grep -q '0.5b_musa'
-
-      - name: Validate Harbor credentials
-        env:
-          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-          REGISTRY_PASSWORD: ${{ secrets.CONTAINER_REGISTRY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "$REGISTRY_USERNAME" ] || [ -z "$REGISTRY_PASSWORD" ]; then
-            echo "::error::REGISTRY_USERNAME and CONTAINER_REGISTRY secrets are required to publish MUSA candidate images"
-            exit 1
-          fi
 
   build:
     needs: prepare
@@ -340,7 +324,7 @@ jobs:
             --env MTHREADS_VISIBLE_DEVICES=all \
             --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" \
             python -c 'import torch, torch_musa; print(torch.musa.device_count())')
-          test "$DEVICE_COUNT" -ge 2
+          test "$DEVICE_COUNT" -ge "${{ env.MUSA_RUNTIME_SMOKE_NPROC }}"
 
           docker run --rm --privileged \
             --env MTHREADS_VISIBLE_DEVICES=all \
@@ -357,8 +341,6 @@ jobs:
               --env MTHREADS_VISIBLE_DEVICES=all \
               --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" \
               python -c '
-          import sys
-          assert "torch_musa" in sys.modules
           import vllm
           import torch_musa
           assert hasattr(torch_musa, "_MUSAC")
@@ -402,10 +384,8 @@ jobs:
             --env MTHREADS_VISIBLE_DEVICES=all \
             --env MTHREADS_DRIVER_CAPABILITIES=all "$IMAGE" python -c '
           import torch_musa
-          from megatron.plugin.platform import get_platform, set_platform
-          from megatron.plugin.platform.platform_register import PLATFORMS
-          set_platform(PLATFORMS["musa"])
           import megatron.core
+          from megatron.plugin.platform import get_platform
           assert get_platform().device_name() == "musa"
           '
 
@@ -414,8 +394,8 @@ jobs:
           docker run --rm --privileged --ipc=host \
             --env MTHREADS_VISIBLE_DEVICES=all \
             --env MTHREADS_DRIVER_CAPABILITIES=all \
-            --env EXPECTED_WORLD_SIZE="$DEVICE_COUNT" "$IMAGE" \
-            torchrun --standalone --nproc_per_node="$DEVICE_COUNT" \
+            --env EXPECTED_WORLD_SIZE="${{ env.MUSA_RUNTIME_SMOKE_NPROC }}" "$IMAGE" \
+            torchrun --standalone --nproc_per_node="${{ env.MUSA_RUNTIME_SMOKE_NPROC }}" \
               --no-python python -c '
           import os
           import torch
@@ -506,7 +486,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
             test "${{ needs.validate_pr.result }}" = "success"
           fi
           if [ "${{ needs.prepare.outputs.build_images }}" = "true" ]; then

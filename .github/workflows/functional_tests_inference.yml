@@ -55,6 +55,11 @@ on:
         type: string
         description: Environment path (venv path for uv, conda installation path for conda)
         default: "/opt/venv"
+      timeout_minutes:
+        required: false
+        type: number
+        description: Maximum duration for one inference functional test
+        default: 15
 
 jobs:
   functional_test_inference:
@@ -315,9 +320,7 @@ jobs:
 
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           exit $exit_code
-        # MUSA reads the real Qwen3 checkpoint from network-backed KS3 storage.
-        # Eager loading avoids mmap crashes but needs a longer startup window.
-        timeout-minutes: ${{ inputs.platform == 'musa' && 45 || 15 }}
+        timeout-minutes: ${{ inputs.timeout_minutes }}
 
       - name: Upload Functional Test Logs
         if: always() && steps.functional_test.outcome == 'failure'

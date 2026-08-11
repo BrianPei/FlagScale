@@ -55,6 +55,11 @@ on:
         type: string
         description: Environment path (venv path for uv, conda installation path for conda)
         default: "/opt/venv"
+      ready_timeout_seconds:
+        required: false
+        type: number
+        description: Maximum time to wait for the service health endpoint
+        default: 180
 
 jobs:
   functional_test_serve:
@@ -250,8 +255,7 @@ jobs:
         id: functional_test
         env:
           no_proxy: "localhost"
-          # The MUSA service loads real weights from network-backed storage.
-          FS_SERVE_READY_TIMEOUT: ${{ inputs.platform == 'musa' && '600' || '' }}
+          FS_SERVE_READY_TIMEOUT: ${{ inputs.ready_timeout_seconds }}
         run: |
           set -euo pipefail
           cd $PROJECT_ROOT
