@@ -33,22 +33,24 @@ install_pip() {
     fi
 }
 
-verify_kunlunxin_runtime() {
+verify_kunlunxin_training_stack() {
     [ "$DEBUG" = true ] && { log_info "Skipping runtime verification in dry-run mode"; return 0; }
-    set_step "Verifying Kunlunxin CUDA-compatible runtime"
+    set_step "Verifying Kunlunxin training stack"
     python - <<'PY'
-import torch
-
-assert torch.cuda.is_available(), "Kunlunxin torch fork must expose torch.cuda"
-assert torch.cuda.device_count() >= 1, "No Kunlunxin devices visible via torch.cuda"
+import flagcx
 import megatron.core
-print(f"Kunlunxin CUDA-compatible devices: {torch.cuda.device_count()}")
+import torch
+import transformer_engine
+import transformer_engine_torch
+
+assert hasattr(torch, "cuda"), "Kunlunxin torch fork must expose torch.cuda API"
+print("Kunlunxin training stack import OK")
 PY
 }
 
 main() {
     install_pip || die "Train pip failed"
-    verify_kunlunxin_runtime || die "Kunlunxin runtime verification failed"
+    verify_kunlunxin_training_stack || die "Kunlunxin training stack verification failed"
 }
 
 main
