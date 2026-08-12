@@ -121,7 +121,8 @@ install_transformer_engine() {
             "$FLAGSCALE_DEPS/TransformerEngine-FL" "$RETRY_COUNT" || return 1
     fi
     retry -d "$DEBUG" "$RETRY_COUNT" \
-        "git -C '$FLAGSCALE_DEPS/TransformerEngine-FL' submodule update --init --recursive" || return 1
+        "git -c http.version=HTTP/1.1 -C '$FLAGSCALE_DEPS/TransformerEngine-FL' \
+        submodule update --init --recursive --depth 1 --recommend-shallow --jobs 1" || return 1
 
     local npu_init="$FLAGSCALE_DEPS/TransformerEngine-FL/transformer_engine/plugin/core/backends/vendor/npu/__init__.py"
     if [ "$DEBUG" != true ] && [ ! -f "$npu_init" ]; then
