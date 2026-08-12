@@ -20,12 +20,14 @@ on:
     paths-ignore:
       - 'docs/**'
       - 'docker/cuda/**'
+      - 'docker/hygon/**'
       - 'docker/musa/**'
       - 'docker/build.sh'
       - 'tools/install/**'
       - 'requirements/**'
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/build_image_common.yml'
+      - '.github/workflows/build_image_hygon.yml'
       - '.github/workflows/build_image_musa.yml'
       - '.github/workflows/push_image_harbor.yml'
   pull_request:
@@ -33,12 +35,14 @@ on:
     paths-ignore:
       - 'docs/**'
       - 'docker/cuda/**'
+      - 'docker/hygon/**'
       - 'docker/musa/**'
       - 'docker/build.sh'
       - 'tools/install/**'
       - 'requirements/**'
       - '.github/workflows/build_image_cuda.yml'
       - '.github/workflows/build_image_common.yml'
+      - '.github/workflows/build_image_hygon.yml'
       - '.github/workflows/build_image_musa.yml'
       - '.github/workflows/push_image_harbor.yml'
   workflow_dispatch:
@@ -52,6 +56,7 @@ on:
           - all
           - cuda
           - ascend
+          - hygon
           - metax
           - musa
 
@@ -71,6 +76,7 @@ jobs:
     if: github.event_name == 'pull_request'
     outputs:
       has_docker_changes: ${{ steps.check.outputs.has_docker_changes }}
+      has_hygon_changes: ${{ steps.check.outputs.has_hygon_changes }}
     steps:
       - name: Check for docker-related file changes
         id: check
@@ -82,6 +88,11 @@ jobs:
             echo "has_docker_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_docker_changes=false" >> $GITHUB_OUTPUT
+          fi
+          if echo "$CHANGED" | grep -qE '^(\.github/configs/hygon\.yml$|tests/test_utils/config/platforms/hygon\.yaml$|tests/functional_tests/train/qwen3/.+hygon)'; then
+            echo "has_hygon_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_hygon_changes=false" >> $GITHUB_OUTPUT
           fi
 
   cuda_tests:
@@ -118,6 +129,17 @@ jobs:
     with:
       platform: musa
 
+  hygon_tests:
+    name: Hygon BW1000 tests
+    needs: check_docker_changes
+    if: >-
+      always() &&
+      ((github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'hygon')) ||
+      (github.event_name == 'pull_request' && needs.check_docker_changes.outputs.has_hygon_changes == 'true'))
+    uses: ./.github/workflows/all_tests_common.yml
+    with:
+      platform: hygon
+
   all_tests:
     name: all_tests
     needs:
@@ -126,6 +148,7 @@ jobs:
       # - ascend_tests
       - metax_tests
       - musa_tests
+      - hygon_tests
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -152,6 +175,12 @@ jobs:
           if [ "${{ needs.musa_tests.result }}" != "success" ] && \
              [ "${{ needs.musa_tests.result }}" != "skipped" ]; then
             echo "MThreads MUSA tests failed"
+            failed=true
+          fi
+
+          if [ "${{ needs.hygon_tests.result }}" != "success" ] && \
+             [ "${{ needs.hygon_tests.result }}" != "skipped" ]; then
+            echo "Hygon BW1000 tests failed"
             failed=true
           fi
 

@@ -1,0 +1,83 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Docker Images - Hygon
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Docker target stage
+        required: true
+        type: choice
+        options: [dev, release]
+        default: dev
+      push:
+        description: Push image to the configured registry
+        type: boolean
+        default: true
+      no_cache:
+        description: Build without Docker cache
+        type: boolean
+        default: false
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker/hygon/**'
+      - 'tools/install/hygon/**'
+      - 'requirements/hygon/**'
+      - '.github/configs/hygon.yml'
+      - '.github/workflows/build_image_hygon.yml'
+      - '.github/workflows/build_image_common.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build_image_common.yml
+    secrets: inherit
+    with:
+      platform: hygon
+      runs_on: '["flagscale-hygon-bw1000-gpu8"]'
+      matrix: '{"task":["train"]}'
+      target: ${{ inputs.target || 'dev' }}
+      build_images: true
+      # Fork PRs have no registry credentials. They build, finalize, and verify
+      # the image; publishing remains an explicit workflow_dispatch operation.
+      push: ${{ github.event_name == 'workflow_dispatch' && inputs.push }}
+      no_cache: ${{ inputs.no_cache || false }}
+      registry: harbor.baai.ac.cn
+      train_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
+      inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
+      all_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
+      base_image: harbor.sourcefind.cn:5443/dcu/admin/base/vllm:0.15.1-ubuntu22.04-dtk26.04-py3.10
+      no_proxy_append: harbor.sourcefind.cn,.sourcefind.cn,harbor.baai.ac.cn,.baai.ac.cn
+      build_args: |
+        BASE_IMAGE=harbor.sourcefind.cn:5443/dcu/admin/base/vllm:0.15.1-ubuntu22.04-dtk26.04-py3.10
+      finalize_options: >-
+        --device=/dev/kfd
+        --device=/dev/dri
+        --group-add video
+        --ipc=host
+        --volume /opt/hyhal:/opt/hyhal:ro
+        --cap-add SYS_PTRACE
+        --security-opt seccomp=unconfined
+      finalize_command: /usr/local/bin/flagscale-hygon-finalize-flagcx
+      verify_command: >-
+        python -c 'import torch; import flag_gems; import transformer_engine;
+        import flagcx; from flagcx import _C;
+        assert torch.cuda.device_count() == 8;
+        print("Hygon training stack: OK")'

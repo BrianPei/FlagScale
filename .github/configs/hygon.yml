@@ -1,0 +1,79 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Hygon BW1000 hardware configuration. Training cases are selected in
+# tests/test_utils/config/platforms/hygon.yaml.
+hardware_name: hygon
+display_name: "Hygon BW1000 Tests"
+
+# The runner and registry share the same host, avoiding a 32 GB remote push.
+ci_image: harbor.baai.ac.cn/flagos-dev/flagscale@sha256:e45ff549756408bae819f807a41f19e842b2cb292e61e694b99e03e81c5cad26
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale@sha256:e45ff549756408bae819f807a41f19e842b2cb292e61e694b99e03e81c5cad26
+
+runner_labels: ["flagscale-hygon-bw1000-gpu8"]
+
+# Image construction is consumed by build_image_common.yml. FlagCX must be
+# finalized on a BW1000 host because its native extension probes DTK devices.
+build:
+  tasks:
+    train:
+      dockerfile: docker/hygon/Dockerfile.train
+      image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
+      target: dev
+      buildkit: false
+      finalize_options: >-
+        --device=/dev/kfd
+        --device=/dev/dri
+        --group-add video
+        --ipc=host
+        --volume /opt/hyhal:/opt/hyhal:ro
+        --cap-add SYS_PTRACE
+        --security-opt seccomp=unconfined
+      finalize_command: /usr/local/bin/flagscale-hygon-finalize-flagcx
+      verify_command: >-
+        python -c 'import torch; import flag_gems; import transformer_engine;
+        import flagcx; from flagcx import _C;
+        assert torch.cuda.device_count() == 8;
+        print("Hygon training stack: OK")'
+
+container_volumes:
+  - /opt/hyhal:/opt/hyhal:ro
+  - /public-flash/lihongyang/data:/home/gitlab-runner/data:ro
+  - /public-flash/lihongyang/qwentokenizer:/home/gitlab-runner/tokenizers/qwentokenizer:ro
+
+# DTK exposes BW1000 devices through the KFD/DRI compatibility interfaces.
+# The BW1000 runner network intermittently resets GitHub HTTP/2 transfers, so
+# pass Git's documented environment config to force checkout onto HTTP/1.1.
+container_options: >-
+  --device=/dev/kfd
+  --device=/dev/dri
+  --group-add video
+  --ipc=host
+  --env GIT_CONFIG_COUNT=1
+  --env GIT_CONFIG_KEY_0=http.version
+  --env GIT_CONFIG_VALUE_0=HTTP/1.1
+  --shm-size=64g
+  --user root
+  --ulimit nofile=1048576:1048576
+  --cap-add SYS_PTRACE
+  --security-opt seccomp=unconfined
+
+pkg_mgr: "pip"
+env_path: "/usr/local"
+env_names:
+  train: ""
+  hetero_train: ""
+  inference: ""
+  rl: ""

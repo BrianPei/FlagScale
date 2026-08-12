@@ -128,10 +128,12 @@ class _AquilaTokenizerFS(_FlagScaleTokenizerBase):
 class _HFTokenizerFS(_FlagScaleTokenizerBase):
     """HuggingFace AutoTokenizer wrapper."""
 
-    def __init__(self, tokenizer_path):
+    def __init__(self, tokenizer_path, use_fast=True):
         super().__init__(path=tokenizer_path)
         from transformers import AutoTokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_path, trust_remote_code=True, use_fast=use_fast
+        )
         self.eod_id = self.tokenizer.eos_token_id
         self.cls_id = self.tokenizer.bos_token_id
         self.pad_id = self.tokenizer.pad_token_id
@@ -181,8 +183,8 @@ class _Llama3TokenizerFS(_HFTokenizerFS):
 class _QwenTokenizerFS(_HFTokenizerFS):
     """Qwen tokenizer with custom special tokens."""
 
-    def __init__(self, tokenizer_path):
-        super().__init__(tokenizer_path)
+    def __init__(self, tokenizer_path, args):
+        super().__init__(tokenizer_path, use_fast=not args.tokenizer_hf_no_use_fast)
         self.eod_id = self.tokenizer.encode('<|extra_204|>')[0]
         self.cls_id = self.tokenizer.encode('<|extra_203|>')[0]
         self.pad_id = self.tokenizer.encode('<|endoftext|>')[0]
@@ -388,7 +390,7 @@ def _build_llama3(args, **kwargs):
 
 def _build_qwen(args, **kwargs):
     assert args.tokenizer_path
-    return _QwenTokenizerFS(args.tokenizer_path)
+    return _QwenTokenizerFS(args.tokenizer_path, args)
 
 
 def _build_hftokenizers(args, **kwargs):
