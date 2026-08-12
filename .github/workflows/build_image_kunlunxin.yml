@@ -1,0 +1,494 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Docker Images - Kunlunxin
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'docker/kunlunxin/**'
+      - 'tools/install/kunlunxin/**'
+      - 'requirements/kunlunxin/**'
+      - '.github/configs/kunlunxin.yml'
+      - '.github/workflows/build_image_kunlunxin.yml'
+      - 'tests/test_utils/config/platforms/kunlunxin.yaml'
+      - 'tests/test_utils/runners/**'
+      - 'tests/functional_tests/train/qwen3/**'
+  push:
+    branches: ["main"]
+    paths:
+      - 'docker/kunlunxin/**'
+      - 'tools/install/kunlunxin/**'
+      - 'requirements/kunlunxin/**'
+      - '.github/configs/kunlunxin.yml'
+      - '.github/workflows/build_image_kunlunxin.yml'
+      - 'tests/test_utils/config/platforms/kunlunxin.yaml'
+      - 'tests/test_utils/runners/**'
+      - 'tests/functional_tests/train/qwen3/**'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Image task to build
+        required: true
+        type: choice
+        options: [train, inference, all]
+        default: all
+      target:
+        description: Docker build target
+        required: true
+        type: choice
+        options: [dev, release]
+        default: dev
+      build_all_tasks:
+        description: Build train, inference and all-in-one images
+        type: boolean
+        default: true
+      push:
+        description: Push the candidate image to Harbor
+        type: boolean
+        default: true
+      run_tests:
+        description: Run CLI and unit tests after publishing
+        type: boolean
+        default: true
+      no_cache:
+        description: Build without Docker cache
+        type: boolean
+        default: false
+      base_image:
+        description: Optional trusted override for the pinned P800 base image
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: harbor.baai.ac.cn
+  REGISTRY_NAMESPACE: flagscale
+  # torch29_xte2.12:v4, pushed from the P800 bring-up host.
+  # Digest: sha256:b166a145e9e397b5c8251618b5c8adb01a603042b263aad29781f9b97ff18b1c
+  KUNLUNXIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
+  PYTHON_VERSION: '3.10'
+  PKG_MGR: conda
+  PIP_INDEX_URL: https://pypi.org/simple
+  PIP_DEFAULT_TIMEOUT: '300'
+
+jobs:
+  prepare:
+    name: Prepare trusted build parameters
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.params.outputs.target }}
+      matrix: ${{ steps.params.outputs.matrix }}
+      publish: ${{ steps.params.outputs.publish }}
+      run_tests: ${{ steps.params.outputs.run_tests }}
+      no_cache: ${{ steps.params.outputs.no_cache }}
+      base_image: ${{ steps.params.outputs.base_image }}
+      train_image: ${{ steps.params.outputs.train_image }}
+      inference_image: ${{ steps.params.outputs.inference_image }}
+      all_image: ${{ steps.params.outputs.all_image }}
+      release_train_image: ${{ steps.params.outputs.release_train_image }}
+      release_inference_image: ${{ steps.params.outputs.release_inference_image }}
+      release_all_image: ${{ steps.params.outputs.release_all_image }}
+    steps:
+      - name: Compute parameters
+        id: params
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET="${{ inputs.target || 'dev' }}"
+          PUBLISH=false
+          RUN_TESTS=false
+          NO_CACHE=false
+          BASE_IMAGE="${{ env.KUNLUNXIN_BASE_IMAGE }}"
+          MATRIX='{"task":["train","inference","all"]}'
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            PUBLISH=true
+            RUN_TESTS=true
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PUBLISH="${{ inputs.push }}"
+            RUN_TESTS="${{ inputs.run_tests }}"
+            NO_CACHE="${{ inputs.no_cache }}"
+            if [ -n "${{ inputs.base_image }}" ]; then
+              BASE_IMAGE="${{ inputs.base_image }}"
+            fi
+            if [ "${{ inputs.build_all_tasks }}" != "true" ]; then
+              MATRIX='{"task":["${{ inputs.task }}"]}'
+            fi
+            if [ "$RUN_TESTS" = "true" ] && [ "$PUBLISH" != "true" ]; then
+              echo "::error::run_tests=true requires push=true so reusable jobs can pull the image"
+              exit 1
+            fi
+            if [ "$RUN_TESTS" = "true" ] && [ "${{ inputs.build_all_tasks }}" != "true" ]; then
+              echo "::error::run_tests=true requires build_all_tasks=true"
+              exit 1
+            fi
+          fi
+
+          SHORT_SHA="${GITHUB_SHA::12}"
+          TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TARGET}-kunlunxin-p800-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:candidate-${TARGET}-kunlunxin-p800-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:candidate-${TARGET}-kunlunxin-p800-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          RELEASE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TARGET}-kunlunxin-p800-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          RELEASE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${TARGET}-kunlunxin-p800-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          RELEASE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${TARGET}-kunlunxin-p800-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
+          echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
+          echo "base_image=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "inference_image=$INFERENCE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "all_image=$ALL_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_train_image=$RELEASE_TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_inference_image=$RELEASE_INFERENCE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_all_image=$RELEASE_ALL_IMAGE" >> "$GITHUB_OUTPUT"
+
+  validate_pr:
+    name: Validate untrusted Kunlunxin PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate Kunlunxin integration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f docker/kunlunxin/Dockerfile.train
+          test -f docker/kunlunxin/Dockerfile.inference
+          test -f docker/kunlunxin/Dockerfile.all
+          test -f requirements/kunlunxin/base.txt
+          test -f requirements/kunlunxin/train.txt
+          test -f requirements/kunlunxin/inference.txt
+          test -f requirements/kunlunxin/serve.txt
+          test -f tests/test_utils/config/platforms/kunlunxin.yaml
+          test -f tests/functional_tests/train/qwen3/conf/0_6b_kunlunxin.yaml
+          test -f tests/functional_tests/train/qwen3/conf/train/0_6b_kunlunxin.yaml
+          bash -n tools/install/kunlunxin/env.sh
+          bash -n tools/install/kunlunxin/install_base.sh
+          bash -n tools/install/kunlunxin/install_train.sh
+          bash -n tools/install/kunlunxin/install_inference.sh
+          bash -n tools/install/kunlunxin/install_serve.sh
+          bash -n tests/test_utils/runners/utils.sh
+          python -m py_compile tests/test_utils/runners/parse_config.py
+          python tests/test_utils/runners/parse_config.py \
+            --platform kunlunxin --type device_types | grep -q 'p800'
+          python tests/test_utils/runners/parse_config.py \
+            --platform p800 --type unit | grep -q 'include'
+          python -c "import yaml; yaml.safe_load(open('.github/configs/kunlunxin.yml'))"
+          python -c "import yaml; yaml.safe_load(open('.github/workflows/build_image_kunlunxin.yml'))"
+
+  build:
+    name: Build Kunlunxin ${{ matrix.task }}
+    needs: prepare
+    if: github.event_name != 'pull_request'
+    runs-on: flagscale-kunlun-p800-gpu8
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Clean workspace
+        run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Detect runner proxy
+        id: proxy
+        shell: bash
+        run: |
+          echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
+          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Select image tag
+        id: image
+        shell: bash
+        run: |
+          case "${{ matrix.task }}" in
+            train) echo "tag=${{ needs.prepare.outputs.train_image }}" >> "$GITHUB_OUTPUT" ;;
+            inference) echo "tag=${{ needs.prepare.outputs.inference_image }}" >> "$GITHUB_OUTPUT" ;;
+            all) echo "tag=${{ needs.prepare.outputs.all_image }}" >> "$GITHUB_OUTPUT" ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Build Kunlunxin ${{ matrix.task }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/kunlunxin/Dockerfile.${{ matrix.task }}
+          target: ${{ needs.prepare.outputs.target }}
+          load: true
+          tags: ${{ steps.image.outputs.tag }}
+          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
+          build-args: |
+            BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
+            PKG_MGR=${{ env.PKG_MGR }}
+            PIP_INDEX_URL=${{ env.PIP_INDEX_URL }}
+            PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
+            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
+            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
+            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
+            http_proxy=${{ steps.proxy.outputs.http_proxy }}
+            https_proxy=${{ steps.proxy.outputs.https_proxy }}
+            no_proxy=${{ steps.proxy.outputs.no_proxy }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}
+
+      - name: Push candidate image with retry
+        if: needs.prepare.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in 1 2 3; do
+            if docker push "${{ steps.image.outputs.tag }}"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              break
+            fi
+            sleep $((attempt * 15))
+          done
+          echo "::error::Failed to push Kunlunxin image after 3 attempts"
+          exit 1
+
+  kunlunxin_runtime:
+    name: Kunlunxin ${{ matrix.task }} runtime
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    runs-on: flagscale-kunlun-p800-gpu8
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [train, inference, all]
+    steps:
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Validate Kunlunxin task runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.task }}" in
+            train) IMAGE="${{ needs.prepare.outputs.train_image }}" ;;
+            inference) IMAGE="${{ needs.prepare.outputs.inference_image }}" ;;
+            all) IMAGE="${{ needs.prepare.outputs.all_image }}" ;;
+          esac
+          docker pull "$IMAGE"
+          DEVICE_COUNT=$(docker run --rm --privileged --ipc=host --shm-size=64g "$IMAGE" \
+            bash -lc 'source /root/miniconda/etc/profile.d/conda.sh && \
+              conda activate python310_torch29_cuda && \
+              . /etc/profile.d/flagscale-env.sh && \
+              python -c "import torch; print(torch.cuda.device_count())"')
+          test "$DEVICE_COUNT" -ge 1
+
+          docker run --rm --privileged --ipc=host --shm-size=64g "$IMAGE" bash -lc '
+            source /root/miniconda/etc/profile.d/conda.sh
+            conda activate python310_torch29_cuda
+            . /etc/profile.d/flagscale-env.sh
+            python -c "import torch; assert torch.cuda.is_available(); x = torch.arange(8, dtype=torch.float32, device=\"cuda\"); assert (x * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]; print(\"Kunlunxin torch runtime OK\")"
+          '
+
+          if [ "${{ matrix.task }}" = "inference" ]; then
+            exit 0
+          fi
+
+          docker run --rm --privileged --ipc=host --shm-size=64g "$IMAGE" bash -lc '
+            source /root/miniconda/etc/profile.d/conda.sh
+            conda activate python310_torch29_cuda
+            . /etc/profile.d/flagscale-env.sh
+            python -c "import importlib; import torch; import transformer_engine; import transformer_engine_torch; import megatron.core; importlib.import_module(\"flagcx\"); assert torch.cuda.is_available(); print(\"Kunlunxin train runtime OK\")"
+          '
+
+  kunlunxin_cli:
+    name: Kunlunxin CLI
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/functional_tests_cli.yml
+    with:
+      platform: kunlunxin
+      image: ${{ needs.prepare.outputs.train_image }}
+      runs_on: '["flagscale-kunlun-p800-gpu8"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_options: >-
+        --hostname=flagscale-ci --privileged --ipc=host
+        --shm-size=64g
+        --user root --ulimit nofile=65535:65535
+      pkg_mgr: conda
+      env_name: 'python310_torch29_cuda'
+      env_path: '/root/miniconda'
+
+  kunlunxin_unit:
+    name: Kunlunxin unit
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/unit_tests_common.yml
+    with:
+      platform: kunlunxin
+      device: p800
+      image: ${{ needs.prepare.outputs.train_image }}
+      runs_on: '["flagscale-kunlun-p800-gpu8"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_options: >-
+        --hostname=flagscale-ci --privileged --ipc=host
+        --shm-size=64g
+        --user root --ulimit nofile=65535:65535
+      pkg_mgr: conda
+      env_name: 'python310_torch29_cuda'
+      env_path: '/root/miniconda'
+
+  kunlunxin_train:
+    name: Kunlunxin functional train
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/functional_tests_train.yml
+    with:
+      platform: kunlunxin
+      test_matrix: '[{"device":"p800","task":"train","model":"qwen3","case":"0_6b_kunlunxin"}]'
+      image: ${{ needs.prepare.outputs.train_image }}
+      runs_on: '["flagscale-kunlun-p800-gpu8"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+      container_options: >-
+        --hostname=flagscale-ci --privileged --ipc=host
+        --shm-size=64g
+        --user root --ulimit nofile=65535:65535
+      pkg_mgr: conda
+      env_name: 'python310_torch29_cuda'
+      env_path: '/root/miniconda'
+
+  kunlunxin_all_tests:
+    name: Kunlunxin all-in-one tests
+    needs: [prepare, build]
+    if: needs.prepare.outputs.run_tests == 'true' && needs.build.result == 'success'
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: kunlunxin
+      ci_train_image: ${{ needs.prepare.outputs.all_image }}
+      ci_inference_image: ${{ needs.prepare.outputs.all_image }}
+      runs_on: '["flagscale-kunlun-p800-gpu8"]'
+      container_volumes: '["/mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data","/mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers"]'
+
+  promote:
+    name: Promote validated Kunlunxin images
+    needs: [prepare, build, kunlunxin_runtime, kunlunxin_cli, kunlunxin_unit, kunlunxin_train, kunlunxin_all_tests]
+    if: >-
+      needs.prepare.outputs.publish == 'true' &&
+      needs.prepare.outputs.run_tests == 'true' &&
+      needs.kunlunxin_runtime.result == 'success' &&
+      needs.kunlunxin_cli.result == 'success' &&
+      needs.kunlunxin_unit.result == 'success' &&
+      needs.kunlunxin_train.result == 'success' &&
+      needs.kunlunxin_all_tests.result == 'success'
+    runs-on: flagscale-kunlun-p800-gpu8
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Promote candidate manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          promote() {
+            docker buildx imagetools create --tag "$2" "$1"
+            docker buildx imagetools inspect "$2"
+          }
+          promote "${{ needs.prepare.outputs.train_image }}" "${{ needs.prepare.outputs.release_train_image }}"
+          promote "${{ needs.prepare.outputs.inference_image }}" "${{ needs.prepare.outputs.release_inference_image }}"
+          promote "${{ needs.prepare.outputs.all_image }}" "${{ needs.prepare.outputs.release_all_image }}"
+
+          {
+            echo "### Validated Kunlunxin P800 images"
+            echo ""
+            echo "- Train: \`${{ needs.prepare.outputs.release_train_image }}\`"
+            echo "- Inference: \`${{ needs.prepare.outputs.release_inference_image }}\`"
+            echo "- All-in-one: \`${{ needs.prepare.outputs.release_all_image }}\`"
+            echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
+            echo "- FlagScale: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  summary:
+    name: Kunlunxin pipeline summary
+    needs: [prepare, validate_pr, build, kunlunxin_runtime, kunlunxin_cli, kunlunxin_unit, kunlunxin_train, kunlunxin_all_tests, promote]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify pipeline result
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            test "${{ needs.validate_pr.result }}" = "success"
+            exit 0
+          fi
+
+          test "${{ needs.build.result }}" = "success"
+          if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
+            test "${{ needs.kunlunxin_runtime.result }}" = "success"
+            test "${{ needs.kunlunxin_cli.result }}" = "success"
+            test "${{ needs.kunlunxin_unit.result }}" = "success"
+            test "${{ needs.kunlunxin_train.result }}" = "success"
+            test "${{ needs.kunlunxin_all_tests.result }}" = "success"
+          fi
+          if [ "${{ needs.prepare.outputs.publish }}" = "true" ] && \
+             [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
+            test "${{ needs.promote.result }}" = "success"
+          fi

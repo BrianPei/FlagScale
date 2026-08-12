@@ -47,6 +47,7 @@ on:
           - cuda
           - ascend
           - metax
+          - kunlunxin
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.actor }}
@@ -101,6 +102,14 @@ jobs:
     with:
       platform: metax
 
+  kunlunxin_tests:
+    name: Kunlunxin P800 tests
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'kunlunxin'
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: kunlunxin
+
   all_tests:
     name: all_tests
     needs:
@@ -108,6 +117,7 @@ jobs:
       - cuda_tests
       - ascend_tests
       - metax_tests
+      - kunlunxin_tests
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -132,6 +142,12 @@ jobs:
           if [ "${{ needs.metax_tests.result }}" != "success" ] && \
              [ "${{ needs.metax_tests.result }}" != "skipped" ]; then
             echo "❌ MetaX C550 tests failed"
+            failed=true
+          fi
+
+          if [ "${{ needs.kunlunxin_tests.result }}" != "success" ] && \
+             [ "${{ needs.kunlunxin_tests.result }}" != "skipped" ]; then
+            echo "❌ Kunlunxin P800 tests failed"
             failed=true
           fi
 
