@@ -21,7 +21,7 @@ display_name: "Ascend NPU Tests"
 
 # Docker image for this hardware
 ci_image: harbor.baai.ac.cn/flagos-dev/flagscale@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
-ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:f9056b4-ascend-dev
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale@sha256:2fe15cf8b339b6828395fc3ce56e67b004b7c5f251d9e6673f20579819fe2c16
 ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
 
 # Runner labels for this hardware
