@@ -30,13 +30,21 @@ ENV VLLM_PLUGINS=fl \
 
 COPY vllm-plugin-FL /tmp/vllm-plugin-FL
 
+# The upstream Ascend base currently contains unrelated pip-check findings.
+# Record that immutable baseline and fail if installing the pinned plugin adds
+# any new dependency inconsistency.
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.before || true
+
 RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps \
         /tmp/vllm-plugin-FL && \
     rm -rf /tmp/vllm-plugin-FL
 
 # Validate the installed stack through vLLM's standard plugin entry point.
 # This check is read-only and must not apply compatibility patches.
-RUN python -m pip check && \
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.after || true; \
+    diff -u /tmp/pip-check.before /tmp/pip-check.after && \
+    cat /tmp/pip-check.after && \
+    rm -f /tmp/pip-check.before /tmp/pip-check.after && \
     python -c 'import importlib.metadata as metadata; \
 from vllm.platforms import current_platform; \
 vllm_version = metadata.version("vllm"); \
