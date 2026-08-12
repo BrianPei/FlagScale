@@ -35,7 +35,7 @@ concurrency:
 
 env:
   REGISTRY: harbor.baai.ac.cn
-  IMAGE_REPOSITORY: flagscale/flagscale-inference
+  IMAGE_REPOSITORY: flagos-dev/flagscale
   VLLM_PLUGIN_FL_REF: 43edeb601f4b8f616f56109de64836529e758deb
   FLAGGEMS_REF: 3e6528cf04f5f964a7b0fa6628de6f0410dbfd02
 
@@ -64,7 +64,7 @@ jobs:
           short_sha="${GITHUB_SHA::7}"
           tag='${{ inputs.tag }}'
           if [ -z "$tag" ]; then
-            tag="ascend-vllm0.20.2-fl-43edeb6-${short_sha}"
+            tag="${short_sha}-ascend-dev"
           fi
           image="${REGISTRY}/${IMAGE_REPOSITORY}:${tag}"
           echo "image=$image" >> "$GITHUB_OUTPUT"
