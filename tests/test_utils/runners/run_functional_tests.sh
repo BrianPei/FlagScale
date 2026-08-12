@@ -175,7 +175,7 @@ run_test() {
             serve_port=$(grep -oP 'port:\s*\K[0-9]+' "$config_file" | head -1)
 
             local max_wait=600   # ascend: 10 min
-            [ "$PLATFORM" != "ascend" ] && max_wait=180   # others: 1 min
+            [ "$PLATFORM" != "ascend" ] && max_wait="${FS_SERVE_READY_TIMEOUT:-180}"
             local interval=10
             local elapsed=0
             local ready=0
@@ -237,6 +237,13 @@ run_test() {
                 if [ -n "$serve_log_file" ] && [ -r "$serve_log_file" ]; then
                     tail -n 80 "$serve_log_file"
                 fi
+                local serve_log
+                for serve_log in "$exp_dir"/serve_logs/host*.output; do
+                    [ "$serve_log" = "$serve_log_file" ] && continue
+                    [ -f "$serve_log" ] || continue
+                    log_error "Serve output: $serve_log"
+                    tail -n 200 "$serve_log" || true
+                done
                 flagscale serve "$model" --config "$config_file" --stop || true
                 return 1
             fi
