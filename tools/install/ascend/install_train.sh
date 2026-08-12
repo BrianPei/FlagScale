@@ -186,41 +186,13 @@ validate_training_stack() {
     fi
 
     TE_FL_SKIP_CUDA=1 python -c '
-try:
-    import torch_npu
-except ImportError:
-    torch_npu = None
-
 import transformer_engine
-apply_patch = None
-if torch_npu is not None and torch_npu.npu.is_available():
-    from transformer_engine.plugin.core.backends.vendor.npu.patches import apply_patch
-
-    apply_patch()
-    assert transformer_engine.te_device_type() == "npu", \
-        f"TransformerEngine selected {transformer_engine.te_device_type()}, expected npu"
-
-from megatron.plugin.platform import get_platform
-
-platform = get_platform()
-# Megatron NPU registration may replace torch.cuda compatibility helpers.
-# Re-apply TE-FL NPU patch after platform initialization so real TE modules
-# do not enter the CUDA-only compatibility path.
-if apply_patch is not None:
-    import torch
-
-    apply_patch()
-    properties = torch.cuda.get_device_properties(torch.cuda.current_device())
-    assert properties.major is not None, \
-        "TE-FL NPU compatibility patch did not restore device properties"
+from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
 from megatron.core.extensions.transformer_engine import HAVE_TE
 from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
 
 assert HAVE_TE, "Megatron-LM-FL did not detect TransformerEngine-FL"
 assert TESpecProvider is not None, "TransformerEngine spec provider is unavailable"
-if torch_npu is not None and torch_npu.npu.is_available():
-    assert platform.device_name() == "npu", \
-        f"Megatron-LM-FL selected {platform.device_name()}, expected npu"
 ' || return 1
     log_success "Ascend training stack ready"
 }

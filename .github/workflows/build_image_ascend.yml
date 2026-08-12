@@ -112,13 +112,13 @@ concurrency:
 
 env:
   REGISTRY: harbor.baai.ac.cn
-  REGISTRY_NAMESPACE: flagscale
-  ASCEND_TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev
+  REGISTRY_NAMESPACE: flagos-dev
+  ASCEND_TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev@sha256:1384b5cb596c3e1012c9f9fca64ed9e2960e27addc73b17704b3c1abcaf1fa02
   ASCEND_INFERENCE_BASE_IMAGE: quay.io/ascend/vllm-ascend:v0.13.0rc1-a3
   ASCEND_TE_REPO: https://github.com/flagos-ai/TransformerEngine-FL.git
-  ASCEND_TE_REF: 711887ef93ca4c8131baf9d59994458a601fe363
+  ASCEND_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
   ASCEND_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
-  ASCEND_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
+  ASCEND_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
   TRAIN_PYTHON_VERSION: '3.12'
   INFERENCE_PYTHON_VERSION: '3.11'
   PKG_MGR: pip
@@ -147,7 +147,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          SHORT_SHA="${GITHUB_SHA::12}"
+          SHORT_SHA="${GITHUB_SHA::7}"
           TARGET="${{ inputs.target || 'dev' }}"
           PUBLISH=false
           CANDIDATE_PUSH=false
@@ -203,12 +203,12 @@ jobs:
             CANDIDATE_REGISTRY="localhost:5000"
           fi
 
-          TRAIN_TAG="${TARGET}-ascend-py${{ env.TRAIN_PYTHON_VERSION }}-${SHORT_SHA}"
-          INFERENCE_TAG="${TARGET}-ascend-py${{ env.INFERENCE_PYTHON_VERSION }}-${SHORT_SHA}"
-          ALL_TAG="${TARGET}-ascend-py${{ env.TRAIN_PYTHON_VERSION }}-py${{ env.INFERENCE_PYTHON_VERSION }}-${SHORT_SHA}"
-          CANDIDATE_TRAIN_IMAGE="${CANDIDATE_REGISTRY}/flagscale-train:candidate-${TRAIN_TAG}"
-          CANDIDATE_INFERENCE_IMAGE="${CANDIDATE_REGISTRY}/flagscale-inference:candidate-${INFERENCE_TAG}"
-          CANDIDATE_ALL_IMAGE="${CANDIDATE_REGISTRY}/flagscale-all:candidate-${ALL_TAG}"
+          TRAIN_TAG="${SHORT_SHA}-ascend-${TARGET}"
+          INFERENCE_TAG="${SHORT_SHA}-ascend-${TARGET}"
+          ALL_TAG="${SHORT_SHA}-ascend-${TARGET}"
+          CANDIDATE_TRAIN_IMAGE="${CANDIDATE_REGISTRY}/flagscale-train:${TRAIN_TAG}"
+          CANDIDATE_INFERENCE_IMAGE="${CANDIDATE_REGISTRY}/flagscale-inference:${INFERENCE_TAG}"
+          CANDIDATE_ALL_IMAGE="${CANDIDATE_REGISTRY}/flagscale-all:${ALL_TAG}"
           RELEASE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TRAIN_TAG}"
           RELEASE_INFERENCE_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-inference:${INFERENCE_TAG}"
           RELEASE_ALL_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-all:${ALL_TAG}"
