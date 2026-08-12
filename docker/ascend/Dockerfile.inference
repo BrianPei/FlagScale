@@ -39,26 +39,20 @@ RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps \
         /tmp/vllm-plugin-FL && \
     rm -rf /tmp/vllm-plugin-FL
 
-# Validate the installed stack through vLLM's standard plugin entry point.
-# This check is read-only and must not apply compatibility patches.
+# Validate package metadata and vLLM's standard plugin entry point. Hardware
+# platform activation is verified after build with the host driver mounted.
 RUN python -m pip check 2>&1 | sort > /tmp/pip-check.after || true; \
     diff -u /tmp/pip-check.before /tmp/pip-check.after && \
     cat /tmp/pip-check.after && \
     rm -f /tmp/pip-check.before /tmp/pip-check.after && \
     python -c 'import importlib.metadata as metadata; \
-from vllm.platforms import current_platform; \
 vllm_version = metadata.version("vllm"); \
 plugin_version = metadata.version("vllm-plugin-fl"); \
-platform_type = type(current_platform); \
 print("vllm:", vllm_version); \
 print("plugin:", plugin_version); \
-print("platform:", platform_type.__module__, platform_type.__name__); \
-print("device_type:", current_platform.device_type); \
-print("dist_backend:", current_platform.dist_backend); \
 assert vllm_version.startswith("0.20.2"), vllm_version; \
-assert platform_type.__module__ == "vllm_fl.platform", platform_type; \
-assert platform_type.__name__ == "PlatformFL", platform_type; \
-assert current_platform.device_type == "npu", current_platform.device_type; \
-assert current_platform.dist_backend == "hccl", current_platform.dist_backend'
+platform_plugins = {ep.name: ep.value for ep in metadata.entry_points(group="vllm.platform_plugins")}; \
+print("platform_plugins:", platform_plugins); \
+assert platform_plugins.get("fl") == "vllm_fl:register", platform_plugins'
 
 WORKDIR /workspace

@@ -93,7 +93,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm -i --entrypoint python '${{ steps.image.outputs.image }}' - <<'PY'
+          docker run --rm -i --privileged \
+            --volume /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro \
+            --volume /usr/local/Ascend/add-ons:/usr/local/Ascend/add-ons:ro \
+            --entrypoint python '${{ steps.image.outputs.image }}' - <<'PY'
           import importlib.metadata as metadata
           from vllm.platforms import current_platform
           from vllm_fl.version import git_version
