@@ -72,10 +72,7 @@ ENV UV_EXTRA_INDEX_URL=${UV_EXTRA_INDEX_URL}
 COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=cache,target=/root/miniconda/pkgs \
-    . /etc/profile.d/flagscale-env.sh && \
+RUN . /etc/profile.d/flagscale-env.sh && \
     chmod +x /workspace/tools/install/*.sh && \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/kunlunxin/*.sh && \
@@ -113,10 +110,7 @@ ENV UV_EXTRA_INDEX_URL=${UV_EXTRA_INDEX_URL}
 COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=cache,target=/root/miniconda/pkgs \
-    . /etc/profile.d/flagscale-env.sh && \
+RUN . /etc/profile.d/flagscale-env.sh && \
     chmod +x /workspace/tools/install/*.sh && \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/kunlunxin/*.sh && \
