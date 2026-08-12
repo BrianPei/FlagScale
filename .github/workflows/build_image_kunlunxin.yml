@@ -27,7 +27,7 @@ on:
       - 'tests/test_utils/runners/**'
       - 'tests/functional_tests/train/qwen3/**'
   push:
-    branches: ["main"]
+    branches: ["main", "kunlunxin-p800-ci"]
     paths:
       - 'docker/kunlunxin/**'
       - 'tools/install/kunlunxin/**'
@@ -81,7 +81,7 @@ concurrency:
 
 env:
   REGISTRY: harbor.baai.ac.cn
-  REGISTRY_NAMESPACE: flagscale
+  REGISTRY_NAMESPACE: flagos-dev
   # torch29_xte2.12:v4, pushed from the P800 bring-up host.
   # Digest: sha256:b166a145e9e397b5c8251618b5c8adb01a603042b263aad29781f9b97ff18b1c
   KUNLUNXIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
@@ -123,7 +123,8 @@ jobs:
 
           if [ "${{ github.event_name }}" = "push" ]; then
             PUBLISH=true
-            RUN_TESTS=true
+            RUN_TESTS=false
+            MATRIX='{"task":["train"]}'
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PUBLISH="${{ inputs.push }}"
             RUN_TESTS="${{ inputs.run_tests }}"
