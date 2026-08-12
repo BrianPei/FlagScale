@@ -230,11 +230,6 @@ jobs:
           echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker
-
       - name: Log in to Harbor
         uses: docker/login-action@v3
         with:
@@ -254,29 +249,35 @@ jobs:
           esac
 
       - name: Build Kunlunxin ${{ matrix.task }} image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/kunlunxin/Dockerfile.${{ matrix.task }}
-          target: ${{ needs.prepare.outputs.target }}
-          load: true
-          tags: ${{ steps.image.outputs.tag }}
-          no-cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
-          build-args: |
-            BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
-            PKG_MGR=${{ env.PKG_MGR }}
-            PIP_INDEX_URL=${{ env.PIP_INDEX_URL }}
-            PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}
-            HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
-            HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
-            NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
-            http_proxy=${{ steps.proxy.outputs.http_proxy }}
-            https_proxy=${{ steps.proxy.outputs.https_proxy }}
-            no_proxy=${{ steps.proxy.outputs.no_proxy }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          build_args=(
+            --build-arg "BASE_IMAGE=${{ needs.prepare.outputs.base_image }}"
+            --build-arg "PKG_MGR=${{ env.PKG_MGR }}"
+            --build-arg "PIP_INDEX_URL=${{ env.PIP_INDEX_URL }}"
+            --build-arg "PIP_DEFAULT_TIMEOUT=${{ env.PIP_DEFAULT_TIMEOUT }}"
+            --build-arg "HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}"
+            --build-arg "HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}"
+            --build-arg "NO_PROXY=${{ steps.proxy.outputs.no_proxy }}"
+            --build-arg "http_proxy=${{ steps.proxy.outputs.http_proxy }}"
+            --build-arg "https_proxy=${{ steps.proxy.outputs.https_proxy }}"
+            --build-arg "no_proxy=${{ steps.proxy.outputs.no_proxy }}"
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}"
+            --label "org.opencontainers.image.revision=${{ github.sha }}"
+            --label "org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}"
+          )
+          if [ "${{ needs.prepare.outputs.no_cache }}" = "true" ]; then
+            build_args+=(--no-cache)
+          fi
+
+          docker build \
+            -f "docker/kunlunxin/Dockerfile.${{ matrix.task }}" \
+            --target "${{ needs.prepare.outputs.target }}" \
+            -t "${{ steps.image.outputs.tag }}" \
+            "${build_args[@]}" \
+            .
 
       - name: Push candidate image with retry
         if: needs.prepare.outputs.publish == 'true'
