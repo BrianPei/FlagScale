@@ -5,11 +5,10 @@
 hardware_name: kunlunxin
 display_name: 'Kunlunxin P800 Tests'
 
-# Docker images for Kunlunxin P800. These tags follow the candidate/release
-# build workflow; confirm Harbor namespace and runner labels with operations.
-ci_image: harbor.baai.ac.cn/flagscale/flagscale-all:dev-kunlunxin-p800-py3.10-latest
-ci_train_image: harbor.baai.ac.cn/flagscale/flagscale-train:dev-kunlunxin-p800-py3.10-latest
-ci_inference_image: harbor.baai.ac.cn/flagscale/flagscale-inference:dev-kunlunxin-p800-py3.10-latest
+# Use the validated P800 image until task-specific images are published.
+ci_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
 
 # Directory to store image tar files (shared between build and push workflows)
 tar_dir: /mnt/airs-business/cicd/image_tar
