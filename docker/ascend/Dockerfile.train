@@ -27,10 +27,7 @@ ENV FLAGSCALE_HOME=${FLAGSCALE_HOME} \
     UV_HTTP_TIMEOUT=500 \
     PATH="${FLAGSCALE_HOME}/venv/bin:/root/.local/bin:${PATH}"
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential ca-certificates curl git ninja-build && \
-    rm -rf /var/lib/apt/lists/*
+RUN python -m pip install --no-cache-dir ninja
 
 RUN mkdir -p /opt/flagscale/test_data && \
     curl -fL --retry 5 --retry-delay 5 \
