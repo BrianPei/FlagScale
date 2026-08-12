@@ -1,0 +1,47 @@
+# Kunlunxin P800 Hardware Configuration
+# This file defines CI/CD settings for Kunlunxin P800 GPU testing.
+# Test configurations are defined in tests/test_utils/config/platforms/kunlunxin.yaml.
+
+hardware_name: kunlunxin
+display_name: 'Kunlunxin P800 Tests'
+
+# Docker images for Kunlunxin P800. These tags follow the candidate/release
+# build workflow; confirm Harbor namespace and runner labels with operations.
+ci_image: harbor.baai.ac.cn/flagscale/flagscale-all:dev-kunlunxin-p800-py3.10-latest
+ci_train_image: harbor.baai.ac.cn/flagscale/flagscale-train:dev-kunlunxin-p800-py3.10-latest
+ci_inference_image: harbor.baai.ac.cn/flagscale/flagscale-inference:dev-kunlunxin-p800-py3.10-latest
+
+# Directory to store image tar files (shared between build and push workflows)
+tar_dir: /mnt/airs-business/cicd/image_tar
+
+# Runner labels for Kunlunxin P800 hardware
+runner_labels: ['flagscale-kunlun-p800-gpu8']
+
+# Container volumes (hardware-specific paths)
+container_volumes:
+  - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
+  - /mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers
+
+# Container options for Kunlunxin P800 runtime.
+container_options: >-
+  --hostname=flagscale-ci
+  --privileged
+  --ipc=host
+  --shm-size=64g
+  --user root
+  --ulimit nofile=65535:65535
+
+# =============================================================================
+# Package Manager Configuration
+# =============================================================================
+pkg_mgr: 'conda'
+
+# Kunlunxin vendor image provides the torch runtime in this conda environment.
+env_path: '/root/miniconda'
+
+env_names:
+  train: 'python310_torch29_cuda'
+  hetero_train: ''
+  inference: 'python310_torch29_cuda'
+  serve: 'python310_torch29_cuda'
+  rl: ''

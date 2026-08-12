@@ -64,6 +64,8 @@ def get_platform_config(platform, device=None):
         "ascend910": "ascend.yaml",
         "metax": "metax.yaml",
         "c550": "metax.yaml",
+        "kunlunxin": "kunlunxin.yaml",
+        "p800": "kunlunxin.yaml",
     }
 
     # If platform is a device type (a100, a800, h100) and no device specified
@@ -135,6 +137,7 @@ def get_device_types(platform):
         "cuda": "cuda.yaml",
         "ascend": "ascend.yaml",
         "metax": "metax.yaml",
+        "kunlunxin": "kunlunxin.yaml",
     }
 
     yaml_file = platform_file_map.get(platform, f"{platform}.yaml")
