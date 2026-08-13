@@ -47,39 +47,25 @@ on:
         required: true
         type: string
       train_image:
-        required: true
+        description: Train image tag; required when the matrix selects train
+        required: false
+        default: ''
         type: string
       inference_image:
-        required: true
+        description: Inference image tag; required when the matrix selects inference
+        required: false
+        default: ''
         type: string
       all_image:
-        required: true
+        description: All-in-one image tag; required when the matrix selects all
+        required: false
+        default: ''
         type: string
       base_image:
         required: true
         type: string
       build_args:
         description: Vendor-specific Docker build arguments
-        required: false
-        default: ''
-        type: string
-      finalize_options:
-        description: Docker options required to finalize an image on vendor hardware
-        required: false
-        default: ''
-        type: string
-      finalize_command:
-        description: Optional command that finalizes the built image in a container
-        required: false
-        default: ''
-        type: string
-      verify_command:
-        description: Optional command that verifies the built image on vendor hardware
-        required: false
-        default: ''
-        type: string
-      no_proxy_append:
-        description: Comma-separated vendor endpoints that must bypass the runner proxy
         required: false
         default: ''
         type: string
@@ -134,18 +120,10 @@ jobs:
       - name: Detect runner proxy
         id: proxy
         shell: bash
-        env:
-          NO_PROXY_APPEND: ${{ inputs.no_proxy_append }}
         run: |
           echo "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" >> "$GITHUB_OUTPUT"
           echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
-          current_no_proxy="${no_proxy:-${NO_PROXY:-}}"
-          if [ -n "$current_no_proxy" ] && [ -n "$NO_PROXY_APPEND" ]; then
-            current_no_proxy="${current_no_proxy},${NO_PROXY_APPEND}"
-          elif [ -n "$NO_PROXY_APPEND" ]; then
-            current_no_proxy="$NO_PROXY_APPEND"
-          fi
-          echo "no_proxy=$current_no_proxy" >> "$GITHUB_OUTPUT"
+          echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -164,12 +142,20 @@ jobs:
         id: image
         shell: bash
         run: |
+          set -euo pipefail
+
           case "${{ matrix.task }}" in
-            train) echo "tag=${{ inputs.train_image }}" >> "$GITHUB_OUTPUT" ;;
-            inference) echo "tag=${{ inputs.inference_image }}" >> "$GITHUB_OUTPUT" ;;
-            all) echo "tag=${{ inputs.all_image }}" >> "$GITHUB_OUTPUT" ;;
+            train) TAG="${{ inputs.train_image }}" ;;
+            inference) TAG="${{ inputs.inference_image }}" ;;
+            all) TAG="${{ inputs.all_image }}" ;;
             *) echo "Unsupported image task: ${{ matrix.task }}" >&2; exit 1 ;;
           esac
+
+          if [ -z "$TAG" ]; then
+            echo "::error::No image tag configured for task '${{ matrix.task }}'"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Build image (attempt 1)
         id: build_attempt_1
@@ -222,37 +208,6 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
             org.opencontainers.image.base.name=${{ inputs.base_image }}
-
-      - name: Finalize image on vendor hardware
-        if: inputs.finalize_command != ''
-        shell: bash
-        env:
-          IMAGE: ${{ steps.image.outputs.tag }}
-          FINALIZE_OPTIONS: ${{ inputs.finalize_options }}
-          FINALIZE_COMMAND: ${{ inputs.finalize_command }}
-        run: |
-          set -euo pipefail
-          read -r -a options <<< "$FINALIZE_OPTIONS"
-          container="flagscale-${{ inputs.platform }}-${{ matrix.task }}-finalize-${GITHUB_RUN_ID}"
-          cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
-          docker run --name "$container" "${options[@]}" \
-            --entrypoint bash "$IMAGE" -lc "$FINALIZE_COMMAND"
-          docker commit --change 'ENTRYPOINT ["/bin/bash"]' --change 'CMD []' \
-            "$container" "$IMAGE"
-
-      - name: Verify image on vendor hardware
-        if: inputs.verify_command != ''
-        shell: bash
-        env:
-          IMAGE: ${{ steps.image.outputs.tag }}
-          FINALIZE_OPTIONS: ${{ inputs.finalize_options }}
-          VERIFY_COMMAND: ${{ inputs.verify_command }}
-        run: |
-          set -euo pipefail
-          read -r -a options <<< "$FINALIZE_OPTIONS"
-          docker run --rm "${options[@]}" --entrypoint bash "$IMAGE" \
-            -lc "$VERIFY_COMMAND"
 
       - name: Push image with retry
         if: inputs.push

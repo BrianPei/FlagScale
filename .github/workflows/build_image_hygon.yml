@@ -15,69 +15,387 @@
 name: Build Docker Images - Hygon
 
 on:
-  workflow_dispatch:
-    inputs:
-      target:
-        description: Docker target stage
-        required: true
-        type: choice
-        options: [dev, release]
-        default: dev
-      push:
-        description: Push image to the configured registry
-        type: boolean
-        default: true
-      no_cache:
-        description: Build without Docker cache
-        type: boolean
-        default: false
   pull_request:
     branches: [main]
     paths:
       - 'docker/hygon/**'
       - 'tools/install/hygon/**'
       - 'requirements/hygon/**'
-      - '.github/configs/hygon.yml'
-      - '.github/workflows/build_image_hygon.yml'
       - '.github/workflows/build_image_common.yml'
+      - '.github/workflows/build_image_hygon.yml'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Docker build target
+        required: true
+        type: choice
+        options: [dev, release]
+        default: dev
+      build_images:
+        description: Build a new Hygon training image (temporarily opt-in)
+        type: boolean
+        default: false
+      push:
+        description: Push the candidate image to Harbor
+        type: boolean
+        default: true
+      run_tests:
+        description: Validate the image built by this workflow
+        type: boolean
+        default: false
+      promote:
+        description: Promote the validated candidate image to a release tag
+        type: boolean
+        default: false
+      no_cache:
+        description: Build without Docker cache
+        type: boolean
+        default: false
+      base_image:
+        description: Optional trusted override for the pinned BW1000 base image
+        type: string
+        default: ''
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  REGISTRY: harbor.baai.ac.cn
+  REGISTRY_NAMESPACE: flagos-dev
+  # Keep automatic PR builds disabled while BW1000 capacity is constrained.
+  # PRs still validate the integration, while normal CI consumes the image in
+  # .github/configs/hygon.yml.
+  HYGON_PR_BUILD_ENABLED: 'false'
+  HYGON_BASE_IMAGE: harbor.sourcefind.cn:5443/dcu/admin/base/vllm:0.15.1-ubuntu22.04-dtk26.04-py3.10
+  HYGON_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
+  HYGON_FLAGGEMS_REF: 66a4ddb3656bf2fc4d305f610a5c49c26192bb04cd
+  HYGON_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
+  HYGON_RUNTIME_SMOKE_NPROC: '2'
+  PYTHON_VERSION: '3.10'
+
 jobs:
+  prepare:
+    name: Prepare Hygon build parameters
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.params.outputs.target }}
+      publish: ${{ steps.params.outputs.publish }}
+      candidate_push: ${{ steps.params.outputs.candidate_push }}
+      run_tests: ${{ steps.params.outputs.run_tests }}
+      build_images: ${{ steps.params.outputs.build_images }}
+      no_cache: ${{ steps.params.outputs.no_cache }}
+      base_image: ${{ steps.params.outputs.base_image }}
+      train_image: ${{ steps.params.outputs.train_image }}
+      release_train_image: ${{ steps.params.outputs.release_train_image }}
+      python_version: ${{ steps.params.outputs.python_version }}
+      megatron_ref: ${{ steps.params.outputs.megatron_ref }}
+      flaggems_ref: ${{ steps.params.outputs.flaggems_ref }}
+      transformer_engine_ref: ${{ steps.params.outputs.transformer_engine_ref }}
+    steps:
+      - name: Compute parameters
+        id: params
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET="${{ inputs.target || 'dev' }}"
+          PUBLISH=false
+          CANDIDATE_PUSH=false
+          RUN_TESTS=false
+          BUILD_IMAGES=false
+          NO_CACHE=false
+          BASE_IMAGE="${{ env.HYGON_BASE_IMAGE }}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BUILD_IMAGES="${{ env.HYGON_PR_BUILD_ENABLED }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BUILD_IMAGES="${{ inputs.build_images }}"
+            PUBLISH="${{ inputs.promote }}"
+            CANDIDATE_PUSH="${{ inputs.push }}"
+            RUN_TESTS="${{ inputs.run_tests }}"
+            NO_CACHE="${{ inputs.no_cache }}"
+            if [ -n "${{ inputs.base_image }}" ]; then
+              BASE_IMAGE="${{ inputs.base_image }}"
+            fi
+            if [ "$RUN_TESTS" = "true" ] && [ "$BUILD_IMAGES" != "true" ]; then
+              echo "::error::run_tests=true requires build_images=true; normal tests use the validated image from .github/configs/hygon.yml"
+              exit 1
+            fi
+            if [ "$RUN_TESTS" = "true" ] && [ "$CANDIDATE_PUSH" != "true" ]; then
+              echo "::error::run_tests=true requires push=true so reusable jobs can pull the candidate image"
+              exit 1
+            fi
+            if [ "$PUBLISH" = "true" ] && [ "$RUN_TESTS" != "true" ]; then
+              echo "::error::promote=true requires run_tests=true"
+              exit 1
+            fi
+            if [ "$BUILD_IMAGES" != "true" ]; then
+              if [ "$PUBLISH" = "true" ]; then
+                echo "::error::promote=true requires build_images=true"
+                exit 1
+              fi
+              CANDIDATE_PUSH=false
+            fi
+          fi
+
+          SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          SHORT_SHA="${SOURCE_SHA::12}"
+          TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:candidate-${TARGET}-hygon-bw1000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+          RELEASE_TRAIN_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/flagscale-train:${TARGET}-hygon-bw1000-py${{ env.PYTHON_VERSION }}-${SHORT_SHA}"
+
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "candidate_push=$CANDIDATE_PUSH" >> "$GITHUB_OUTPUT"
+          echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
+          echo "build_images=$BUILD_IMAGES" >> "$GITHUB_OUTPUT"
+          echo "no_cache=$NO_CACHE" >> "$GITHUB_OUTPUT"
+          echo "base_image=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "train_image=$TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "release_train_image=$RELEASE_TRAIN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "python_version=${{ env.PYTHON_VERSION }}" >> "$GITHUB_OUTPUT"
+          echo "megatron_ref=${{ env.HYGON_MEGATRON_REF }}" >> "$GITHUB_OUTPUT"
+          echo "flaggems_ref=${{ env.HYGON_FLAGGEMS_REF }}" >> "$GITHUB_OUTPUT"
+          echo "transformer_engine_ref=${{ env.HYGON_TE_REF }}" >> "$GITHUB_OUTPUT"
+
+  validate_pr:
+    name: Validate Hygon PR configuration
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source (attempt 1)
+        id: checkout_attempt_1
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Checkout source (attempt 2)
+        id: checkout_attempt_2
+        if: steps.checkout_attempt_1.outcome == 'failure'
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Checkout source (attempt 3)
+        if: steps.checkout_attempt_2.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Validate Hygon integration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f docker/hygon/Dockerfile.train
+          test -f requirements/hygon/train.txt
+          test -f .github/configs/hygon.yml
+          test -f tests/test_utils/config/platforms/hygon.yaml
+          test -f tests/functional_tests/train/qwen3/conf/0_6b_hygon.yaml
+          test -f tests/functional_tests/train/qwen3/conf/train/0_6b_hygon.yaml
+          test -f tests/functional_tests/train/qwen3/conf/train/data_hygon.yaml
+          test -f tests/unit_tests/train/megatron/test_tokenizer.py
+          python -m py_compile flagscale/train/megatron/training/tokenizer/tokenizer.py
+          python -m py_compile tests/unit_tests/train/megatron/test_tokenizer.py
+          python tests/test_utils/runners/parse_config.py \
+            --platform hygon --type device_types | grep -q 'bw1000'
+          UNIT_MATRIX="$(python tests/test_utils/runners/parse_config.py \
+            --platform hygon --device bw1000 --type unit)"
+          echo "$UNIT_MATRIX" | grep -q 'test_spiky_loss_detector.py'
+          echo "$UNIT_MATRIX" | grep -q 'test_tokenizer.py'
+          python tests/test_utils/runners/parse_config.py \
+            --platform hygon --type functional --task train | grep -q '0_6b_hygon'
+
   build:
+    needs: prepare
     uses: ./.github/workflows/build_image_common.yml
     secrets: inherit
     with:
       platform: hygon
       runs_on: '["flagscale-hygon-bw1000-gpu8"]'
       matrix: '{"task":["train"]}'
-      target: ${{ inputs.target || 'dev' }}
-      build_images: true
-      # Fork PRs have no registry credentials. They build, finalize, and verify
-      # the image; publishing remains an explicit workflow_dispatch operation.
-      push: ${{ github.event_name == 'workflow_dispatch' && inputs.push }}
-      no_cache: ${{ inputs.no_cache || false }}
+      target: ${{ needs.prepare.outputs.target }}
+      build_images: ${{ needs.prepare.outputs.build_images == 'true' }}
+      no_cache: ${{ needs.prepare.outputs.no_cache == 'true' }}
+      push: ${{ needs.prepare.outputs.candidate_push == 'true' }}
       registry: harbor.baai.ac.cn
-      train_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
-      inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
-      all_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
-      base_image: harbor.sourcefind.cn:5443/dcu/admin/base/vllm:0.15.1-ubuntu22.04-dtk26.04-py3.10
-      no_proxy_append: harbor.sourcefind.cn,.sourcefind.cn,harbor.baai.ac.cn,.baai.ac.cn
+      train_image: ${{ needs.prepare.outputs.train_image }}
+      base_image: ${{ needs.prepare.outputs.base_image }}
       build_args: |
-        BASE_IMAGE=harbor.sourcefind.cn:5443/dcu/admin/base/vllm:0.15.1-ubuntu22.04-dtk26.04-py3.10
-      finalize_options: >-
-        --device=/dev/kfd
-        --device=/dev/dri
-        --group-add video
-        --ipc=host
-        --volume /opt/hyhal:/opt/hyhal:ro
-        --cap-add SYS_PTRACE
-        --security-opt seccomp=unconfined
-      finalize_command: /usr/local/bin/flagscale-hygon-finalize-flagcx
-      verify_command: >-
-        python -c 'import torch; import flag_gems; import transformer_engine;
-        import flagcx; from flagcx import _C;
-        assert torch.cuda.device_count() == 8;
-        print("Hygon training stack: OK")'
+        BASE_IMAGE=${{ needs.prepare.outputs.base_image }}
+        PYTHON_VERSION=${{ needs.prepare.outputs.python_version }}
+        MEGATRON_REF=${{ needs.prepare.outputs.megatron_ref }}
+        FLAGGEMS_REF=${{ needs.prepare.outputs.flaggems_ref }}
+        TRANSFORMER_ENGINE_REF=${{ needs.prepare.outputs.transformer_engine_ref }}
+
+  hygon_runtime:
+    name: Hygon training runtime
+    needs: [prepare, build]
+    if: >-
+      always() &&
+      needs.prepare.outputs.run_tests == 'true' &&
+      needs.build.result == 'success'
+    runs-on: flagscale-hygon-bw1000-gpu8
+    steps:
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Validate Hygon training runtime
+        shell: bash
+        env:
+          IMAGE: ${{ needs.prepare.outputs.train_image }}
+        run: |
+          set -euo pipefail
+
+          runtime_options=(
+            --device=/dev/kfd
+            --device=/dev/dri
+            --group-add video
+            --ipc=host
+            --volume /opt/hyhal:/opt/hyhal:ro
+            --env HSA_FORCE_FINE_GRAIN_PCIE=1
+            --env TE_FL_PREFER=flagos
+            --cap-add SYS_PTRACE
+            --security-opt seccomp=unconfined
+          )
+
+          docker pull "$IMAGE"
+          docker run --rm "${runtime_options[@]}" "$IMAGE" python -c '
+          import torch
+          import flag_gems
+          import megatron.core
+          import transformer_engine
+          from megatron.plugin.platform import get_platform
+          from transformer_engine.plugin.core import get_manager
+          assert torch.cuda.is_available()
+          assert torch.cuda.device_count() >= 2
+          assert get_platform().device_name() == "cuda"
+          assert get_manager().get_selected_impl_id("generic_gemm") == "default.flagos"
+          value = torch.tensor(list(range(8)), dtype=torch.float32, device="cuda")
+          assert (value * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]
+          print(f"Hygon training stack ready on {torch.cuda.device_count()} devices")
+          '
+
+          docker run --rm "${runtime_options[@]}" \
+            --env EXPECTED_WORLD_SIZE="${{ env.HYGON_RUNTIME_SMOKE_NPROC }}" "$IMAGE" \
+            torchrun --standalone --nproc_per_node="${{ env.HYGON_RUNTIME_SMOKE_NPROC }}" \
+              --no-python python -c '
+          import os
+          import torch
+          rank = int(os.environ["LOCAL_RANK"])
+          world = int(os.environ["EXPECTED_WORLD_SIZE"])
+          torch.cuda.set_device(rank)
+          torch.distributed.init_process_group(backend="nccl")
+          value = torch.tensor([rank], dtype=torch.int64, device="cuda")
+          torch.distributed.all_reduce(value)
+          assert value.item() == world * (world - 1) // 2
+          torch.distributed.destroy_process_group()
+          '
+
+  run_hygon_tests:
+    name: Run Hygon tests
+    needs: [prepare, build]
+    if: >-
+      always() &&
+      needs.prepare.outputs.run_tests == 'true' &&
+      needs.build.result == 'success'
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: hygon
+      ci_train_image: ${{ needs.prepare.outputs.train_image }}
+      runs_on: '["flagscale-hygon-bw1000-gpu8"]'
+      container_volumes: '["/opt/hyhal:/opt/hyhal:ro","/public-flash/lihongyang/data:/home/gitlab-runner/data:ro","/public-flash/lihongyang/qwentokenizer:/home/gitlab-runner/tokenizers/qwentokenizer:ro"]'
+
+  promote:
+    name: Promote validated Hygon image
+    needs: [prepare, build, hygon_runtime, run_hygon_tests]
+    if: >-
+      needs.prepare.outputs.build_images == 'true' &&
+      needs.prepare.outputs.publish == 'true' &&
+      needs.prepare.outputs.run_tests == 'true' &&
+      needs.hygon_runtime.result == 'success' &&
+      needs.run_hygon_tests.result == 'success'
+    runs-on: flagscale-hygon-bw1000-gpu8
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY }}
+
+      - name: Promote candidate manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${{ needs.prepare.outputs.release_train_image }}" \
+            "${{ needs.prepare.outputs.train_image }}"
+          docker buildx imagetools inspect "${{ needs.prepare.outputs.release_train_image }}"
+
+          {
+            echo "### Validated Hygon image"
+            echo ""
+            echo "- Train: \`${{ needs.prepare.outputs.release_train_image }}\`"
+            echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
+            echo "- FlagScale: \`${{ github.sha }}\`"
+            echo "- Megatron-LM-FL: \`${{ env.HYGON_MEGATRON_REF }}\`"
+            echo "- TransformerEngine-FL: \`${{ env.HYGON_TE_REF }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  summary:
+    name: Hygon pipeline summary
+    needs: [prepare, validate_pr, build, hygon_runtime, run_hygon_tests, promote]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify pipeline result
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${{ needs.prepare.result }}" = "success"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            test "${{ needs.validate_pr.result }}" = "success"
+          fi
+          if [ "${{ needs.prepare.outputs.build_images }}" = "true" ]; then
+            test "${{ needs.build.result }}" = "success"
+          fi
+          if [ "${{ needs.prepare.outputs.run_tests }}" = "true" ]; then
+            test "${{ needs.hygon_runtime.result }}" = "success"
+            test "${{ needs.run_hygon_tests.result }}" = "success"
+          fi
+          if [ "${{ needs.prepare.outputs.publish }}" = "true" ]; then
+            test "${{ needs.promote.result }}" = "success"
+          fi
+
+          {
+            echo "### Hygon training image"
+            echo ""
+            echo "- Candidate: \`${{ needs.prepare.outputs.train_image }}\`"
+            echo "- Target: \`${{ needs.prepare.outputs.target }}\`"
+            echo "- Published: \`${{ needs.prepare.outputs.publish }}\`"
+            echo "- Promoted: \`${{ needs.promote.result }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

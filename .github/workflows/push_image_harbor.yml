@@ -20,8 +20,9 @@ on:
     branches: [main]
     paths:
       - 'docker/cuda/**'
-      - 'tools/install/cuda/**'
-      - 'requirements/cuda/**'
+      - 'docker/build.sh'
+      - 'tools/install/**'
+      - 'requirements/**'
       - '.github/workflows/build_image_cuda.yml'
   workflow_dispatch:
 

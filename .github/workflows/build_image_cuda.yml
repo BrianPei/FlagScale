@@ -72,7 +72,7 @@ on:
           ["/home/flagscale_cicd/docker/docker_build/docker_data:/home/gitlab-runner/data",
           "/home/flagscale_cicd/docker/docker_build/docker_tokenizers:/home/gitlab-runner/tokenizers"]
 
-  # Trigger only when CUDA image build inputs change (build + test only, no push).
+  # Trigger on PRs that modify docker-related files (build + test only, no push)
   pull_request:
     branches: [main]
     paths:

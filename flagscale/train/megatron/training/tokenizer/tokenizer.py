@@ -184,7 +184,8 @@ class _QwenTokenizerFS(_HFTokenizerFS):
     """Qwen tokenizer with custom special tokens."""
 
     def __init__(self, tokenizer_path, args):
-        super().__init__(tokenizer_path, use_fast=not args.tokenizer_hf_no_use_fast)
+        use_fast = not getattr(args, "tokenizer_hf_no_use_fast", False)
+        super().__init__(tokenizer_path, use_fast=use_fast)
         self.eod_id = self.tokenizer.encode('<|extra_204|>')[0]
         self.cls_id = self.tokenizer.encode('<|extra_203|>')[0]
         self.pad_id = self.tokenizer.encode('<|endoftext|>')[0]

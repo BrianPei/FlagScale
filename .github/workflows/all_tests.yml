@@ -76,7 +76,6 @@ jobs:
     if: github.event_name == 'pull_request'
     outputs:
       has_docker_changes: ${{ steps.check.outputs.has_docker_changes }}
-      has_hygon_changes: ${{ steps.check.outputs.has_hygon_changes }}
     steps:
       - name: Check for docker-related file changes
         id: check
@@ -88,11 +87,6 @@ jobs:
             echo "has_docker_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_docker_changes=false" >> $GITHUB_OUTPUT
-          fi
-          if echo "$CHANGED" | grep -qE '^(\.github/configs/hygon\.yml$|tests/test_utils/config/platforms/hygon\.yaml$|tests/functional_tests/train/qwen3/.+hygon)'; then
-            echo "has_hygon_changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_hygon_changes=false" >> $GITHUB_OUTPUT
           fi
 
   cuda_tests:
@@ -131,11 +125,9 @@ jobs:
 
   hygon_tests:
     name: Hygon BW1000 tests
-    needs: check_docker_changes
-    if: >-
-      always() &&
-      ((github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'hygon')) ||
-      (github.event_name == 'pull_request' && needs.check_docker_changes.outputs.has_hygon_changes == 'true'))
+    # Use the verified Hygon image from the platform config for PR/push tests.
+    # New image builds remain an explicit concern of build_image_hygon.yml.
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'hygon'
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: hygon

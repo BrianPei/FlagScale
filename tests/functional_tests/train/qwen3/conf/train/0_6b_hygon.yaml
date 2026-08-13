@@ -46,9 +46,7 @@ model:
   no_check_for_nan_in_loss_and_grad: true
   no_gradient_accumulation_fusion: true
   te_fl_prefer: flagos
-  # FlagCX collectives are validated separately. Training currently uses the
-  # DTK NCCL-compatible backend because this FlagScale revision maps FlagCX to
-  # an unsupported txda device string during early rank initialization.
+  # DTK exposes its RCCL runtime through PyTorch's NCCL-compatible backend.
   distributed_backend: nccl
   num_layers: 28
   hidden_size: 1024

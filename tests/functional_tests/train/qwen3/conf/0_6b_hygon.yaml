@@ -24,13 +24,15 @@ experiment:
     backend: megatron
     entrypoint: flagscale/train/megatron/train_gpt.py
   runner:
-    ssh_port: null
-    # Single-node CI does not need dynamic c10d rendezvous discovery.
+    backend: torchrun
+    nnodes: 1
+    nproc_per_node: 1
     rdzv_backend: static
+    no_shared_fs: false
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1
-    CUDA_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7"
+    CUDA_VISIBLE_DEVICES: "0"
     CUDA_DEVICE_MAX_CONNECTIONS: 1
     # Override the base image's vendor-specific setting with an algorithm
     # accepted by the DTK NCCL compatibility layer on BW1000.

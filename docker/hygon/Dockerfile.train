@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.6
+
 # Copyright 2026 FlagOS Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,23 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# FlagScale training image for Hygon BW1000 DCUs. The DTK runtime and
-# PyTorch stack are supplied by the vendor base image. FlagScale itself is
-# intentionally checked out at runtime so the same image can test PR branches.
+# FlagScale training image for Hygon BW1000 DCUs. The vendor base supplies DTK
+# and PyTorch. The FlagOS Transformer Engine implementation is installed below;
+# FlagScale is checked out at test time so one image can exercise PR revisions.
 
 ARG BASE_IMAGE=harbor.sourcefind.cn:5443/dcu/admin/base/vllm:0.15.1-ubuntu22.04-dtk26.04-py3.10
 ARG PYTHON_VERSION=3.10
-
-ARG MEGATRON_REPO=https://github.com/flagos-ai/Megatron-LM-FL.git
-ARG MEGATRON_REF=e2174161fa6e6ae844fc5e05a17b5ea64e492c59cd
-ARG FLAGGEMS_REPO=https://github.com/flagos-ai/FlagGems.git
+ARG MEGATRON_REF=409c1ed949675ddf9aa540aaae48652f446351cc
 ARG FLAGGEMS_REF=66a4ddb3656bf2fc4d305f610a5c49c26192bb04cd
-ARG TRANSFORMER_ENGINE_REPO=https://github.com/flagos-ai/TransformerEngine-FL.git
-ARG TRANSFORMER_ENGINE_REF=b7f65d1b4a4c73b554e5b8f5ce0547eab0c3c35acd
-ARG FLAGCX_REPO=https://github.com/flagos-ai/FlagCX.git
-ARG FLAGCX_REF=0beba7aa7e76cc0885a9929f1975857bcd310d5ecd
-ARG GOOGLETEST_REF=e90fe2485641bab0d6af4500192dc503384950d1
-ARG JSON_REF=a0e9fb1e638cfbb5b8b556b7c51eaa81977bad48
+ARG TRANSFORMER_ENGINE_REF=94c7007c84107028919b4e52213d1bcb4ca3f7cf
 
 FROM ${BASE_IMAGE} AS base
 
@@ -36,17 +30,11 @@ ARG PYTHON_VERSION
 ARG MEGATRON_REF
 ARG FLAGGEMS_REF
 ARG TRANSFORMER_ENGINE_REF
-ARG FLAGCX_REF
-ARG GOOGLETEST_REF
-ARG JSON_REF
 
 LABEL io.flagscale.platform=hygon-bw1000 \
       io.flagscale.megatron-lm-fl.revision=${MEGATRON_REF} \
       io.flagscale.flaggems.revision=${FLAGGEMS_REF} \
-      io.flagscale.transformer-engine-fl.revision=${TRANSFORMER_ENGINE_REF} \
-      io.flagscale.flagcx.revision=${FLAGCX_REF} \
-      io.flagscale.googletest.revision=${GOOGLETEST_REF} \
-      io.flagscale.json.revision=${JSON_REF}
+      io.flagscale.transformer-engine-fl.revision=${TRANSFORMER_ENGINE_REF}
 
 ENV FLAGSCALE_HOME=/opt/flagscale \
     FLAGSCALE_DEPS=/opt/flagscale/deps \
@@ -67,7 +55,6 @@ RUN apt-get update && \
         curl \
         git \
         ninja-build \
-        patch \
         python3-dev && \
     rm -rf /var/lib/apt/lists/* && \
     git config --system http.version HTTP/1.1 && \
@@ -77,34 +64,29 @@ WORKDIR /workspace
 
 FROM base AS deps
 
-# The native FlagCX extension is finalized after DTK devices and /opt/hyhal
-# are mounted into a running container.
-COPY docker/hygon/flagcx-dtk26.04.patch /tmp/flagcx-dtk26.04.patch
-COPY docker/hygon/finalize-flagcx.sh /usr/local/bin/flagscale-hygon-finalize-flagcx
-
-ARG MEGATRON_REPO
 ARG MEGATRON_REF
-ARG FLAGGEMS_REPO
 ARG FLAGGEMS_REF
-ARG TRANSFORMER_ENGINE_REPO
 ARG TRANSFORMER_ENGINE_REF
-ARG FLAGCX_REPO
-ARG FLAGCX_REF
-ARG GOOGLETEST_REF
-ARG JSON_REF
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
-RUN sed -i 's/\r$//' /usr/local/bin/flagscale-hygon-finalize-flagcx && \
-    chmod 0755 /usr/local/bin/flagscale-hygon-finalize-flagcx && \
-    python -m pip install \
-        "hydra-core==1.3.5" \
-        "onnxscript==0.7.1" \
-        "typer>=0.9.0"
+COPY requirements/hygon/train.txt /tmp/requirements/hygon/train.txt
 
 RUN set -eux; \
-    mkdir -p "${FLAGSCALE_DEPS}"; \
+    python -c "from pathlib import Path; import torch; Path('/tmp/flagscale-vendor-torch').write_text(torch.__version__ + '\\n' + torch.__file__); Path('/tmp/flagscale-torch-constraint.txt').write_text('torch==' + torch.__version__ + '\\n')"; \
+    python -m pip install \
+        "setuptools>=77.0,<80.0" \
+        "wheel>=0.45.1" \
+        "cmake>=3.21,<4.0" \
+        "ninja==1.13.0" \
+        "scikit-build-core==0.12.2" \
+        "pybind11[global]==3.0.3"; \
+    python -m pip install \
+        --constraint /tmp/flagscale-torch-constraint.txt \
+        --requirement /tmp/requirements/hygon/train.txt
+
+RUN set -eux; \
     mkdir -p "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
     curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
         --output /tmp/megatron-lm-fl.tar.gz \
@@ -112,8 +94,9 @@ RUN set -eux; \
     tar -xzf /tmp/megatron-lm-fl.tar.gz --strip-components=1 \
         -C "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
     rm /tmp/megatron-lm-fl.tar.gz; \
-    python -c "from pathlib import Path; p=Path('${FLAGSCALE_DEPS}/Megatron-LM-FL/pyproject.toml'); s=p.read_text(); q=chr(34); old='requires-python = '+q+'>=3.12'+q; new='requires-python = '+q+'>=3.10'+q; assert s.count(old) == 1, 'unexpected Megatron-LM-FL Python constraint'; p.write_text(s.replace(old, new))"; \
-    python -m pip install --no-build-isolation -e "${FLAGSCALE_DEPS}/Megatron-LM-FL"
+    python -m pip install --ignore-requires-python --no-build-isolation --no-deps \
+        -e "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
+    python -m pip show megatron-core >/dev/null
 
 RUN set -eux; \
     mkdir -p "${FLAGSCALE_DEPS}/FlagGems"; \
@@ -123,13 +106,8 @@ RUN set -eux; \
     tar -xzf /tmp/flag-gems.tar.gz --strip-components=1 \
         -C "${FLAGSCALE_DEPS}/FlagGems"; \
     rm /tmp/flag-gems.tar.gz; \
-    python -m pip install \
-        "setuptools>=64.0,<80.0" \
-        "cmake>=3.20,<4.0" \
-        "ninja==1.13.0" \
-        "scikit-build-core==0.12.2" \
-        "pybind11==3.0.3"; \
-    python -m pip install --no-build-isolation -e "${FLAGSCALE_DEPS}/FlagGems"
+    python -m pip install --no-build-isolation --no-deps \
+        -e "${FLAGSCALE_DEPS}/FlagGems"
 
 RUN set -eux; \
     mkdir -p "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
@@ -139,32 +117,11 @@ RUN set -eux; \
     tar -xzf /tmp/transformer-engine-fl.tar.gz --strip-components=1 \
         -C "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
     rm /tmp/transformer-engine-fl.tar.gz; \
-    TE_FL_SKIP_CUDA=1 python -m pip install --no-build-isolation -e "${FLAGSCALE_DEPS}/TransformerEngine-FL"
-
-RUN set -eux; \
-    mkdir -p \
-        "${FLAGSCALE_DEPS}/FlagCX" \
-        "${FLAGSCALE_DEPS}/FlagCX/third-party/googletest" \
-        "${FLAGSCALE_DEPS}/FlagCX/third-party/json"; \
-    curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
-        --output /tmp/flagcx.tar.gz \
-        "https://codeload.github.com/flagos-ai/FlagCX/tar.gz/${FLAGCX_REF}"; \
-    curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
-        --output /tmp/googletest.tar.gz \
-        "https://codeload.github.com/google/googletest/tar.gz/${GOOGLETEST_REF}"; \
-    curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
-        --output /tmp/json.tar.gz \
-        "https://codeload.github.com/nlohmann/json/tar.gz/${JSON_REF}"; \
-    tar -xzf /tmp/flagcx.tar.gz --strip-components=1 \
-        -C "${FLAGSCALE_DEPS}/FlagCX"; \
-    tar -xzf /tmp/googletest.tar.gz --strip-components=1 \
-        -C "${FLAGSCALE_DEPS}/FlagCX/third-party/googletest"; \
-    tar -xzf /tmp/json.tar.gz --strip-components=1 \
-        -C "${FLAGSCALE_DEPS}/FlagCX/third-party/json"; \
-    rm /tmp/flagcx.tar.gz /tmp/googletest.tar.gz /tmp/json.tar.gz; \
-    patch --directory "${FLAGSCALE_DEPS}/FlagCX" --strip=1 \
-        < /tmp/flagcx-dtk26.04.patch; \
-    python -m pip install --no-build-isolation -v "${FLAGSCALE_DEPS}/FlagCX"
+    TE_FL_SKIP_CUDA=1 python -m pip install --no-build-isolation --no-deps \
+        -e "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
+    python -m pip show transformer-engine >/dev/null; \
+    python -c "from pathlib import Path; import torch; expected=Path('/tmp/flagscale-vendor-torch').read_text().splitlines(); actual=[torch.__version__, torch.__file__]; assert actual == expected, f'vendor torch changed: expected {expected}, found {actual}'"; \
+    rm /tmp/flagscale-vendor-torch /tmp/flagscale-torch-constraint.txt
 
 FROM deps AS dev
 
