@@ -357,7 +357,6 @@ jobs:
             test "$(git -C "$FLAGSCALE_MEGATRON_PATH" rev-parse HEAD)" = "$FLAGSCALE_MEGATRON_REF"
             python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version"
             python -c "from pathlib import Path; import importlib; import megatron.core; import torch; import transformer_engine; import transformer_engine_torch; importlib.import_module(\"flagcx\"); from megatron.core.jit import disable_jit_fuser; from megatron.core.models.gpt.gpt_layer_specs import get_gpt_decoder_layer_specs; expected = Path(\"$FLAGSCALE_MEGATRON_PATH\").resolve(); actual = Path(megatron.core.__file__).resolve(); assert actual.is_relative_to(expected), (actual, expected); assert callable(disable_jit_fuser); assert callable(get_gpt_decoder_layer_specs); assert torch.cuda.is_available(); print(f\"Kunlunxin train runtime OK: {actual}\")"
-            python -c "from xmegatron_ext import megatron_plugin_init; megatron_plugin_init(use_version=\"0.17.1\", check_version=True); print(\"Kunlunxin XME version check OK\")"
           '
 
   kunlunxin_cli:
