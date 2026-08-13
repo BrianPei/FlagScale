@@ -29,10 +29,12 @@ FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/ascend/serve.txt"
 FLAGGEMS_REPO="${FLAGSCALE_FLAGGEMS_REPO:-https://github.com/flagos-ai/FlagGems.git}"
-# Candidate source revision. Promote the resulting image digest to CI only
-# after the Ascend inference and serve matrices pass.
+# This is the first upstream revision containing the Ascend zero-element
+# tensor fix from FlagGems PR #5410. No released tag contains that fix yet.
 FLAGGEMS_REF="${FLAGSCALE_FLAGGEMS_REF:-61f3ff2773bc9c8e86b97489775ef9668a96a33c}"
 VLLM_PLUGIN_REPO="${FLAGSCALE_VLLM_PLUGIN_REPO:-https://github.com/flagos-ai/vllm-plugin-FL.git}"
+# This revision contains the consolidated Ascend 910C and vLLM 0.20.2 updates
+# from vllm-plugin-FL PR #347. Pin the commit until that support is released.
 VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-43edeb601f4b8f616f56109de64836529e758deb}"
 
 SRC_DEPS_LIST="flaggems vllm-plugin"
