@@ -40,7 +40,6 @@ experiment:
     # Megatron deterministic mode requires Transformer Engine to reject
     # nondeterministic attention implementations.
     NVTE_ALLOW_NONDETERMINISTIC_ALGO: 0
-    GEMS_VENDOR: amd
     TORCHINDUCTOR_WORKER_START: spawn
   cmds:
     before_start: ulimit -n 1048576

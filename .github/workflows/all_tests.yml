@@ -83,7 +83,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           CHANGED=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files --paginate --jq '.[].filename')
-          if echo "$CHANGED" | grep -qE '^(docker/cuda/|docker/build\.sh$|tools/install/|requirements/|\.github/workflows/build_image_cuda\.yml$)'; then
+          if echo "$CHANGED" | grep -qE '^(docker/cuda/|tools/install/cuda/|requirements/cuda/|\.github/workflows/build_image_cuda\.yml$)'; then
             echo "has_docker_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_docker_changes=false" >> $GITHUB_OUTPUT
@@ -93,8 +93,10 @@ jobs:
     name: CUDA tests
     needs: check_docker_changes
     if: >-
+      always() &&
       (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'cuda') &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || needs.check_docker_changes.outputs.has_docker_changes != 'true')
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
+      (needs.check_docker_changes.result == 'success' && needs.check_docker_changes.outputs.has_docker_changes != 'true'))
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: cuda
@@ -148,13 +150,19 @@ jobs:
         run: |
           failed=false
 
-          # if [ "${{ needs.check_docker_changes.outputs.has_docker_changes }}" = "true" ]; then
-          #   echo "⏭️ CUDA tests skipped - docker changes detected, handled by build_image_cuda workflow"
-          # elif [ "${{ needs.cuda_tests.result }}" != "success" ] && \
-          #      [ "${{ needs.cuda_tests.result }}" != "skipped" ]; then
-          #   echo "❌ CUDA tests failed"
-          #   failed=true
-          # fi
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ needs.check_docker_changes.result }}" != "success" ]; then
+            echo "CUDA image change detection failed"
+            failed=true
+          fi
+
+          if [ "${{ needs.check_docker_changes.outputs.has_docker_changes }}" = "true" ]; then
+            echo "CUDA tests skipped - CUDA image inputs are handled by build_image_cuda workflow"
+          elif [ "${{ needs.cuda_tests.result }}" != "success" ] && \
+               [ "${{ needs.cuda_tests.result }}" != "skipped" ]; then
+            echo "CUDA tests failed"
+            failed=true
+          fi
 
           #   echo "❌ Ascend tests failed"
 

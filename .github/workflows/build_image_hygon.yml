@@ -72,7 +72,7 @@ env:
   HYGON_PR_BUILD_ENABLED: 'false'
   HYGON_BASE_IMAGE: harbor.sourcefind.cn:5443/dcu/admin/base/vllm:0.15.1-ubuntu22.04-dtk26.04-py3.10
   HYGON_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
-  HYGON_FLAGGEMS_REF: 66a4ddb3656bf2fc4d305f610a5c49c26192bb04cd
+  HYGON_FLAGGEMS_REF: f7ae8e6b934a33ec1ccaf2c9aae71edf205f8fb4
   HYGON_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
   HYGON_RUNTIME_SMOKE_NPROC: '2'
   PYTHON_VERSION: '3.10'
@@ -283,6 +283,7 @@ jobs:
           from transformer_engine.plugin.core import get_manager
           assert torch.cuda.is_available()
           assert torch.cuda.device_count() >= 2
+          assert flag_gems.vendor_name == "hygon"
           assert get_platform().device_name() == "cuda"
           assert get_manager().get_selected_impl_id("generic_gemm") == "default.flagos"
           value = torch.tensor(list(range(8)), dtype=torch.float32, device="cuda")
@@ -360,6 +361,7 @@ jobs:
             echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
             echo "- FlagScale: \`${{ github.sha }}\`"
             echo "- Megatron-LM-FL: \`${{ env.HYGON_MEGATRON_REF }}\`"
+            echo "- FlagGems: \`${{ env.HYGON_FLAGGEMS_REF }}\`"
             echo "- TransformerEngine-FL: \`${{ env.HYGON_TE_REF }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 

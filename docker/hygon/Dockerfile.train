@@ -21,7 +21,7 @@
 ARG BASE_IMAGE=harbor.sourcefind.cn:5443/dcu/admin/base/vllm:0.15.1-ubuntu22.04-dtk26.04-py3.10
 ARG PYTHON_VERSION=3.10
 ARG MEGATRON_REF=409c1ed949675ddf9aa540aaae48652f446351cc
-ARG FLAGGEMS_REF=66a4ddb3656bf2fc4d305f610a5c49c26192bb04cd
+ARG FLAGGEMS_REF=f7ae8e6b934a33ec1ccaf2c9aae71edf205f8fb4
 ARG TRANSFORMER_ENGINE_REF=94c7007c84107028919b4e52213d1bcb4ca3f7cf
 
 FROM ${BASE_IMAGE} AS base
@@ -42,7 +42,6 @@ ENV FLAGSCALE_HOME=/opt/flagscale \
     CUDA_HOME=/opt/dtk/cuda/cuda-12 \
     DEVICE_HOME=/opt/dtk/cuda/cuda-12 \
     CCL_HOME=/opt/dtk/cuda/cuda-12 \
-    GEMS_VENDOR=amd \
     TE_FL_SKIP_CUDA=1 \
     TORCHINDUCTOR_WORKER_START=spawn \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -77,8 +76,9 @@ COPY requirements/hygon /tmp/requirements/hygon
 RUN set -eux; \
     python -c "from pathlib import Path; import torch; Path('/tmp/flagscale-vendor-torch').write_text(torch.__version__ + '\\n' + torch.__file__); Path('/tmp/flagscale-torch-constraint.txt').write_text('torch==' + torch.__version__ + '\\n')"; \
     python -m pip install \
-        "setuptools>=77.0,<80.0" \
-        "wheel>=0.45.1" \
+        "setuptools>=64.0,<77.0" \
+        "setuptools-scm>=8.0,<10.0" \
+        "wheel==0.46.2" \
         "cmake>=3.21,<4.0" \
         "ninja==1.13.0" \
         "scikit-build-core==0.12.2" \
