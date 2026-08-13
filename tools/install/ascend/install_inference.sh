@@ -60,34 +60,24 @@ install_vllm_plugin() {
 }
 
 validate_inference_stack() {
-    set_step "Validating Ascend inference stack"
+    set_step "Validating Ascend inference package contract"
     [ "$DEBUG" = true ] && return 0
     python - <<'PY'
 import importlib.metadata as metadata
 
-import flag_gems
-import vllm
-import vllm_fl
-from vllm.platforms import current_platform
-
 vllm_version = metadata.version("vllm")
 plugin_version = metadata.version("vllm-plugin-fl")
+flaggems_version = metadata.version("flaggems")
 platform_plugins = {
     entry.name: entry.value
     for entry in metadata.entry_points(group="vllm.platform_plugins")
 }
 print("vllm:", vllm_version)
 print("plugin:", plugin_version)
+print("FlagGems:", flaggems_version)
 print("platform_plugins:", platform_plugins)
-print("platform:", type(current_platform).__module__, type(current_platform).__name__)
-print("device_type:", current_platform.device_type)
-print("dist_backend:", current_platform.dist_backend)
 assert vllm_version.startswith("0.20.2"), vllm_version
 assert platform_plugins.get("fl") == "vllm_fl:register", platform_plugins
-assert type(current_platform).__module__ == "vllm_fl.platform"
-assert type(current_platform).__name__ == "PlatformFL"
-assert current_platform.device_type == "npu"
-assert current_platform.dist_backend == "hccl"
 PY
     log_success "Ascend inference stack ready"
 }

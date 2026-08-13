@@ -101,7 +101,7 @@ EOF
 }
 
 transformer_engine_ready() {
-    TE_FL_SKIP_CUDA=1 python -c '
+    TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 python -c '
 from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
 from transformer_engine.pytorch.fp8 import FP8GlobalStateManager, fp8_autocast
 ' &>/dev/null
