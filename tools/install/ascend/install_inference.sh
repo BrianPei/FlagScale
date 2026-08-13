@@ -67,7 +67,7 @@ import importlib.metadata as metadata
 
 vllm_version = metadata.version("vllm")
 plugin_version = metadata.version("vllm-plugin-fl")
-flaggems_version = metadata.version("flaggems")
+flaggems_version = metadata.version("flag_gems")
 platform_plugins = {
     entry.name: entry.value
     for entry in metadata.entry_points(group="vllm.platform_plugins")

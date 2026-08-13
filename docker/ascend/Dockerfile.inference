@@ -33,12 +33,21 @@ ENV FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF}
 COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
 
+# The immutable vendor base contains unrelated package metadata findings.
+# Installing the pinned plugin must not introduce any additional conflicts.
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.before || true
+
 RUN chmod +x /workspace/tools/install/*.sh \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/ascend/*.sh && \
     /workspace/tools/install/install.sh --platform ascend --task inference \
-        --pkg-mgr pip --no-system --no-dev --no-base && \
-    python -m pip check && \
+        --pkg-mgr pip --no-system --no-dev --no-base
+
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.after || true
+
+RUN diff -u /tmp/pip-check.before /tmp/pip-check.after && \
+    cat /tmp/pip-check.after && \
+    rm -f /tmp/pip-check.before /tmp/pip-check.after && \
     rm -rf /opt/flagscale/deps /workspace/tools /workspace/requirements
 
 WORKDIR /workspace
