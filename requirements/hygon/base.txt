@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-data:
-  data_path: /home/gitlab-runner/data/Nemotron-CC-v2__High-Quality__part1_text_document
-  # Store generated indices outside the read-only dataset mount.
-  data_cache_path: /tmp/flagscale-data-cache/qwen3-0_6b_hygon
-  split: 1
-  no_mmap_bin_files: true
-  tokenizer:
-    tokenizer_type: QwenTokenizerFS
-    tokenizer_path: /home/gitlab-runner/tokenizers/qwentokenizer
-    vocab_size: 151936
-    make_vocab_size_divisible_by: 64
+# Hygon platform-specific base dependencies. Vendor Torch is intentionally
+# omitted and protected in Dockerfile.train.
+
+-r ../common.txt
+
+einops==0.8.2
+importlib-metadata>=1.0
+onnx
+onnxscript==0.7.1
+nvdlfw-inspect
+packaging==26.0
+pydantic
+sqlalchemy==2.0.48

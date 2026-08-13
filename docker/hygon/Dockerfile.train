@@ -71,7 +71,8 @@ ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
-COPY requirements/hygon/train.txt /tmp/requirements/hygon/train.txt
+COPY requirements/common.txt /tmp/requirements/common.txt
+COPY requirements/hygon /tmp/requirements/hygon
 
 RUN set -eux; \
     python -c "from pathlib import Path; import torch; Path('/tmp/flagscale-vendor-torch').write_text(torch.__version__ + '\\n' + torch.__file__); Path('/tmp/flagscale-torch-constraint.txt').write_text('torch==' + torch.__version__ + '\\n')"; \

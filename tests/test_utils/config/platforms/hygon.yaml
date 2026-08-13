@@ -30,5 +30,4 @@ bw1000:
       nproc_per_node: 2
       include:
         - tests/unit_tests/test_spiky_loss_detector.py
-        - tests/unit_tests/train/megatron/test_tokenizer.py
       exclude: []

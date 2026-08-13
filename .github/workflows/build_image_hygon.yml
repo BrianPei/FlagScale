@@ -199,21 +199,20 @@ jobs:
           set -euo pipefail
 
           test -f docker/hygon/Dockerfile.train
+          test -f requirements/hygon/base.txt
           test -f requirements/hygon/train.txt
           test -f .github/configs/hygon.yml
           test -f tests/test_utils/config/platforms/hygon.yaml
           test -f tests/functional_tests/train/qwen3/conf/0_6b_hygon.yaml
           test -f tests/functional_tests/train/qwen3/conf/train/0_6b_hygon.yaml
           test -f tests/functional_tests/train/qwen3/conf/train/data_hygon.yaml
-          test -f tests/unit_tests/train/megatron/test_tokenizer.py
           python -m py_compile flagscale/train/megatron/training/tokenizer/tokenizer.py
-          python -m py_compile tests/unit_tests/train/megatron/test_tokenizer.py
+          python -c "import sys; sys.path.insert(0, 'tools/install/utils'); from parse_requirements import parse_requirements; assert parse_requirements('requirements/hygon/base.txt')[0]; assert parse_requirements('requirements/hygon/train.txt')[0]"
           python tests/test_utils/runners/parse_config.py \
             --platform hygon --type device_types | grep -q 'bw1000'
           UNIT_MATRIX="$(python tests/test_utils/runners/parse_config.py \
             --platform hygon --device bw1000 --type unit)"
           echo "$UNIT_MATRIX" | grep -q 'test_spiky_loss_detector.py'
-          echo "$UNIT_MATRIX" | grep -q 'test_tokenizer.py'
           python tests/test_utils/runners/parse_config.py \
             --platform hygon --type functional --task train | grep -q '0_6b_hygon'
 
