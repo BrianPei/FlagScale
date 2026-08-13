@@ -3,8 +3,9 @@
 # Copyright 2026 FlagOS Contributors
 # Licensed under the Apache License, Version 2.0.
 
-# The validated MetaX base image owns Torch, Megatron-LM-FL and
-# TransformerEngine-FL. This script installs only FlagScale-level requirements.
+# The validated MetaX base image owns the vendor Torch and native MetaX TE
+# libraries. Install the pinned FlagOS Megatron and TE Python layers without
+# replacing the vendor runtime or compiling CUDA extensions.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../utils/utils.sh"
@@ -54,8 +55,16 @@ install_training_runtime() {
     set_step "Installing pinned TransformerEngine-FL"
     checkout_pinned_ref "$TE_REPO" "$TE_REF" \
         "$FLAGSCALE_DEPS/TransformerEngine-FL" || return 1
+    retry -d "$DEBUG" "$RETRY_COUNT" \
+        "git -c http.version=HTTP/1.1 -C '$FLAGSCALE_DEPS/TransformerEngine-FL' \
+        submodule sync --recursive && \
+        git -c http.version=HTTP/1.1 -C '$FLAGSCALE_DEPS/TransformerEngine-FL' \
+        submodule update --init --recursive --depth 1 \
+        --recommend-shallow --jobs 1" || return 1
     run_cmd -d "$DEBUG" bash -c \
-        "cd '$FLAGSCALE_DEPS/TransformerEngine-FL' && TE_FL_SKIP_CUDA=1 \
+        "cd '$FLAGSCALE_DEPS/TransformerEngine-FL' && \
+        TE_FL_SKIP_CUDA='${TE_FL_SKIP_CUDA:-1}' \
+        NVTE_WITH_MACA='${NVTE_WITH_MACA:-1}' \
         $pip_cmd install --root-user-action=ignore \
         --no-build-isolation --no-deps ." || return 1
 }
@@ -65,10 +74,16 @@ validate_runtime() {
     python - <<'PY'
 import torch
 import transformer_engine
+from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
+from megatron.core.extensions.transformer_engine import HAVE_TE
+from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
 from megatron.core.models.gpt import GPTModel
 
+assert HAVE_TE, "Megatron-LM-FL did not detect TransformerEngine-FL"
+assert TESpecProvider is not None, "TransformerEngine spec provider is unavailable"
 print("torch:", torch.__version__)
 print("transformer_engine:", transformer_engine.__file__)
+print("TE modules:", DotProductAttention, LayerNormLinear)
 print("megatron GPTModel:", GPTModel)
 PY
 }

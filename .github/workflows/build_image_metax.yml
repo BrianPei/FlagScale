@@ -6,19 +6,8 @@ name: Build Docker Images - MetaX
 on:
   workflow_dispatch:
     inputs:
-      task:
-        description: MetaX image to build
-        required: true
-        type: choice
-        options: [train, inference, all]
-        default: train
-      push:
-        description: Push candidate to shared Harbor
-        required: true
-        type: boolean
-        default: true
       run_tests:
-        description: Run the current MetaX matrix after build
+        description: Run the current MetaX train and benchmark matrix after build
         required: true
         type: boolean
         default: true
@@ -27,10 +16,6 @@ on:
         required: true
         type: boolean
         default: false
-      tag:
-        description: Optional tag override
-        required: false
-        type: string
       base_image:
         description: Validated MetaX base image (prefer an immutable digest)
         required: true
@@ -41,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-image-metax-${{ github.ref }}-${{ inputs.task }}
+  group: build-image-metax-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -49,18 +34,13 @@ env:
   REGISTRY_NAMESPACE: flagos-dev
   METAX_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
   METAX_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
-  CURRENT_TRAIN_IMAGE: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
-  CURRENT_INFERENCE_IMAGE: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
 
 jobs:
   prepare:
-    name: Prepare MetaX candidate
+    name: Prepare MetaX train candidate
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.params.outputs.matrix }}
       candidate: ${{ steps.params.outputs.candidate }}
-      train_image: ${{ steps.params.outputs.train_image }}
-      inference_image: ${{ steps.params.outputs.inference_image }}
     steps:
       - name: Resolve build parameters
         id: params
@@ -68,29 +48,15 @@ jobs:
         run: |
           set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
-          tag='${{ inputs.tag }}'
-          if [ -z "$tag" ]; then
-            tag="${short_sha}-metax-dev"
-          fi
-          candidate="${REGISTRY}/${REGISTRY_NAMESPACE}/flagscale-${{ inputs.task }}:${tag}"
-          train_image="$CURRENT_TRAIN_IMAGE"
-          inference_image="$CURRENT_INFERENCE_IMAGE"
-          case '${{ inputs.task }}' in
-            train) train_image="$candidate" ;;
-            inference) inference_image="$candidate" ;;
-            all) train_image="$candidate"; inference_image="$candidate" ;;
-          esac
-          echo 'matrix={"task":["${{ inputs.task }}"]}' >> "$GITHUB_OUTPUT"
+          candidate="${REGISTRY}/${REGISTRY_NAMESPACE}/flagscale:${short_sha}-metax-train-dev"
           echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
-          echo "train_image=$train_image" >> "$GITHUB_OUTPUT"
-          echo "inference_image=$inference_image" >> "$GITHUB_OUTPUT"
 
   runtime_contract:
     name: Validate MetaX base runtime
     needs: prepare
     runs-on: flagscale-metax-c550-gpu2-8c-256g
     steps:
-      - name: Validate devices and collective
+      - name: Validate eight devices and TP2 collective
         shell: bash
         run: |
           set -euo pipefail
@@ -126,36 +92,22 @@ jobs:
               torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/metax_collective.py
             '
 
-      - name: Validate MetaX vLLM contract
-        if: inputs.task == 'inference' || inputs.task == 'all'
-        shell: bash
-        run: |
-          set -euo pipefail
-          base_image='${{ inputs.base_image }}'
-          docker run --rm \
-            --ipc=host --group-add video \
-            --device=/dev/dri --device=/dev/mxcd \
-            --entrypoint python "$base_image" -c '
-          import importlib.metadata as metadata
-          import vllm
-          print("vllm:", metadata.version("vllm"))
-          print("module:", vllm.__file__)
-          '
-
   build:
-    name: Build MetaX candidate
+    name: Build and push MetaX train candidate
     needs: [prepare, runtime_contract]
     uses: ./.github/workflows/build_image_common.yml
     secrets: inherit
     with:
       platform: metax
       runs_on: '["flagscale-metax-c550-gpu2-8c-256g"]'
-      matrix: ${{ needs.prepare.outputs.matrix }}
+      matrix: '{"task":["train"]}'
       target: dev
       build_images: true
       no_cache: ${{ inputs.no_cache }}
-      push: ${{ inputs.push }}
+      push: true
       registry: harbor.baai.ac.cn
+      # The common builder requires all three inputs; this train-only matrix
+      # reads only train_image.
       train_image: ${{ needs.prepare.outputs.candidate }}
       inference_image: ${{ needs.prepare.outputs.candidate }}
       all_image: ${{ needs.prepare.outputs.candidate }}
@@ -166,12 +118,11 @@ jobs:
         FLAGSCALE_TE_REF=94c7007c84107028919b4e52213d1bcb4ca3f7cf
 
   candidate_contract:
-    name: Validate MetaX candidate runtime
+    name: Validate MetaX train candidate
     needs: [prepare, build]
     runs-on: flagscale-metax-c550-gpu2-8c-256g
     steps:
-      - name: Validate pinned training framework imports
-        if: inputs.task == 'train' || inputs.task == 'all'
+      - name: Validate pinned training stack on C550
         shell: bash
         run: |
           set -euo pipefail
@@ -183,36 +134,40 @@ jobs:
             --entrypoint python "$image" -c '
           import torch
           import transformer_engine
+          from transformer_engine.pytorch import DotProductAttention, LayerNormLinear
+          from megatron.core.extensions.transformer_engine import HAVE_TE
+          from megatron.core.extensions.transformer_engine_spec_provider import TESpecProvider
           from megatron.core.models.gpt import GPTModel
-          print("devices:", torch.cuda.device_count())
+
+          assert torch.cuda.device_count() == 8
+          assert HAVE_TE
+          assert TESpecProvider is not None
           print("transformer_engine:", transformer_engine.__file__)
+          print("TE modules:", DotProductAttention, LayerNormLinear)
           print("megatron GPTModel:", GPTModel)
           '
 
-      - name: Validate MetaX vLLM import
-        if: inputs.task == 'inference' || inputs.task == 'all'
+      - name: Record Harbor digest
         shell: bash
         run: |
           set -euo pipefail
           image='${{ needs.prepare.outputs.candidate }}'
-          docker pull "$image"
-          docker run --rm \
-            --ipc=host --group-add video \
-            --device=/dev/dri --device=/dev/mxcd \
-            --entrypoint python "$image" -c '
-          import importlib.metadata as metadata
-          import vllm
-          print("vllm:", metadata.version("vllm"))
-          print("module:", vllm.__file__)
-          '
+          digest="$(docker image inspect "$image" --format '{{range .RepoDigests}}{{println .}}{{end}}' | head -n 1)"
+          {
+            echo '### MetaX train candidate'
+            echo
+            echo "- Image: \`$image\`"
+            echo "- Digest: \`$digest\`"
+            echo "- Megatron-LM-FL: \`${METAX_MEGATRON_REF}\`"
+            echo "- TransformerEngine-FL: \`${METAX_TE_REF}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   tests:
-    name: Test MetaX candidate
+    name: Test MetaX train candidate
     needs: [prepare, build, candidate_contract]
-    if: inputs.push && inputs.run_tests
+    if: inputs.run_tests
     uses: ./.github/workflows/all_tests_common.yml
     secrets: inherit
     with:
       platform: metax
-      ci_train_image: ${{ needs.prepare.outputs.train_image }}
-      ci_inference_image: ${{ needs.prepare.outputs.inference_image }}
+      ci_train_image: ${{ needs.prepare.outputs.candidate }}

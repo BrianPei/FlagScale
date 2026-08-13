@@ -1,8 +1,0 @@
-# Copyright 2026 FlagOS Contributors
-# Licensed under the Apache License, Version 2.0.
-
--r ./inference.txt
-
-websocket-client==1.8.0
-websockets==15.0.1
-msgpack==1.1.0

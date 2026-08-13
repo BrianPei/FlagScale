@@ -16,20 +16,11 @@ on:
         required: true
         type: choice
         options: [train, inference]
-      push:
-        description: Push the candidate to shared Harbor
-        required: true
-        type: boolean
-        default: true
       run_tests:
         description: Run the existing Ascend matrix with the candidate
         required: true
         type: boolean
         default: true
-      tag:
-        description: Optional tag override
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -44,8 +35,8 @@ env:
   ASCEND_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
   ASCEND_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
   ASCEND_VLLM_PLUGIN_REF: 43edeb601f4b8f616f56109de64836529e758deb
-  MANUAL_TRAIN_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train
-  MANUAL_INFERENCE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
+  MANUAL_TRAIN_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train@sha256:2b6ceb58a1dc345ba89b2f8eb22dcc73aeec2048aa8e141abfaaf80f8635b91c
+  MANUAL_INFERENCE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
 
 jobs:
   prepare:
@@ -62,11 +53,8 @@ jobs:
         run: |
           set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
-          tag='${{ inputs.tag }}'
-          if [ -z "$tag" ]; then
-            tag="${short_sha}-ascend-dev"
-          fi
-          image="${REGISTRY}/${REGISTRY_NAMESPACE}/flagscale-${{ inputs.task }}:${tag}"
+          tag="${short_sha}-ascend-${{ inputs.task }}-dev"
+          image="${REGISTRY}/${REGISTRY_NAMESPACE}/flagscale:${tag}"
           train_image="$MANUAL_TRAIN_IMAGE"
           inference_image="$MANUAL_INFERENCE_IMAGE"
           if [ '${{ inputs.task }}' = train ]; then
@@ -93,7 +81,6 @@ jobs:
           persist-credentials: false
 
       - name: Log in to shared Harbor
-        if: inputs.push
         shell: bash
         run: echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" --username "$REGISTRY_USERNAME" --password-stdin
 
@@ -145,7 +132,6 @@ jobs:
           '
 
       - name: Push candidate
-        if: inputs.push
         shell: bash
         run: docker push '${{ needs.prepare.outputs.image }}'
 
@@ -157,6 +143,8 @@ jobs:
             echo
             echo "- Task: \`${{ inputs.task }}\`"
             echo "- Image: \`${{ needs.prepare.outputs.image }}\`"
+            digest="$(docker image inspect '${{ needs.prepare.outputs.image }}' --format '{{range .RepoDigests}}{{println .}}{{end}}' | head -n 1)"
+            echo "- Digest: \`$digest\`"
             echo "- TransformerEngine-FL: \`${ASCEND_TE_REF}\`"
             echo "- Megatron-LM-FL: \`${ASCEND_MEGATRON_REF}\`"
             echo "- vllm-plugin-FL: \`${ASCEND_VLLM_PLUGIN_REF}\`"
@@ -165,7 +153,7 @@ jobs:
   tests:
     name: Test Ascend candidate
     needs: [prepare, build]
-    if: inputs.push && inputs.run_tests
+    if: inputs.run_tests
     uses: ./.github/workflows/all_tests_common.yml
     secrets: inherit
     with:

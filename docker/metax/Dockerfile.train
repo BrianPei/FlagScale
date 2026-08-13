@@ -17,7 +17,12 @@ ENV FLAGSCALE_HOME=${FLAGSCALE_HOME} \
     FLAGSCALE_CONDA=${FLAGSCALE_CONDA} \
     FLAGSCALE_MEGATRON_REF=${FLAGSCALE_MEGATRON_REF} \
     FLAGSCALE_TE_REF=${FLAGSCALE_TE_REF} \
-    PATH="${FLAGSCALE_CONDA}/bin:${PATH}"
+    MACA_HOME=/opt/maca \
+    CUDA_HOME=/opt/maca \
+    TE_FL_SKIP_CUDA=1 \
+    NVTE_WITH_MACA=1 \
+    PATH="/opt/maca/bin:${FLAGSCALE_CONDA}/bin:${PATH}" \
+    LD_LIBRARY_PATH="/opt/maca/lib:${LD_LIBRARY_PATH}"
 
 COPY tools/install/metax/env.sh /etc/profile.d/flagscale-env.sh
 WORKDIR /workspace
@@ -28,8 +33,9 @@ COPY requirements /workspace/requirements
 RUN chmod +x /workspace/tools/install/*.sh \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/metax/*.sh && \
+    . /etc/profile.d/flagscale-env.sh && \
     /workspace/tools/install/install.sh --platform metax --task train \
-        --pkg-mgr pip --no-system --no-dev --force-build && \
+        --pkg-mgr pip --no-system --no-dev --no-base --force-build && \
     rm -rf /workspace/tools /workspace/requirements
 CMD ["/bin/bash"]
 

@@ -65,5 +65,4 @@ env_names:
   train: "base"
   hetero_train: ""
   inference: ""
-  serve: ""
   rl: ""
