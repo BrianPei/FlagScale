@@ -35,7 +35,7 @@ on:
         description: Validated MetaX base image (prefer an immutable digest)
         required: true
         type: string
-        default: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
+        default: harbor.baai.ac.cn/flagscale/megatron-lm-with-te@sha256:c6bc75f8512a3ba385339a536a33dfc1dcbeb0c42b6ca1e2d5f0f0e4e9d6200f
 
 permissions:
   contents: read
@@ -47,6 +47,8 @@ concurrency:
 env:
   REGISTRY: harbor.baai.ac.cn
   REGISTRY_NAMESPACE: flagos-dev
+  METAX_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
+  METAX_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
   CURRENT_TRAIN_IMAGE: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
   CURRENT_INFERENCE_IMAGE: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
 
@@ -88,7 +90,7 @@ jobs:
     needs: prepare
     runs-on: flagscale-metax-c550-gpu2-8c-256g
     steps:
-      - name: Validate devices and framework imports
+      - name: Validate devices and collective
         shell: bash
         run: |
           set -euo pipefail
@@ -101,14 +103,10 @@ jobs:
               set -euo pipefail
               python - <<"PY"
           import torch
-          import transformer_engine
-          from megatron.core.models.gpt import GPTModel
 
           count = torch.cuda.device_count()
           print("torch:", torch.__version__)
           print("devices:", count)
-          print("transformer_engine:", transformer_engine.__file__)
-          print("megatron GPTModel:", GPTModel)
           assert count == 8, f"expected 8 MetaX devices, found {count}"
           PY
               cat >/tmp/metax_collective.py <<"PY"
@@ -162,11 +160,55 @@ jobs:
       inference_image: ${{ needs.prepare.outputs.candidate }}
       all_image: ${{ needs.prepare.outputs.candidate }}
       base_image: ${{ inputs.base_image }}
-      build_args: BASE_IMAGE=${{ inputs.base_image }}
+      build_args: |
+        BASE_IMAGE=${{ inputs.base_image }}
+        FLAGSCALE_MEGATRON_REF=409c1ed949675ddf9aa540aaae48652f446351cc
+        FLAGSCALE_TE_REF=94c7007c84107028919b4e52213d1bcb4ca3f7cf
+
+  candidate_contract:
+    name: Validate MetaX candidate runtime
+    needs: [prepare, build]
+    runs-on: flagscale-metax-c550-gpu2-8c-256g
+    steps:
+      - name: Validate pinned training framework imports
+        if: inputs.task == 'train' || inputs.task == 'all'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='${{ needs.prepare.outputs.candidate }}'
+          docker pull "$image"
+          docker run --rm \
+            --ipc=host --group-add video \
+            --device=/dev/dri --device=/dev/mxcd \
+            --entrypoint python "$image" -c '
+          import torch
+          import transformer_engine
+          from megatron.core.models.gpt import GPTModel
+          print("devices:", torch.cuda.device_count())
+          print("transformer_engine:", transformer_engine.__file__)
+          print("megatron GPTModel:", GPTModel)
+          '
+
+      - name: Validate MetaX vLLM import
+        if: inputs.task == 'inference' || inputs.task == 'all'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='${{ needs.prepare.outputs.candidate }}'
+          docker pull "$image"
+          docker run --rm \
+            --ipc=host --group-add video \
+            --device=/dev/dri --device=/dev/mxcd \
+            --entrypoint python "$image" -c '
+          import importlib.metadata as metadata
+          import vllm
+          print("vllm:", metadata.version("vllm"))
+          print("module:", vllm.__file__)
+          '
 
   tests:
     name: Test MetaX candidate
-    needs: [prepare, build]
+    needs: [prepare, build, candidate_contract]
     if: inputs.push && inputs.run_tests
     uses: ./.github/workflows/all_tests_common.yml
     secrets: inherit

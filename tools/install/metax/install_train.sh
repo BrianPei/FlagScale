@@ -14,11 +14,51 @@ source "$SCRIPT_DIR/../utils/retry_utils.sh"
 PROJECT_ROOT=$(get_project_root)
 DEBUG="${FLAGSCALE_DEBUG:-false}"
 RETRY_COUNT="${FLAGSCALE_RETRY_COUNT:-3}"
+FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
+FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/metax/train.txt"
+MEGATRON_REPO="${FLAGSCALE_MEGATRON_REPO:-https://github.com/flagos-ai/Megatron-LM-FL.git}"
+MEGATRON_REF="${FLAGSCALE_MEGATRON_REF:-409c1ed949675ddf9aa540aaae48652f446351cc}"
+TE_REPO="${FLAGSCALE_TE_REPO:-https://github.com/flagos-ai/TransformerEngine-FL.git}"
+TE_REF="${FLAGSCALE_TE_REF:-94c7007c84107028919b4e52213d1bcb4ca3f7cf}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac
 done
+
+checkout_pinned_ref() {
+    local repo=$1
+    local ref=$2
+    local target=$3
+
+    [ -z "$ref" ] && { log_error "A pinned git ref is required"; return 1; }
+    retry -d "$DEBUG" "$RETRY_COUNT" "rm -rf '$target' && \
+        git init -q '$target' && \
+        git -C '$target' remote add origin '$repo' && \
+        git -c http.version=HTTP/1.1 -C '$target' fetch --depth 1 origin '$ref' && \
+        git -C '$target' checkout -q --detach FETCH_HEAD"
+}
+
+install_training_runtime() {
+    local pip_cmd
+    pip_cmd=$(get_pip_cmd)
+    mkdir -p "$FLAGSCALE_DEPS"
+
+    set_step "Installing pinned Megatron-LM-FL"
+    checkout_pinned_ref "$MEGATRON_REPO" "$MEGATRON_REF" \
+        "$FLAGSCALE_DEPS/Megatron-LM-FL" || return 1
+    run_cmd -d "$DEBUG" bash -c \
+        "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && $pip_cmd install \
+        --root-user-action=ignore --no-build-isolation --no-deps ." || return 1
+
+    set_step "Installing pinned TransformerEngine-FL"
+    checkout_pinned_ref "$TE_REPO" "$TE_REF" \
+        "$FLAGSCALE_DEPS/TransformerEngine-FL" || return 1
+    run_cmd -d "$DEBUG" bash -c \
+        "cd '$FLAGSCALE_DEPS/TransformerEngine-FL' && TE_FL_SKIP_CUDA=1 \
+        $pip_cmd install --root-user-action=ignore \
+        --no-build-isolation --no-deps ." || return 1
+}
 
 validate_runtime() {
     [ "$DEBUG" = true ] && return 0
@@ -36,6 +76,7 @@ PY
 main() {
     set_step "Installing MetaX train requirements"
     retry_pip_install -d "$DEBUG" "$REQ_FILE" "$RETRY_COUNT" || die "MetaX train pip failed"
+    install_training_runtime || die "MetaX training runtime install failed"
     validate_runtime || die "MetaX train runtime validation failed"
     log_success "MetaX train runtime ready"
 }

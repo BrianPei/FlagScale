@@ -127,17 +127,16 @@ setup_cuda_training_env() {
 }
 
 setup_metax_training_env() {
-    local megatron_dir="/tmp/Megatron-LM-FL"
-    local te_dir="/tmp/TransformerEngine-FL"
+    if python -c '
+import transformer_engine
+from megatron.core.models.gpt import GPTModel
+' >/dev/null 2>&1; then
+        echo "MetaX training stack is preinstalled; skipping platform dependency installation"
+        return 0
+    fi
 
-    git clone https://github.com/flagos-ai/Megatron-LM-FL.git "$megatron_dir"
-    python -m pip install "$megatron_dir" --no-build-isolation --root-user-action=ignore
-
-    git clone --depth 1 https://github.com/flagos-ai/TransformerEngine-FL.git "$te_dir"
-    TE_FL_SKIP_CUDA=1 python -m pip install "$te_dir" --no-build-isolation --root-user-action=ignore
-
-    apt-get update
-    apt-get install -y curl
+    echo "MetaX training stack is missing from the configured CI image" >&2
+    return 1
 }
 
 setup_ascend_training_env() {
