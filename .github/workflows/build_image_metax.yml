@@ -1,0 +1,176 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+
+name: Build Docker Images - MetaX
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: MetaX image to build
+        required: true
+        type: choice
+        options: [train, inference, all]
+        default: train
+      push:
+        description: Push candidate to shared Harbor
+        required: true
+        type: boolean
+        default: true
+      run_tests:
+        description: Run the current MetaX matrix after build
+        required: true
+        type: boolean
+        default: true
+      no_cache:
+        description: Disable Docker cache
+        required: true
+        type: boolean
+        default: false
+      tag:
+        description: Optional tag override
+        required: false
+        type: string
+      base_image:
+        description: Validated MetaX base image (prefer an immutable digest)
+        required: true
+        type: string
+        default: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-image-metax-${{ github.ref }}-${{ inputs.task }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: harbor.baai.ac.cn
+  REGISTRY_NAMESPACE: flagos-dev
+  CURRENT_TRAIN_IMAGE: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
+  CURRENT_INFERENCE_IMAGE: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
+
+jobs:
+  prepare:
+    name: Prepare MetaX candidate
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.params.outputs.matrix }}
+      candidate: ${{ steps.params.outputs.candidate }}
+      train_image: ${{ steps.params.outputs.train_image }}
+      inference_image: ${{ steps.params.outputs.inference_image }}
+    steps:
+      - name: Resolve build parameters
+        id: params
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+          tag='${{ inputs.tag }}'
+          if [ -z "$tag" ]; then
+            tag="${short_sha}-metax-dev"
+          fi
+          candidate="${REGISTRY}/${REGISTRY_NAMESPACE}/flagscale-${{ inputs.task }}:${tag}"
+          train_image="$CURRENT_TRAIN_IMAGE"
+          inference_image="$CURRENT_INFERENCE_IMAGE"
+          case '${{ inputs.task }}' in
+            train) train_image="$candidate" ;;
+            inference) inference_image="$candidate" ;;
+            all) train_image="$candidate"; inference_image="$candidate" ;;
+          esac
+          echo 'matrix={"task":["${{ inputs.task }}"]}' >> "$GITHUB_OUTPUT"
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+          echo "train_image=$train_image" >> "$GITHUB_OUTPUT"
+          echo "inference_image=$inference_image" >> "$GITHUB_OUTPUT"
+
+  runtime_contract:
+    name: Validate MetaX base runtime
+    needs: prepare
+    runs-on: flagscale-metax-c550-gpu2-8c-256g
+    steps:
+      - name: Validate devices and framework imports
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_image='${{ inputs.base_image }}'
+          docker pull "$base_image"
+          docker run --rm \
+            --ipc=host --group-add video \
+            --device=/dev/dri --device=/dev/mxcd --device=/dev/infiniband \
+            --entrypoint bash "$base_image" -lc '
+              set -euo pipefail
+              python - <<"PY"
+          import torch
+          import transformer_engine
+          from megatron.core.models.gpt import GPTModel
+
+          count = torch.cuda.device_count()
+          print("torch:", torch.__version__)
+          print("devices:", count)
+          print("transformer_engine:", transformer_engine.__file__)
+          print("megatron GPTModel:", GPTModel)
+          assert count == 8, f"expected 8 MetaX devices, found {count}"
+          PY
+              cat >/tmp/metax_collective.py <<"PY"
+          import os
+          import torch
+          import torch.distributed as dist
+
+          rank = int(os.environ["LOCAL_RANK"])
+          torch.cuda.set_device(rank)
+          dist.init_process_group("nccl")
+          value = torch.tensor([rank + 1.0], device=f"cuda:{rank}")
+          dist.all_reduce(value)
+          assert value.item() == 3.0, value
+          print(f"rank={rank} all_reduce={value.item()}")
+          dist.destroy_process_group()
+          PY
+              torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/metax_collective.py
+            '
+
+      - name: Validate MetaX vLLM contract
+        if: inputs.task == 'inference' || inputs.task == 'all'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_image='${{ inputs.base_image }}'
+          docker run --rm \
+            --ipc=host --group-add video \
+            --device=/dev/dri --device=/dev/mxcd \
+            --entrypoint python "$base_image" -c '
+          import importlib.metadata as metadata
+          import vllm
+          print("vllm:", metadata.version("vllm"))
+          print("module:", vllm.__file__)
+          '
+
+  build:
+    name: Build MetaX candidate
+    needs: [prepare, runtime_contract]
+    uses: ./.github/workflows/build_image_common.yml
+    secrets: inherit
+    with:
+      platform: metax
+      runs_on: '["flagscale-metax-c550-gpu2-8c-256g"]'
+      matrix: ${{ needs.prepare.outputs.matrix }}
+      target: dev
+      build_images: true
+      no_cache: ${{ inputs.no_cache }}
+      push: ${{ inputs.push }}
+      registry: harbor.baai.ac.cn
+      train_image: ${{ needs.prepare.outputs.candidate }}
+      inference_image: ${{ needs.prepare.outputs.candidate }}
+      all_image: ${{ needs.prepare.outputs.candidate }}
+      base_image: ${{ inputs.base_image }}
+      build_args: BASE_IMAGE=${{ inputs.base_image }}
+
+  tests:
+    name: Test MetaX candidate
+    needs: [prepare, build]
+    if: inputs.push && inputs.run_tests
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: metax
+      ci_train_image: ${{ needs.prepare.outputs.train_image }}
+      ci_inference_image: ${{ needs.prepare.outputs.inference_image }}

@@ -1,0 +1,29 @@
+# FlagScale training image for MetaX C550.
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
+ARG FLAGSCALE_HOME=/opt/flagscale
+ARG FLAGSCALE_CONDA=/opt/conda
+
+FROM ${BASE_IMAGE} AS base
+
+ARG FLAGSCALE_HOME
+ARG FLAGSCALE_CONDA
+ENV FLAGSCALE_HOME=${FLAGSCALE_HOME} \
+    FLAGSCALE_CONDA=${FLAGSCALE_CONDA} \
+    PATH="${FLAGSCALE_CONDA}/bin:${PATH}"
+
+COPY tools/install/metax/env.sh /etc/profile.d/flagscale-env.sh
+WORKDIR /workspace
+
+FROM base AS dev
+COPY tools/install /workspace/tools/install
+COPY requirements /workspace/requirements
+RUN chmod +x /workspace/tools/install/*.sh \
+        /workspace/tools/install/utils/*.sh \
+        /workspace/tools/install/metax/*.sh && \
+    /workspace/tools/install/install.sh --platform metax --task train \
+        --pkg-mgr pip --no-system --no-dev && \
+    rm -rf /workspace/tools /workspace/requirements
+CMD ["/bin/bash"]
+
+FROM dev AS release
+CMD ["/bin/bash"]
