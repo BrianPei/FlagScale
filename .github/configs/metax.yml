@@ -21,7 +21,7 @@ display_name: "MetaX C550 Tests"
 
 # Docker images for MetaX C550 (MACA-based)
 ci_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
-ci_train_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev@sha256:2a59d6df4fb4f9ddb09feb3b266cb44de06492c599d802d50b0477ca80891573
 ci_inference_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
 
 # Runner labels for MetaX C550 hardware
