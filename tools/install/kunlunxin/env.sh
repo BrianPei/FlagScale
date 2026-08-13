@@ -11,7 +11,7 @@
 : "${FLAGSCALE_DOWNLOADS:=$FLAGSCALE_HOME/downloads}"
 : "${MPI_HOME:=/usr/local/mpi}"
 : "${KLX_HOME:=/opt/xccl_Linux_x86_64}"
-: "${FLAGSCALE_MEGATRON_PATH:=/opt/Megatron-LM-FL}"
+: "${FLAGSCALE_MEGATRON_PATH:=$FLAGSCALE_DEPS/Megatron-LM-FL}"
 
 : "${UV_HTTP_TIMEOUT:=500}"
 : "${UV_INDEX_STRATEGY:=unsafe-best-match}"
