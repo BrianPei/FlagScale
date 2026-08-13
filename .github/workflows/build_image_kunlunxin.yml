@@ -123,8 +123,8 @@ jobs:
 
           if [ "${{ github.event_name }}" = "push" ]; then
             PUBLISH=true
-            RUN_TESTS=false
-            MATRIX='{"task":["train"]}'
+            RUN_TESTS=true
+            MATRIX='{"task":["train","inference","all"]}'
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PUBLISH="${{ inputs.push }}"
             RUN_TESTS="${{ inputs.run_tests }}"
