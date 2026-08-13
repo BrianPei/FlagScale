@@ -85,6 +85,8 @@ env:
   # torch29_xte2.12:v4, pushed from the P800 bring-up host.
   # Digest: sha256:b166a145e9e397b5c8251618b5c8adb01a603042b263aad29781f9b97ff18b1c
   KUNLUNXIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
+  KUNLUNXIN_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
+  KUNLUNXIN_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
   PYTHON_VERSION: '3.10'
   PKG_MGR: conda
   PIP_INDEX_URL: https://pypi.org/simple
@@ -268,6 +270,12 @@ jobs:
             --label "org.opencontainers.image.revision=${{ github.sha }}"
             --label "org.opencontainers.image.base.name=${{ needs.prepare.outputs.base_image }}"
           )
+          if [ "${{ matrix.task }}" != "inference" ]; then
+            build_args+=(
+              --build-arg "FLAGSCALE_MEGATRON_REPO=${{ env.KUNLUNXIN_MEGATRON_REPO }}"
+              --build-arg "FLAGSCALE_MEGATRON_REF=${{ env.KUNLUNXIN_MEGATRON_REF }}"
+            )
+          fi
           if [ "${{ needs.prepare.outputs.no_cache }}" = "true" ]; then
             build_args+=(--no-cache)
           fi
@@ -346,7 +354,10 @@ jobs:
             source /root/miniconda/etc/profile.d/conda.sh
             conda activate python310_torch29_cuda
             . /etc/profile.d/flagscale-env.sh
-            python -c "import importlib; import torch; import transformer_engine; import transformer_engine_torch; import megatron.core; importlib.import_module(\"flagcx\"); assert torch.cuda.is_available(); print(\"Kunlunxin train runtime OK\")"
+            test "$(git -C "$FLAGSCALE_MEGATRON_PATH" rev-parse HEAD)" = "$FLAGSCALE_MEGATRON_REF"
+            python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version"
+            python -c "from pathlib import Path; import importlib; import megatron.core; import torch; import transformer_engine; import transformer_engine_torch; importlib.import_module(\"flagcx\"); from megatron.core.jit import disable_jit_fuser; from megatron.core.models.gpt.gpt_layer_specs import get_gpt_decoder_layer_specs; expected = Path(\"$FLAGSCALE_MEGATRON_PATH\").resolve(); actual = Path(megatron.core.__file__).resolve(); assert actual.is_relative_to(expected), (actual, expected); assert callable(disable_jit_fuser); assert callable(get_gpt_decoder_layer_specs); assert torch.cuda.is_available(); print(f\"Kunlunxin train runtime OK: {actual}\")"
+            python -c "from xmegatron_ext import megatron_plugin_init; megatron_plugin_init(use_version=\"0.17.1\", check_version=True); print(\"Kunlunxin XME version check OK\")"
           '
 
   kunlunxin_cli:
@@ -463,6 +474,7 @@ jobs:
             echo "- Inference: \`${{ needs.prepare.outputs.release_inference_image }}\`"
             echo "- All-in-one: \`${{ needs.prepare.outputs.release_all_image }}\`"
             echo "- Base: \`${{ needs.prepare.outputs.base_image }}\`"
+            echo "- Megatron-LM-FL: \`${{ env.KUNLUNXIN_MEGATRON_REF }}\`"
             echo "- FlagScale: \`${{ github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
