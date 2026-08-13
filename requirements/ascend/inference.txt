@@ -1,0 +1,11 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# The pinned Ascend inference base owns torch, torch-npu, vLLM and FlagGems.
+# install_inference.sh installs the matching vllm-plugin-FL from a fixed commit
+# without replacing those core runtime packages.

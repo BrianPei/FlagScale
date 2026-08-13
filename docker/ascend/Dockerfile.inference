@@ -1,0 +1,47 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This immutable base was built from quay.io/ascend/vllm-ascend:v0.20.2rc1-a3
+# with FlagGems 3e6528cf04f5f964a7b0fa6628de6f0410dbfd02.
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagscale/vllm-plugin-fl@sha256:5062ac23b8b8247e5b4faa5d2c61b7b8e82e46a9ae7c55fe15c5cdbe3533f4b7
+
+FROM ${BASE_IMAGE} AS dev
+
+ARG VLLM_PLUGIN_FL_REF=43edeb601f4b8f616f56109de64836529e758deb
+ARG FLAGGEMS_REF=3e6528cf04f5f964a7b0fa6628de6f0410dbfd02
+
+LABEL io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF} \
+      io.flagscale.flaggems.revision=${FLAGGEMS_REF}
+
+ENV VLLM_PLUGINS=fl \
+    VLLM_FL_PLATFORM=ascend \
+    TRITON_ALL_BLOCKS_PARALLEL=1
+
+ENV FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF}
+
+COPY tools/install /workspace/tools/install
+COPY requirements /workspace/requirements
+
+RUN chmod +x /workspace/tools/install/*.sh \
+        /workspace/tools/install/utils/*.sh \
+        /workspace/tools/install/ascend/*.sh && \
+    /workspace/tools/install/install.sh --platform ascend --task inference \
+        --pkg-mgr pip --no-system --no-dev --no-base && \
+    python -m pip check && \
+    rm -rf /opt/flagscale/deps /workspace/tools /workspace/requirements
+
+WORKDIR /workspace
+
+FROM dev AS release
+CMD ["/bin/bash"]
