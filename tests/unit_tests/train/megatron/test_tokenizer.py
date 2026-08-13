@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from flagscale.train.megatron.training.tokenizer.tokenizer import _QwenTokenizerFS
+from megatron.training.tokenizer.tokenizer import _QwenTokenizerFS
 
 
 @pytest.mark.parametrize(
