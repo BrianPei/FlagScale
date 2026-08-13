@@ -20,7 +20,7 @@
 ### Serve with vllm
 #### 1. Launch Container
 ```bash
-ASCEND_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
+ASCEND_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
 docker pull "$ASCEND_IMAGE"
 ```
 
