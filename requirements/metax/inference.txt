@@ -5,3 +5,4 @@
 # This is the sole runtime dependency declared by vllm-plugin-FL; the plugin
 # source itself is installed from the workflow-resolved commit.
 pyyaml>=6.0,<7
+pandas==2.2.3

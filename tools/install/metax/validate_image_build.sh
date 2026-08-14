@@ -57,6 +57,7 @@ if [ "$task" = inference ]; then
         --device=/dev/dri --device=/dev/mxcd --device=/dev/infiniband \
         --entrypoint python "$candidate" -c '
 import importlib.metadata as metadata
+import pandas
 import torch
 import vllm_fl
 from vllm.platforms import current_platform
@@ -64,6 +65,7 @@ from vllm.platforms import current_platform
 print("torch:", torch.__version__)
 print("vllm:", metadata.version("vllm"))
 print("vllm-plugin-fl:", metadata.version("vllm-plugin-fl"))
+print("pandas:", pandas.__version__)
 print("platform:", type(current_platform).__module__, type(current_platform).__name__)
 print("vendor:", current_platform.vendor_name)
 print("device_type:", current_platform.device_type)
