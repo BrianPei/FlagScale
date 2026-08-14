@@ -1,0 +1,54 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+
+# MetaX all-in-one image. The validated train and inference images contain
+# different Torch/MACA stacks, so the train Conda environment and MACA runtime
+# are relocated into a task-owned prefix. Serve reuses inference packages but
+# has an explicit activation contract of its own.
+ARG TRAIN_BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev@sha256:2a59d6df4fb4f9ddb09feb3b266cb44de06492c599d802d50b0477ca80891573
+ARG INFERENCE_BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
+
+FROM ${TRAIN_BASE_IMAGE} AS train_runtime
+RUN python -m pip install --no-cache-dir --no-deps conda-pack==0.8.1 && \
+    conda-pack --ignore-missing-files -p /opt/conda -o /tmp/train-conda.tar.gz
+
+FROM ${INFERENCE_BASE_IMAGE} AS inference_runtime
+
+FROM inference_runtime AS dev
+ARG TRAIN_BASE_IMAGE
+ARG INFERENCE_BASE_IMAGE
+
+LABEL io.flagscale.runtime.layout=task-isolated \
+      io.flagscale.runtime.train=/opt/flagscale/runtimes/train \
+      io.flagscale.runtime.inference=/opt/flagscale/runtimes/inference \
+      io.flagscale.runtime.serve=/opt/flagscale/runtimes/serve \
+      io.flagscale.runtime.train.base=${TRAIN_BASE_IMAGE} \
+      io.flagscale.runtime.inference.base=${INFERENCE_BASE_IMAGE}
+
+COPY --from=train_runtime /tmp/train-conda.tar.gz /tmp/train-conda.tar.gz
+COPY --from=train_runtime /opt/maca /opt/flagscale/runtimes/train/maca
+COPY tools/install/metax/activate_runtime.sh /opt/flagscale/bin/activate-metax-runtime.sh
+
+RUN set -eux; \
+    mkdir -p /opt/flagscale/runtimes/train/conda \
+        /opt/flagscale/runtimes/inference \
+        /opt/flagscale/runtimes/serve; \
+    tar -xzf /tmp/train-conda.tar.gz -C /opt/flagscale/runtimes/train/conda; \
+    /opt/flagscale/runtimes/train/conda/bin/conda-unpack; \
+    rm -f /tmp/train-conda.tar.gz; \
+    printf '%s\n' train > /opt/flagscale/runtimes/train/task; \
+    printf '%s\n' inference > /opt/flagscale/runtimes/inference/task; \
+    printf '%s\n' serve > /opt/flagscale/runtimes/serve/task; \
+    chmod 0755 /opt/flagscale/bin/activate-metax-runtime.sh; \
+    ln -s /opt/flagscale/bin/activate-metax-runtime.sh /opt/flagscale/runtimes/train/activate.sh; \
+    ln -s /opt/flagscale/bin/activate-metax-runtime.sh /opt/flagscale/runtimes/inference/activate.sh; \
+    ln -s /opt/flagscale/bin/activate-metax-runtime.sh /opt/flagscale/runtimes/serve/activate.sh; \
+    FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, transformer_engine, megatron.core"'; \
+    FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, vllm, vllm_fl, pandas"'
+
+WORKDIR /workspace
+CMD ["/bin/bash"]
+
+FROM dev AS release

@@ -67,6 +67,12 @@ activate_python_env() {
                 }
             fi
             ;;
+        runtime)
+            activate_runtime_env "$ENV_PATH" || {
+                echo "Runtime activation failed"
+                exit 1
+            }
+            ;;
         pip)
             echo "Using system Python with pip"
             ;;

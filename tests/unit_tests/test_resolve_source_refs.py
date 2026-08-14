@@ -92,6 +92,23 @@ def test_platform_source_refs_use_catalog(platform):
             assert re.search(rf"^ARG {build_arg}(?:=|$)", dockerfile, re.MULTILINE)
 
 
+@pytest.mark.parametrize("platform", ["ascend", "metax"])
+def test_split_runtime_all_images_have_explicit_task_environments(platform):
+    root = Path(__file__).parents[2]
+    config = yaml.safe_load((root / f".github/configs/{platform}.yml").read_text())
+    task = config["image_build"]["tasks"]["all"]
+
+    assert task["test_roles"] == ["train", "inference"]
+    assert set(task["test_environments"]) == {"train", "inference", "serve"}
+    for role, environment in task["test_environments"].items():
+        assert environment["pkg_mgr"] == "runtime"
+        assert environment["env_path"] == f"/opt/flagscale/runtimes/{role}"
+
+    dockerfile = (root / task["dockerfile"]).read_text()
+    assert "io.flagscale.runtime.layout=task-isolated" in dockerfile
+    assert "--task all" not in dockerfile
+
+
 def test_validate_catalog_rejects_unknown_policy():
     with pytest.raises(MODULE.SourceResolutionError, match="unsupported policy"):
         MODULE.validate_catalog(

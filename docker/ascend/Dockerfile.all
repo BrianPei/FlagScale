@@ -1,0 +1,50 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+
+# Ascend all-in-one image. Training and inference intentionally remain in
+# separate runtime prefixes because their Python, Torch and torch-npu ABIs are
+# different. Serve reuses the inference runtime contract.
+ARG TRAIN_BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train@sha256:2b6ceb58a1dc345ba89b2f8eb22dcc73aeec2048aa8e141abfaaf80f8635b91c
+ARG INFERENCE_BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
+
+FROM ${TRAIN_BASE_IMAGE} AS train_runtime
+FROM ${INFERENCE_BASE_IMAGE} AS inference_runtime
+
+FROM inference_runtime AS dev
+ARG TRAIN_BASE_IMAGE
+ARG INFERENCE_BASE_IMAGE
+
+LABEL io.flagscale.runtime.layout=task-isolated \
+      io.flagscale.runtime.train=/opt/flagscale/runtimes/train \
+      io.flagscale.runtime.inference=/opt/flagscale/runtimes/inference \
+      io.flagscale.runtime.serve=/opt/flagscale/runtimes/serve \
+      io.flagscale.runtime.train.base=${TRAIN_BASE_IMAGE} \
+      io.flagscale.runtime.inference.base=${INFERENCE_BASE_IMAGE}
+
+# The two Python prefixes have different versions and therefore do not
+# overlap. CANN is copied to a task-owned prefix instead of replacing the
+# validated inference CANN tree in /usr/local/Ascend.
+COPY --from=train_runtime /usr/local/python3.12.13 /usr/local/python3.12.13
+COPY --from=train_runtime /usr/local/Ascend /opt/flagscale/runtimes/train/Ascend
+COPY tools/install/ascend/activate_runtime.sh /opt/flagscale/bin/activate-ascend-runtime.sh
+
+RUN set -eux; \
+    mkdir -p /opt/flagscale/runtimes/train \
+        /opt/flagscale/runtimes/inference \
+        /opt/flagscale/runtimes/serve; \
+    printf '%s\n' train > /opt/flagscale/runtimes/train/task; \
+    printf '%s\n' inference > /opt/flagscale/runtimes/inference/task; \
+    printf '%s\n' serve > /opt/flagscale/runtimes/serve/task; \
+    chmod 0755 /opt/flagscale/bin/activate-ascend-runtime.sh; \
+    ln -s /opt/flagscale/bin/activate-ascend-runtime.sh /opt/flagscale/runtimes/train/activate.sh; \
+    ln -s /opt/flagscale/bin/activate-ascend-runtime.sh /opt/flagscale/runtimes/inference/activate.sh; \
+    ln -s /opt/flagscale/bin/activate-ascend-runtime.sh /opt/flagscale/runtimes/serve/activate.sh; \
+    FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, torch_npu, transformer_engine, megatron.core"'; \
+    FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, torch_npu, vllm, vllm_fl"'
+
+WORKDIR /workspace
+CMD ["/bin/bash"]
+
+FROM dev AS release

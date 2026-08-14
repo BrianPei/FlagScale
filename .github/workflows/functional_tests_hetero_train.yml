@@ -192,6 +192,9 @@ jobs:
                 activate_uv_env "$ENV_PATH" || echo "⚠️  UV activation failed"
               fi
               ;;
+            runtime)
+              activate_runtime_env "$ENV_PATH" || { echo "Runtime activation failed"; exit 1; }
+              ;;
             pip)
               echo "ℹ️  Running tests with pip/system Python"
               ;;

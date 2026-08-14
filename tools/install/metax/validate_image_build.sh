@@ -11,7 +11,7 @@ base_image="${IMAGE_BUILD_BASE_IMAGE:?IMAGE_BUILD_BASE_IMAGE is required}"
 candidate="${IMAGE_BUILD_CANDIDATE_IMAGE:?IMAGE_BUILD_CANDIDATE_IMAGE is required}"
 
 case "$task" in
-    train|inference) ;;
+    train|inference|all) ;;
     *) exit 0 ;;
 esac
 
@@ -50,6 +50,79 @@ torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/metax_collective.py
 fi
 
 [ "$phase" = post ] || exit 0
+
+if [ "$task" = all ]; then
+    docker run --rm \
+        --ipc=host --group-add video \
+        --device=/dev/dri --device=/dev/mxcd --device=/dev/infiniband \
+        --entrypoint bash "$candidate" -lc '
+set -euo pipefail
+export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train
+. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
+python - <<"PY"
+import torch
+import transformer_engine
+from megatron.core.models.gpt import GPTModel
+
+assert "+metax" in torch.__version__.lower()
+assert torch.cuda.device_count() == 8
+value = torch.ones(16, device="cuda:0")
+assert value.sum().item() == 16
+print("train runtime:", torch.__version__, transformer_engine.__file__, GPTModel)
+PY
+cat >/tmp/collective.py <<"PY"
+import os
+import torch
+import torch.distributed as dist
+
+rank = int(os.environ["LOCAL_RANK"])
+torch.cuda.set_device(rank)
+dist.init_process_group("nccl")
+value = torch.tensor([rank + 1.0], device=f"cuda:{rank}")
+dist.all_reduce(value)
+assert value.item() == 3.0, value
+dist.destroy_process_group()
+PY
+torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/collective.py
+'
+    docker run --rm \
+        --ipc=host --group-add video \
+        --device=/dev/dri --device=/dev/mxcd --device=/dev/infiniband \
+        --entrypoint bash "$candidate" -lc '
+set -euo pipefail
+export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference
+. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
+python - <<"PY"
+import torch
+import vllm_fl
+from vllm.platforms import current_platform
+
+assert "+metax" in torch.__version__.lower()
+assert torch.cuda.device_count() == 8
+assert type(current_platform).__module__ == "vllm_fl.platform"
+assert current_platform.vendor_name == "metax"
+assert current_platform.device_type == "cuda"
+value = torch.ones(16, device="cuda:0")
+assert value.sum().item() == 16
+print("inference runtime:", torch.__version__, type(current_platform))
+PY
+cat >/tmp/collective.py <<"PY"
+import os
+import torch
+import torch.distributed as dist
+
+rank = int(os.environ["LOCAL_RANK"])
+torch.cuda.set_device(rank)
+dist.init_process_group("nccl")
+value = torch.tensor([rank + 1.0], device=f"cuda:{rank}")
+dist.all_reduce(value)
+assert value.item() == 3.0, value
+dist.destroy_process_group()
+PY
+torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/collective.py
+'
+    exit 0
+fi
 
 if [ "$task" = inference ]; then
     docker run --rm \

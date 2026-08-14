@@ -71,6 +71,12 @@ jobs:
       max_parallel: ${{ steps.contract.outputs.max_parallel }}
       train_image: ${{ steps.contract.outputs.train_image }}
       inference_image: ${{ steps.contract.outputs.inference_image }}
+      train_pkg_mgr: ${{ steps.contract.outputs.train_pkg_mgr }}
+      train_env_path: ${{ steps.contract.outputs.train_env_path }}
+      inference_pkg_mgr: ${{ steps.contract.outputs.inference_pkg_mgr }}
+      inference_env_path: ${{ steps.contract.outputs.inference_env_path }}
+      serve_pkg_mgr: ${{ steps.contract.outputs.serve_pkg_mgr }}
+      serve_env_path: ${{ steps.contract.outputs.serve_env_path }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -157,6 +163,12 @@ jobs:
           train_image=$(/usr/local/bin/yq -r '.ci_train_image // .ci_image // ""' "$config_file")
           inference_image=$(/usr/local/bin/yq -r \
             '.ci_inference_image // .ci_image // ""' "$config_file")
+          train_pkg_mgr=""
+          train_env_path=""
+          inference_pkg_mgr=""
+          inference_env_path=""
+          serve_pkg_mgr=""
+          serve_env_path=""
 
           for raw_task in "${task_names[@]}"; do
             task="${raw_task//[[:space:]]/}"
@@ -184,7 +196,8 @@ jobs:
                  "runtime_smoke_nproc": ($item.runtime_smoke_nproc // .image_build.runtime_smoke_nproc // ""),
                  "build_args": ((.image_build.build_args // {}) * ($item.build_args // {})),
                  "source_refs": ((.image_build.source_refs // {}) * ($item.source_refs // {})),
-                 "test_roles": ($item.test_roles // [])
+                  "test_roles": ($item.test_roles // []),
+                  "test_environments": ($item.test_environments // {})
                }' "$config_file")
 
             dockerfile=$(jq -r '.dockerfile // ""' <<< "$entry")
@@ -278,10 +291,16 @@ jobs:
                 case "$role" in
                   train)
                     train_image="$candidate"
+                    train_pkg_mgr=$(jq -r '.test_environments.train.pkg_mgr // ""' <<< "$entry")
+                    train_env_path=$(jq -r '.test_environments.train.env_path // ""' <<< "$entry")
                     candidate_test_roles=$((candidate_test_roles + 1))
                     ;;
                   inference)
                     inference_image="$candidate"
+                    inference_pkg_mgr=$(jq -r '.test_environments.inference.pkg_mgr // ""' <<< "$entry")
+                    inference_env_path=$(jq -r '.test_environments.inference.env_path // ""' <<< "$entry")
+                    serve_pkg_mgr=$(jq -r '.test_environments.serve.pkg_mgr // ""' <<< "$entry")
+                    serve_env_path=$(jq -r '.test_environments.serve.env_path // ""' <<< "$entry")
                     candidate_test_roles=$((candidate_test_roles + 1))
                     ;;
                   '') ;;
@@ -305,6 +324,12 @@ jobs:
             echo "max_parallel=$max_parallel"
             echo "train_image=$train_image"
             echo "inference_image=$inference_image"
+            echo "train_pkg_mgr=$train_pkg_mgr"
+            echo "train_env_path=$train_env_path"
+            echo "inference_pkg_mgr=$inference_pkg_mgr"
+            echo "inference_env_path=$inference_env_path"
+            echo "serve_pkg_mgr=$serve_pkg_mgr"
+            echo "serve_env_path=$serve_env_path"
           } >> "$GITHUB_OUTPUT"
 
   build:
@@ -538,3 +563,9 @@ jobs:
       platform: ${{ needs.configure.outputs.platform }}
       ci_train_image: ${{ needs.configure.outputs.train_image }}
       ci_inference_image: ${{ needs.configure.outputs.inference_image }}
+      train_pkg_mgr: ${{ needs.configure.outputs.train_pkg_mgr }}
+      train_env_path: ${{ needs.configure.outputs.train_env_path }}
+      inference_pkg_mgr: ${{ needs.configure.outputs.inference_pkg_mgr }}
+      inference_env_path: ${{ needs.configure.outputs.inference_env_path }}
+      serve_pkg_mgr: ${{ needs.configure.outputs.serve_pkg_mgr }}
+      serve_env_path: ${{ needs.configure.outputs.serve_env_path }}

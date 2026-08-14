@@ -58,6 +58,24 @@ image_build:
       base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl@sha256:c83a7b26e5b72fcffa920f32929a76984c78d5ee5520828b6e50feb9864240ed
       source_refs:
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
+    all:
+      dockerfile: docker/metax/Dockerfile.all
+      image: flagos-dev/flagscale-all
+      test_roles: [train, inference]
+      base_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
+      build_args:
+        TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev@sha256:2a59d6df4fb4f9ddb09feb3b266cb44de06492c599d802d50b0477ca80891573
+        INFERENCE_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
+      test_environments:
+        train:
+          pkg_mgr: runtime
+          env_path: /opt/flagscale/runtimes/train
+        inference:
+          pkg_mgr: runtime
+          env_path: /opt/flagscale/runtimes/inference
+        serve:
+          pkg_mgr: runtime
+          env_path: /opt/flagscale/runtimes/serve
 
 # Container options for MetaX C550 (MACA runtime)
 container_options: >-
