@@ -78,7 +78,7 @@ permissions:
 
 concurrency:
   group: build-image-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   prepare:
