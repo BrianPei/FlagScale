@@ -22,47 +22,26 @@ on:
         required: true
         type: string
       runs_on:
-        description: JSON array containing the runner scale-set label
+        description: JSON array containing the runner labels
         required: true
         type: string
       matrix:
-        description: JSON task matrix, for example {"task":["train","inference","all"]}
+        description: JSON matrix with complete image-build entries
         required: true
         type: string
-      target:
-        required: true
-        type: string
-      build_images:
-        required: true
+      max_parallel:
+        description: Maximum image tasks to build concurrently
+        required: false
+        default: 1
+        type: number
+      push:
+        required: false
+        default: false
         type: boolean
       no_cache:
         required: false
         default: false
         type: boolean
-      push:
-        required: false
-        default: false
-        type: boolean
-      registry:
-        required: true
-        type: string
-      train_image:
-        required: true
-        type: string
-      inference_image:
-        required: true
-        type: string
-      all_image:
-        required: true
-        type: string
-      base_image:
-        required: true
-        type: string
-      build_args:
-        description: Vendor-specific Docker build arguments
-        required: false
-        default: ''
-        type: string
     secrets:
       REGISTRY_USERNAME:
         required: false
@@ -75,10 +54,10 @@ permissions:
 jobs:
   build:
     name: Build ${{ inputs.platform }} ${{ matrix.task }}
-    if: inputs.build_images
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     strategy:
       fail-fast: false
+      max-parallel: ${{ inputs.max_parallel }}
       matrix: ${{ fromJSON(inputs.matrix) }}
     steps:
       - name: Clean workspace
@@ -111,6 +90,22 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
+      - name: Validate image-build entry
+        shell: bash
+        env:
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          IMAGE: ${{ matrix.image }}
+          BASE_IMAGE: ${{ matrix.base_image }}
+          VALIDATION_SCRIPT: ${{ matrix.validation_script }}
+        run: |
+          set -euo pipefail
+          test -f "$DOCKERFILE"
+          test -n "$IMAGE"
+          test -n "$BASE_IMAGE"
+          if [ -n "$VALIDATION_SCRIPT" ]; then
+            test -f "$VALIDATION_SCRIPT"
+          fi
+
       - name: Detect runner proxy
         id: proxy
         shell: bash
@@ -119,29 +114,43 @@ jobs:
           echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve build arguments
+        id: build_args
+        shell: bash
+        env:
+          BUILD_ARGS_JSON: ${{ toJSON(matrix.build_args) }}
+        run: |
+          set -euo pipefail
+          {
+            echo 'args<<EOF_BUILD_ARGS'
+            jq -r 'to_entries[] | "\(.key)=\(.value)"' <<< "$BUILD_ARGS_JSON"
+            echo 'EOF_BUILD_ARGS'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker
 
       - name: Log in to registry
-        if: inputs.push
+        if: inputs.push || matrix.registry_login
         uses: docker/login-action@v3
         with:
-          registry: ${{ inputs.registry }}
+          registry: ${{ matrix.registry }}
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.CONTAINER_REGISTRY }}
 
-      - name: Select image tag
-        id: image
+      - name: Run platform pre-build contract
+        if: matrix.validation_script != ''
         shell: bash
-        run: |
-          case "${{ matrix.task }}" in
-            train) echo "tag=${{ inputs.train_image }}" >> "$GITHUB_OUTPUT" ;;
-            inference) echo "tag=${{ inputs.inference_image }}" >> "$GITHUB_OUTPUT" ;;
-            all) echo "tag=${{ inputs.all_image }}" >> "$GITHUB_OUTPUT" ;;
-            *) echo "Unsupported image task: ${{ matrix.task }}" >&2; exit 1 ;;
-          esac
+        env:
+          IMAGE_BUILD_PHASE: pre
+          IMAGE_BUILD_TASK: ${{ matrix.task }}
+          IMAGE_BUILD_BASE_IMAGE: ${{ matrix.base_image }}
+          IMAGE_BUILD_CANDIDATE_IMAGE: ${{ matrix.image }}
+          IMAGE_BUILD_RUNTIME_SMOKE_NPROC: ${{ matrix.runtime_smoke_nproc }}
+          IMAGE_BUILD_VALIDATION_SCRIPT: ${{ matrix.validation_script }}
+        run: bash "$IMAGE_BUILD_VALIDATION_SCRIPT"
 
       - name: Build image (attempt 1)
         id: build_attempt_1
@@ -149,13 +158,15 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/${{ inputs.platform }}/Dockerfile.${{ matrix.task }}
-          target: ${{ inputs.target }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          network: ${{ matrix.network }}
           load: true
-          tags: ${{ steps.image.outputs.tag }}
+          tags: ${{ matrix.image }}
           no-cache: ${{ inputs.no_cache }}
           build-args: |
-            ${{ inputs.build_args }}
+            BASE_IMAGE=${{ matrix.base_image }}
+            ${{ steps.build_args.outputs.args }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -165,7 +176,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
-            org.opencontainers.image.base.name=${{ inputs.base_image }}
+            org.opencontainers.image.base.name=${{ matrix.base_image }}
 
       - name: Wait before build retry
         if: steps.build_attempt_1.outcome == 'failure'
@@ -177,13 +188,15 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/${{ inputs.platform }}/Dockerfile.${{ matrix.task }}
-          target: ${{ inputs.target }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          network: ${{ matrix.network }}
           load: true
-          tags: ${{ steps.image.outputs.tag }}
+          tags: ${{ matrix.image }}
           no-cache: ${{ inputs.no_cache }}
           build-args: |
-            ${{ inputs.build_args }}
+            BASE_IMAGE=${{ matrix.base_image }}
+            ${{ steps.build_args.outputs.args }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -193,15 +206,29 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
-            org.opencontainers.image.base.name=${{ inputs.base_image }}
+            org.opencontainers.image.base.name=${{ matrix.base_image }}
+
+      - name: Run platform post-build contract
+        if: matrix.validation_script != ''
+        shell: bash
+        env:
+          IMAGE_BUILD_PHASE: post
+          IMAGE_BUILD_TASK: ${{ matrix.task }}
+          IMAGE_BUILD_BASE_IMAGE: ${{ matrix.base_image }}
+          IMAGE_BUILD_CANDIDATE_IMAGE: ${{ matrix.image }}
+          IMAGE_BUILD_RUNTIME_SMOKE_NPROC: ${{ matrix.runtime_smoke_nproc }}
+          IMAGE_BUILD_VALIDATION_SCRIPT: ${{ matrix.validation_script }}
+        run: bash "$IMAGE_BUILD_VALIDATION_SCRIPT"
 
       - name: Push image with retry
         if: inputs.push
         shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if docker push "${{ steps.image.outputs.tag }}"; then
+            if docker push "$IMAGE"; then
               exit 0
             fi
             [ "$attempt" -eq 3 ] && break
@@ -209,3 +236,25 @@ jobs:
           done
           echo "::error::Failed to push image after 3 attempts"
           exit 1
+
+      - name: Record image result
+        shell: bash
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          TASK: ${{ matrix.task }}
+          IMAGE: ${{ matrix.image }}
+          BASE_IMAGE: ${{ matrix.base_image }}
+        run: |
+          set -euo pipefail
+          digest="$(docker image inspect "$IMAGE" \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' | head -n 1)"
+          [ -n "$digest" ] || digest="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          {
+            echo '### Image build result'
+            echo
+            echo "- Platform: \`$PLATFORM\`"
+            echo "- Task: \`$TASK\`"
+            echo "- Image: \`$IMAGE\`"
+            echo "- Base: \`$BASE_IMAGE\`"
+            echo "- Digest/ID: \`$digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"

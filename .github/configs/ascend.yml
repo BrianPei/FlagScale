@@ -35,6 +35,34 @@ container_volumes:
   - /usr/local/Ascend/add-ons:/usr/local/Ascend/add-ons:ro
   - /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro
 
+# Image build contract consumed by the generic build workflow.
+image_build:
+  enabled: true
+  registry: harbor.baai.ac.cn
+  target: dev
+  network: host
+  max_parallel: 1
+  registry_login: true
+  validation_script: tools/install/ascend/validate_image_build.sh
+  tasks:
+    train:
+      dockerfile: docker/ascend/Dockerfile.train
+      image: flagos-dev/flagscale
+      test_roles: [train]
+      base_image: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev@sha256:1384b5cb596c3e1012c9f9fca64ed9e2960e27addc73b17704b3c1abcaf1fa02
+      build_args:
+        PKG_MGR: pip
+        FLAGSCALE_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
+        FLAGSCALE_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
+    inference:
+      dockerfile: docker/ascend/Dockerfile.inference
+      image: flagos-dev/flagscale
+      test_roles: [inference]
+      base_image: harbor.baai.ac.cn/flagscale/vllm-plugin-fl@sha256:5062ac23b8b8247e5b4faa5d2c61b7b8e82e46a9ae7c55fe15c5cdbe3533f4b7
+      build_args:
+        VLLM_PLUGIN_FL_REF: 43edeb601f4b8f616f56109de64836529e758deb
+        FLAGGEMS_REF: 3e6528cf04f5f964a7b0fa6628de6f0410dbfd02
+
 # Container options for Ascend NPU (no --gpus, use --device for NPU cards)
 container_options: >-
   --device /dev/davinci_manager

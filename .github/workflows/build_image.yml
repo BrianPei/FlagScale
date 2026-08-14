@@ -1,0 +1,486 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Docker Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/**'
+      - 'tools/install/**'
+      - 'requirements/**'
+      - '.github/configs/**'
+      - '.github/workflows/build_image.yml'
+      - '.github/workflows/build_image_common.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker/**'
+      - 'tools/install/**'
+      - 'requirements/**'
+      - '.github/configs/**'
+      - '.github/workflows/build_image.yml'
+      - '.github/workflows/build_image_common.yml'
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform config name under .github/configs
+        required: true
+        type: string
+      tasks:
+        description: Comma-separated image tasks, or all_tasks for every declared task
+        required: true
+        default: all_tasks
+        type: string
+      build_images:
+        description: Build new images; disable to test configured images only
+        required: true
+        default: true
+        type: boolean
+      run_tests:
+        description: Run the platform test matrix
+        required: true
+        default: true
+        type: boolean
+      push:
+        description: Push built images to the configured registry
+        required: true
+        default: true
+        type: boolean
+      no_cache:
+        description: Build without Docker cache
+        required: true
+        default: false
+        type: boolean
+      target:
+        description: Override the target declared by the platform config
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-image-${{ inputs.platform }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate_configs:
+    name: Validate image build contracts
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install yq
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Validate platform contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          found=false
+          for config_file in .github/configs/*.yml; do
+            if ! enabled_json=$(/usr/local/bin/yq -o=json -I=0 \
+              '.image_build.enabled // false' "$config_file"); then
+              echo "::error::Invalid YAML configuration: $config_file"
+              exit 1
+            fi
+            if [ "$(jq -r 'type' <<< "$enabled_json")" != boolean ]; then
+              echo "::error::image_build.enabled must be boolean: $config_file"
+              exit 1
+            fi
+            if [ "$(jq -r '.' <<< "$enabled_json")" != true ]; then
+              continue
+            fi
+            found=true
+
+            platform="$(basename "$config_file" .yml)"
+            env_script="tools/install/${platform}/env.sh"
+            registry=$(/usr/local/bin/yq -r '.image_build.registry // ""' "$config_file")
+            runners=$(/usr/local/bin/yq -o=json -I=0 \
+              '.image_build.runner_labels // .runner_labels // []' "$config_file")
+            registry_login_json=$(/usr/local/bin/yq -o=json -I=0 \
+              '.image_build.registry_login // false' "$config_file")
+            max_parallel=$(/usr/local/bin/yq -r \
+              '.image_build.max_parallel // 1' "$config_file")
+            platform_target=$(/usr/local/bin/yq -r \
+              '.image_build.target // "dev"' "$config_file")
+            platform_network=$(/usr/local/bin/yq -r \
+              '.image_build.network // "default"' "$config_file")
+            platform_validation_script=$(/usr/local/bin/yq -r \
+              '.image_build.validation_script // ""' "$config_file")
+            if [ -z "$registry" ] || \
+               [ "$(jq -r 'type' <<< "$runners")" != array ] || \
+               [ "$(jq 'length' <<< "$runners")" -eq 0 ]; then
+              echo "::error::${platform} has an incomplete image_build registry/runner contract"
+              exit 1
+            fi
+            if ! jq -e 'all(.[]; type == "string" and length > 0)' \
+              <<< "$runners" >/dev/null; then
+              echo "::error::${platform} image_build runner labels must be non-empty strings"
+              exit 1
+            fi
+            if [ "$(jq -r 'type' <<< "$registry_login_json")" != boolean ]; then
+              echo "::error::${platform} image_build.registry_login must be boolean"
+              exit 1
+            fi
+            if ! [[ "$max_parallel" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::${platform} image_build.max_parallel must be a positive integer"
+              exit 1
+            fi
+            if [ ! -f "$env_script" ]; then
+              echo "::error::Platform environment script not found: $env_script"
+              exit 1
+            fi
+            bash -n "$env_script"
+
+            mapfile -t tasks < <(\
+              /usr/local/bin/yq -r '.image_build.tasks | to_entries | .[].key' "$config_file")
+            if [ "${#tasks[@]}" -eq 0 ]; then
+              echo "::error::${platform} image_build.tasks is empty"
+              exit 1
+            fi
+
+            for task in "${tasks[@]}"; do
+              if [[ ! "$task" =~ ^[a-z0-9_-]+$ ]]; then
+                echo "::error::Invalid image task name: ${platform}/${task}"
+                exit 1
+              fi
+              entry=$(TASK="$task" /usr/local/bin/yq -o=json -I=0 \
+                '.image_build.tasks[strenv(TASK)]' "$config_file")
+              dockerfile=$(jq -r '.dockerfile // ""' <<< "$entry")
+              image=$(jq -r '.image // ""' <<< "$entry")
+              base_image=$(jq -r '.base_image // ""' <<< "$entry")
+              target=$(jq -r --arg default "$platform_target" \
+                '.target // $default' <<< "$entry")
+              network=$(jq -r --arg default "$platform_network" \
+                '.network // $default' <<< "$entry")
+              validation_script=$(jq -r --arg default "$platform_validation_script" \
+                '.validation_script // $default' <<< "$entry")
+              if [ -z "$dockerfile" ] || [ ! -f "$dockerfile" ] || \
+                 [ -z "$image" ] || [ -z "$base_image" ] || [ -z "$network" ]; then
+                echo "::error::Incomplete image task contract: ${platform}/${task}"
+                exit 1
+              fi
+              if [[ ! "$target" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+                echo "::error::Invalid Docker target/tag component: ${platform}/${task}: $target"
+                exit 1
+              fi
+              if [ "$(jq -r '(.build_args // {}) | type' <<< "$entry")" != object ]; then
+                echo "::error::build_args must be a mapping: ${platform}/${task}"
+                exit 1
+              fi
+              if ! jq -e \
+                '(has("registry_login") | not) or (.registry_login | type == "boolean")' \
+                <<< "$entry" >/dev/null; then
+                echo "::error::registry_login must be boolean: ${platform}/${task}"
+                exit 1
+              fi
+              if ! jq -e \
+                '((.test_roles // []) | type) == "array" and
+                 all((.test_roles // [])[]; . == "train" or . == "inference")' \
+                <<< "$entry" >/dev/null; then
+                echo "::error::test_roles must contain only train/inference: ${platform}/${task}"
+                exit 1
+              fi
+              if [ -n "$validation_script" ]; then
+                if [ ! -f "$validation_script" ]; then
+                  echo "::error::Validation script not found: ${platform}/${task}: $validation_script"
+                  exit 1
+                fi
+                bash -n "$validation_script"
+              fi
+            done
+            while IFS= read -r script; do
+              bash -n "$script"
+            done < <(find "tools/install/${platform}" -maxdepth 1 -type f -name '*.sh' -print)
+          done
+
+          if [ "$found" != true ]; then
+            echo "::error::No enabled image_build platform contracts were found"
+            exit 1
+          fi
+
+  configure:
+    name: Resolve ${{ inputs.platform }} image contract
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      platform: ${{ steps.contract.outputs.platform }}
+      runs_on: ${{ steps.contract.outputs.runs_on }}
+      matrix: ${{ steps.contract.outputs.matrix }}
+      max_parallel: ${{ steps.contract.outputs.max_parallel }}
+      train_image: ${{ steps.contract.outputs.train_image }}
+      inference_image: ${{ steps.contract.outputs.inference_image }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install yq
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Resolve platform contract
+        id: contract
+        shell: bash
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          TASKS: ${{ inputs.tasks }}
+          BUILD_IMAGES: ${{ inputs.build_images }}
+          RUN_TESTS: ${{ inputs.run_tests }}
+          PUSH: ${{ inputs.push }}
+          TARGET_OVERRIDE: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$PLATFORM" =~ ^[a-z0-9_-]+$ ]]; then
+            echo "::error::Platform must use lowercase letters, digits, underscores, or hyphens"
+            exit 1
+          fi
+          if [ -z "$TASKS" ]; then
+            echo "::error::At least one image task is required"
+            exit 1
+          fi
+          if [ "$BUILD_IMAGES" = true ] && [ "$RUN_TESTS" = true ] && [ "$PUSH" != true ]; then
+            echo "::error::run_tests=true with build_images=true requires push=true"
+            exit 1
+          fi
+
+          config_file=".github/configs/${PLATFORM}.yml"
+          if [ ! -f "$config_file" ]; then
+            echo "::error::Platform config not found: $config_file"
+            exit 1
+          fi
+          if ! enabled_json=$(/usr/local/bin/yq -o=json -I=0 \
+            '.image_build.enabled // false' "$config_file"); then
+            echo "::error::Invalid YAML configuration: $config_file"
+            exit 1
+          fi
+          if [ "$(jq -r 'type' <<< "$enabled_json")" != boolean ]; then
+            echo "::error::image_build.enabled must be boolean in $config_file"
+            exit 1
+          fi
+          if [ "$(jq -r '.' <<< "$enabled_json")" != true ]; then
+            echo "::error::Image builds are not enabled for ${PLATFORM}"
+            exit 1
+          fi
+
+          runs_on=$(/usr/local/bin/yq -o=json -I=0 \
+            '.image_build.runner_labels // .runner_labels' "$config_file")
+          registry=$(/usr/local/bin/yq -r '.image_build.registry' "$config_file")
+          registry_login_json=$(/usr/local/bin/yq -o=json -I=0 \
+            '.image_build.registry_login // false' "$config_file")
+          max_parallel=$(/usr/local/bin/yq -r '.image_build.max_parallel // 1' "$config_file")
+          short_sha="${GITHUB_SHA::7}"
+
+          for value in "$runs_on" "$registry"; do
+            if [ -z "$value" ] || [ "$value" = null ]; then
+              echo "::error::Incomplete image_build contract in $config_file"
+              exit 1
+            fi
+          done
+          if [ "$(jq -r 'type' <<< "$runs_on")" != array ] || \
+             [ "$(jq 'length' <<< "$runs_on")" -eq 0 ]; then
+            echo "::error::image_build runner labels must be a non-empty array"
+            exit 1
+          fi
+          if ! jq -e 'all(.[]; type == "string" and length > 0)' \
+            <<< "$runs_on" >/dev/null; then
+            echo "::error::image_build runner labels must be non-empty strings"
+            exit 1
+          fi
+          if [ "$(jq -r 'type' <<< "$registry_login_json")" != boolean ]; then
+            echo "::error::image_build.registry_login must be boolean"
+            exit 1
+          fi
+          if ! [[ "$max_parallel" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::image_build.max_parallel must be a positive integer"
+            exit 1
+          fi
+
+          if [ "$TASKS" = all_tasks ]; then
+            mapfile -t task_names < <(\
+              /usr/local/bin/yq -r '.image_build.tasks | to_entries | .[].key' "$config_file")
+          else
+            IFS=',' read -r -a task_names <<< "$TASKS"
+          fi
+          if [ "${#task_names[@]}" -eq 0 ]; then
+            echo "::error::No image tasks selected"
+            exit 1
+          fi
+
+          entries=()
+          candidate_test_roles=0
+          train_image=$(/usr/local/bin/yq -r '.ci_train_image // .ci_image // ""' "$config_file")
+          inference_image=$(/usr/local/bin/yq -r '.ci_inference_image // .ci_image // ""' "$config_file")
+
+          for raw_task in "${task_names[@]}"; do
+            task="${raw_task//[[:space:]]/}"
+            if [[ ! "$task" =~ ^[a-z0-9_-]+$ ]]; then
+              echo "::error::Invalid task name: $task"
+              exit 1
+            fi
+
+            if ! TASK="$task" /usr/local/bin/yq -e \
+              '.image_build.tasks[strenv(TASK)] != null' "$config_file" >/dev/null; then
+              echo "::error::${PLATFORM} does not declare image_build.tasks.${task}"
+              exit 1
+            fi
+            entry=$(TASK="$task" /usr/local/bin/yq -o=json -I=0 \
+              '.image_build.tasks[strenv(TASK)] as $item |
+               {
+                 "task": strenv(TASK),
+                 "dockerfile": $item.dockerfile,
+                 "image_name": $item.image,
+                 "base_image": $item.base_image,
+                 "target": ($item.target // .image_build.target // "dev"),
+                 "network": ($item.network // .image_build.network // "default"),
+                 "registry_login": ($item.registry_login // .image_build.registry_login // false),
+                 "validation_script": ($item.validation_script // .image_build.validation_script // ""),
+                 "runtime_smoke_nproc": ($item.runtime_smoke_nproc // .image_build.runtime_smoke_nproc // ""),
+                 "build_args": ((.image_build.build_args // {}) * ($item.build_args // {})),
+                 "test_roles": ($item.test_roles // [])
+               }' "$config_file")
+
+            dockerfile=$(jq -r '.dockerfile // ""' <<< "$entry")
+            image_name=$(jq -r '.image_name // ""' <<< "$entry")
+            base_image=$(jq -r '.base_image // ""' <<< "$entry")
+            target=$(jq -r '.target // ""' <<< "$entry")
+            network=$(jq -r '.network // ""' <<< "$entry")
+            validation_script=$(jq -r '.validation_script // ""' <<< "$entry")
+            if [ -n "$TARGET_OVERRIDE" ]; then
+              target="$TARGET_OVERRIDE"
+              entry=$(jq -c --arg target "$target" '. + {target: $target}' <<< "$entry")
+            fi
+            if [ -z "$dockerfile" ] || [ ! -f "$dockerfile" ]; then
+              echo "::error::Dockerfile is missing for ${PLATFORM}/${task}: ${dockerfile:-<empty>}"
+              exit 1
+            fi
+            if [ -z "$image_name" ] || [ -z "$base_image" ] || \
+               [ -z "$target" ] || [ -z "$network" ]; then
+              echo "::error::Incomplete image task contract for ${PLATFORM}/${task}"
+              exit 1
+            fi
+            if [ "$(jq -r '.build_args | type' <<< "$entry")" != object ]; then
+              echo "::error::build_args must be a mapping for ${PLATFORM}/${task}"
+              exit 1
+            fi
+            if [ "$(jq -r '.registry_login | type' <<< "$entry")" != boolean ]; then
+              echo "::error::registry_login must be boolean for ${PLATFORM}/${task}"
+              exit 1
+            fi
+            if ! jq -e \
+              '((.test_roles // []) | type) == "array" and
+               all((.test_roles // [])[]; . == "train" or . == "inference")' \
+              <<< "$entry" >/dev/null; then
+              echo "::error::test_roles must contain only train/inference for ${PLATFORM}/${task}"
+              exit 1
+            fi
+            if [ -n "$validation_script" ] && [ ! -f "$validation_script" ]; then
+              echo "::error::Validation script is missing for ${PLATFORM}/${task}: $validation_script"
+              exit 1
+            fi
+            if [[ ! "$target" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+              echo "::error::Invalid Docker target/tag component for ${PLATFORM}/${task}: $target"
+              exit 1
+            fi
+
+            candidate="${registry}/${image_name}:${short_sha}-${PLATFORM}-${task}-${target}"
+            entry=$(jq -c --arg registry "$registry" --arg image "$candidate" \
+              '. + {registry: $registry, image: $image}' <<< "$entry")
+            entries+=("$entry")
+
+            if [ "$BUILD_IMAGES" = true ]; then
+              roles=$(jq -r '.test_roles[]?' <<< "$entry")
+              while IFS= read -r role; do
+                case "$role" in
+                  train)
+                    train_image="$candidate"
+                    candidate_test_roles=$((candidate_test_roles + 1))
+                    ;;
+                  inference)
+                    inference_image="$candidate"
+                    candidate_test_roles=$((candidate_test_roles + 1))
+                    ;;
+                  '') ;;
+                  *) echo "::error::Unsupported test image role '${role}' in ${PLATFORM}/${task}"; exit 1 ;;
+                esac
+              done <<< "$roles"
+            fi
+          done
+
+          if [ "$BUILD_IMAGES" = true ] && [ "$RUN_TESTS" = true ] && \
+             [ "$candidate_test_roles" -eq 0 ]; then
+            echo "::error::None of the selected image tasks supplies a train/inference test role"
+            echo "::error::Select a task with test_roles or set run_tests=false"
+            exit 1
+          fi
+
+          matrix=$(printf '%s\n' "${entries[@]}" | jq -s -c '{include: .}')
+          if [ "$(jq '.include | length' <<< "$matrix")" -eq 0 ]; then
+            echo "::error::Resolved image matrix is empty"
+            exit 1
+          fi
+
+          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+          echo "runs_on=$runs_on" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "max_parallel=$max_parallel" >> "$GITHUB_OUTPUT"
+          echo "train_image=$train_image" >> "$GITHUB_OUTPUT"
+          echo "inference_image=$inference_image" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ inputs.platform }} images
+    needs: configure
+    if: inputs.build_images
+    uses: ./.github/workflows/build_image_common.yml
+    secrets: inherit
+    with:
+      platform: ${{ needs.configure.outputs.platform }}
+      runs_on: ${{ needs.configure.outputs.runs_on }}
+      matrix: ${{ needs.configure.outputs.matrix }}
+      max_parallel: ${{ fromJSON(needs.configure.outputs.max_parallel) }}
+      push: ${{ inputs.push }}
+      no_cache: ${{ inputs.no_cache }}
+
+  tests:
+    name: Test ${{ inputs.platform }} images
+    needs: [configure, build]
+    if: >-
+      always() &&
+      inputs.run_tests &&
+      needs.configure.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: ${{ needs.configure.outputs.platform }}
+      ci_train_image: ${{ needs.configure.outputs.train_image }}
+      ci_inference_image: ${{ needs.configure.outputs.inference_image }}

@@ -32,6 +32,25 @@ container_volumes:
   - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
   - /mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers
 
+# Image build contract consumed by the generic build workflow.
+image_build:
+  enabled: true
+  registry: harbor.baai.ac.cn
+  target: dev
+  network: default
+  max_parallel: 1
+  registry_login: true
+  validation_script: tools/install/metax/validate_image_build.sh
+  tasks:
+    train:
+      dockerfile: docker/metax/Dockerfile.train
+      image: flagos-dev/flagscale
+      test_roles: [train]
+      base_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te@sha256:c6bc75f8512a3ba385339a536a33dfc1dcbeb0c42b6ca1e2d5f0f0e4e9d6200f
+      build_args:
+        FLAGSCALE_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
+        FLAGSCALE_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
+
 # Container options for MetaX C550 (MACA runtime)
 container_options: >-
   --hostname=flagscale-ci

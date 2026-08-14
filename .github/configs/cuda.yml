@@ -24,11 +24,54 @@ ci_image: harbor.baai.ac.cn/flagos/flagscale:cuda12.8.1-cudnn9.7.1-python3.12-to
 ci_train_image: harbor.baai.ac.cn/flagscale/flagscale-train:dev-cu128-py3.12-20260228210721
 ci_inference_image: harbor.baai.ac.cn/flagscale/flagscale-inference:dev-cu128-py3.12-20260302102033
 
-# Directory to store image tar files (shared between build and push workflows)
-tar_dir: /mnt/airs-business/cicd/image_tar
-
 # Runner labels for this hardware
 runner_labels: ['flagscale-nvidia-a100-gpu2-32c-128g']
+
+# Image build contract consumed by the generic image-build workflow.
+image_build:
+  enabled: true
+  registry: harbor.baai.ac.cn
+  target: dev
+  network: default
+  max_parallel: 1
+  registry_login: false
+  runner_labels: [self-hosted, Linux, X64, nvidia-0, gpus-8]
+  tasks:
+    train:
+      dockerfile: docker/cuda/Dockerfile.train
+      image: flagscale/flagscale-train
+      base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
+      test_roles: [train]
+      build_args:
+        CUDA_VERSION: '12.8.1'
+        UBUNTU_VERSION: '22.04'
+        PYTHON_VERSION: '3.12'
+        UV_VERSION: '0.7.2'
+        PKG_MGR: conda
+        PYTORCH_INDEX: https://download.pytorch.org/whl/cu128
+    inference:
+      dockerfile: docker/cuda/Dockerfile.inference
+      image: flagscale/flagscale-inference
+      base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
+      test_roles: [inference]
+      build_args:
+        CUDA_VERSION: '12.8.1'
+        UBUNTU_VERSION: '22.04'
+        PYTHON_VERSION: '3.12'
+        UV_VERSION: '0.7.2'
+        PKG_MGR: conda
+        PYTORCH_INDEX: https://download.pytorch.org/whl/cu128
+    all:
+      dockerfile: docker/cuda/Dockerfile.all
+      image: flagscale/flagscale-all
+      base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
+      build_args:
+        CUDA_VERSION: '12.8.1'
+        UBUNTU_VERSION: '22.04'
+        PYTHON_VERSION: '3.12'
+        UV_VERSION: '0.7.2'
+        PKG_MGR: conda
+        PYTORCH_INDEX: https://download.pytorch.org/whl/cu128
 
 # Container volumes (hardware-specific paths)
 container_volumes:
