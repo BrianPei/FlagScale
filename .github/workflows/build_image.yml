@@ -15,26 +15,6 @@
 name: Build Docker Images
 
 on:
-  push:
-    branches:
-      - main
-      - 'ci/**'
-    paths:
-      - 'docker/**'
-      - 'tools/install/**'
-      - 'requirements/**'
-      - '.github/configs/**'
-      - '.github/workflows/build_image.yml'
-      - '.github/workflows/build_image_common.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'docker/**'
-      - 'tools/install/**'
-      - 'requirements/**'
-      - '.github/configs/**'
-      - '.github/workflows/build_image.yml'
-      - '.github/workflows/build_image_common.yml'
   workflow_dispatch:
     inputs:
       platform:
@@ -98,8 +78,8 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Install yq
@@ -113,7 +93,6 @@ jobs:
         id: prepare
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
           INPUT_PLATFORM: ${{ inputs.platform }}
           INPUT_TASKS: ${{ inputs.tasks }}
           INPUT_BUILD_IMAGES: ${{ inputs.build_images }}
@@ -121,9 +100,7 @@ jobs:
           INPUT_PUSH: ${{ inputs.push }}
           INPUT_NO_CACHE: ${{ inputs.no_cache }}
           INPUT_TARGET: ${{ inputs.target }}
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          BASE_REPOSITORY: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'unavailable' || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -137,29 +114,13 @@ jobs:
             python3 tools/install/utils/resolve_source_refs.py --validate-only >/dev/null
 
           execute=true
-          if [ "$EVENT_NAME" = workflow_dispatch ]; then
-            selected_platform="${INPUT_PLATFORM:-all}"
-            tasks="${INPUT_TASKS:-all_tasks}"
-            build_images="${INPUT_BUILD_IMAGES:-true}"
-            run_tests="${INPUT_RUN_TESTS:-true}"
-            push="${INPUT_PUSH:-true}"
-            no_cache="${INPUT_NO_CACHE:-false}"
-            target="${INPUT_TARGET:-}"
-          else
-            selected_platform=all
-            tasks=all_tasks
-            build_images=true
-            run_tests=true
-            push=true
-            no_cache=false
-            target=''
-            if [ "$EVENT_NAME" = pull_request ] && \
-               [ "$HEAD_REPOSITORY" != "$BASE_REPOSITORY" ]; then
-              build_images=false
-              push=false
-              echo "::notice::Fork PR will run tests with the validated Harbor images; image build and push are disabled for this event"
-            fi
-          fi
+          selected_platform="${INPUT_PLATFORM:-all}"
+          tasks="${INPUT_TASKS:-all_tasks}"
+          build_images="${INPUT_BUILD_IMAGES:-true}"
+          run_tests="${INPUT_RUN_TESTS:-true}"
+          push="${INPUT_PUSH:-true}"
+          no_cache="${INPUT_NO_CACHE:-false}"
+          target="${INPUT_TARGET:-}"
 
           if [[ ! "$selected_platform" =~ ^(all|[a-z0-9_-]+)$ ]]; then
             echo "::error::Invalid platform: $selected_platform"
