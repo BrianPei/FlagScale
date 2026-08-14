@@ -22,7 +22,7 @@ display_name: "MetaX C550 Tests"
 # Docker images for MetaX C550 (MACA-based)
 ci_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
 ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev@sha256:2a59d6df4fb4f9ddb09feb3b266cb44de06492c599d802d50b0477ca80891573
-ci_inference_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
 
 # Runner labels for MetaX C550 hardware
 runner_labels: ["flagscale-metax-c550-gpu2-8c-256g"]
