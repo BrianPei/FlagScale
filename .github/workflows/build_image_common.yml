@@ -242,15 +242,32 @@ jobs:
               fi
             done < <(jq -r '.source_refs | to_entries[]? | [.key, .value] | @tsv' <<< "$entry")
 
+            build_arg_lines=$(jq -r \
+              'to_entries[] | "\(.key)=\(.value)"' <<< "$build_args")
+            source_labels=$(jq -r \
+              'to_entries[] | (.key | gsub("_"; "-")) as $label |
+               "io.flagscale.source.\($label).revision=\(.value.revision)\n" +
+               "io.flagscale.source.\($label).selector=\(.value.selector)"' \
+              <<< "$source_metadata")
+            source_summary=$(jq -r \
+              'to_entries[] |
+               "| `\(.key)` | `\(.value.selector)` | `\(.value.revision)` |"' \
+              <<< "$source_metadata")
             candidate="${registry}/${image_name}:${short_sha}-${PLATFORM}-${target}"
             entry=$(jq -c \
               --arg registry "$registry" \
               --arg image "$candidate" \
+              --arg build_arg_lines "$build_arg_lines" \
+              --arg source_labels "$source_labels" \
+              --arg source_summary "$source_summary" \
               --argjson build_args "$build_args" \
               --argjson resolved_sources "$source_metadata" \
               '. + {
                 registry: $registry,
                 image: $image,
+                build_arg_lines: $build_arg_lines,
+                source_labels: $source_labels,
+                source_summary: $source_summary,
                 build_args: $build_args,
                 resolved_sources: $resolved_sources
               }' <<< "$entry")
@@ -338,26 +355,6 @@ jobs:
           echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve build arguments and labels
-        id: metadata
-        shell: bash
-        env:
-          BUILD_ARGS_JSON: ${{ toJSON(matrix.build_args) }}
-          SOURCES_JSON: ${{ toJSON(matrix.resolved_sources) }}
-        run: |
-          set -euo pipefail
-          {
-            echo 'args<<EOF_BUILD_ARGS'
-            jq -r 'to_entries[] | "\(.key)=\(.value)"' <<< "$BUILD_ARGS_JSON"
-            echo 'EOF_BUILD_ARGS'
-            echo 'labels<<EOF_SOURCE_LABELS'
-            jq -r 'to_entries[] | (.key | gsub("_"; "-")) as $label |
-              "io.flagscale.source.\($label).revision=\(.value.revision)\n" +
-              "io.flagscale.source.\($label).selector=\(.value.selector)"' \
-              <<< "$SOURCES_JSON"
-            echo 'EOF_SOURCE_LABELS'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -410,7 +407,7 @@ jobs:
           no-cache: ${{ inputs.no_cache }}
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
-            ${{ steps.metadata.outputs.args }}
+            ${{ matrix.build_arg_lines }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -421,7 +418,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
             org.opencontainers.image.base.name=${{ matrix.base_image }}
-            ${{ steps.metadata.outputs.labels }}
+            ${{ matrix.source_labels }}
 
       - name: Wait before build retry
         if: steps.build_attempt_1.outcome == 'failure'
@@ -440,7 +437,7 @@ jobs:
           no-cache: ${{ inputs.no_cache }}
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
-            ${{ steps.metadata.outputs.args }}
+            ${{ matrix.build_arg_lines }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -451,7 +448,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
             org.opencontainers.image.base.name=${{ matrix.base_image }}
-            ${{ steps.metadata.outputs.labels }}
+            ${{ matrix.source_labels }}
 
       - name: Run platform post-build contract
         if: matrix.validation_script != ''
@@ -501,7 +498,7 @@ jobs:
           TASK: ${{ matrix.task }}
           IMAGE: ${{ matrix.image }}
           BASE_IMAGE: ${{ matrix.base_image }}
-          SOURCES_JSON: ${{ toJSON(matrix.resolved_sources) }}
+          SOURCE_SUMMARY: ${{ matrix.source_summary }}
           REMOTE_DIGEST: ${{ steps.push_image.outputs.digest }}
         run: |
           set -euo pipefail
@@ -519,13 +516,11 @@ jobs:
               echo '- Published digest: `not pushed`'
             fi
             echo "- Local image ID: \`$local_id\`"
-            if [ "$SOURCES_JSON" != '{}' ]; then
+            if [ -n "$SOURCE_SUMMARY" ]; then
               echo
               echo '| Source | Selector | Revision |'
               echo '|---|---|---|'
-              jq -r 'to_entries[] |
-                "| `\(.key)` | `\(.value.selector)` | `\(.value.revision)` |"' \
-                <<< "$SOURCES_JSON"
+              printf '%s\n' "$SOURCE_SUMMARY"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
