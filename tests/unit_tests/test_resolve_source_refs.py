@@ -111,10 +111,7 @@ def test_split_runtime_all_images_have_explicit_task_environments(platform):
         if "install.sh" in command and "--task all" in command:
             assert "--no-task" in command
     for role in ("train", "inference", "serve"):
-        assert (
-            f"io.flagscale.runtime.{role}=/opt/flagscale/runtimes/{role}"
-            in dockerfile
-        )
+        assert f"io.flagscale.runtime.{role}=/opt/flagscale/runtimes/{role}" in dockerfile
 
     image_build = config["image_build"]
     smoke_nproc = task.get("runtime_smoke_nproc", image_build.get("runtime_smoke_nproc"))
