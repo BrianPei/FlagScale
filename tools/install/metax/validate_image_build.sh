@@ -10,7 +10,10 @@ task="${IMAGE_BUILD_TASK:?IMAGE_BUILD_TASK is required}"
 base_image="${IMAGE_BUILD_BASE_IMAGE:?IMAGE_BUILD_BASE_IMAGE is required}"
 candidate="${IMAGE_BUILD_CANDIDATE_IMAGE:?IMAGE_BUILD_CANDIDATE_IMAGE is required}"
 
-[ "$task" = train ] || exit 0
+case "$task" in
+    train|inference) ;;
+    *) exit 0 ;;
+esac
 
 if [ "$phase" = pre ]; then
     docker pull "$base_image"
@@ -47,6 +50,36 @@ torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/metax_collective.py
 fi
 
 [ "$phase" = post ] || exit 0
+
+if [ "$task" = inference ]; then
+    docker run --rm \
+        --ipc=host --group-add video \
+        --device=/dev/dri --device=/dev/mxcd --device=/dev/infiniband \
+        --entrypoint python "$candidate" -c '
+import importlib.metadata as metadata
+import torch
+import vllm_fl
+from vllm.platforms import current_platform
+
+print("torch:", torch.__version__)
+print("vllm:", metadata.version("vllm"))
+print("vllm-plugin-fl:", metadata.version("vllm-plugin-fl"))
+print("platform:", type(current_platform).__module__, type(current_platform).__name__)
+print("vendor:", current_platform.vendor_name)
+print("device_type:", current_platform.device_type)
+
+assert torch.cuda.device_count() == 8
+assert type(current_platform).__module__ == "vllm_fl.platform"
+assert type(current_platform).__name__ == "PlatformFL"
+assert current_platform.vendor_name == "metax"
+assert current_platform.device_type == "cuda"
+
+value = torch.ones(16, device="cuda:0")
+assert value.sum().item() == 16
+'
+    exit 0
+fi
+
 docker run --rm \
     --ipc=host --group-add video \
     --device=/dev/dri --device=/dev/mxcd \

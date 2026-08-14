@@ -1,0 +1,7 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+
+# The pinned MetaX vLLM base owns Torch, MACA, vLLM-MetaX and FlagGems.
+# This is the sole runtime dependency declared by vllm-plugin-FL; the plugin
+# source itself is installed from the workflow-resolved commit.
+pyyaml>=6.0,<7
