@@ -53,7 +53,8 @@ dist.all_reduce(value)
 assert value.item() == 3.0, value
 dist.destroy_process_group()
 PY
-torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/collective.py
+torchrun --nnodes=1 --nproc-per-node=2 \
+    --master-addr=127.0.0.1 --master-port=29500 /tmp/collective.py
 '
     docker run "${docker_args[@]}" --entrypoint bash "$candidate" -lc '
 set -euo pipefail
@@ -86,7 +87,8 @@ dist.all_reduce(value)
 assert value.item() == 3.0, value
 dist.destroy_process_group()
 PY
-torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/collective.py
+torchrun --nnodes=1 --nproc-per-node=2 \
+    --master-addr=127.0.0.1 --master-port=29500 /tmp/collective.py
 '
     exit 0
 fi

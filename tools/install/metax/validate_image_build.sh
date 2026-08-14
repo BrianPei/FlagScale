@@ -44,7 +44,8 @@ assert value.item() == 3.0, value
 print(f"rank={rank} all_reduce={value.item()}")
 dist.destroy_process_group()
 PY
-torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/metax_collective.py
+torchrun --nnodes=1 --nproc-per-node=2 \
+    --master-addr=127.0.0.1 --master-port=29500 /tmp/metax_collective.py
 '
     exit 0
 fi
@@ -83,7 +84,8 @@ dist.all_reduce(value)
 assert value.item() == 3.0, value
 dist.destroy_process_group()
 PY
-torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/collective.py
+torchrun --nnodes=1 --nproc-per-node=2 \
+    --master-addr=127.0.0.1 --master-port=29500 /tmp/collective.py
 '
     docker run --rm \
         --ipc=host --group-add video \
@@ -119,7 +121,8 @@ dist.all_reduce(value)
 assert value.item() == 3.0, value
 dist.destroy_process_group()
 PY
-torchrun --standalone --nnodes=1 --nproc-per-node=2 /tmp/collective.py
+torchrun --nnodes=1 --nproc-per-node=2 \
+    --master-addr=127.0.0.1 --master-port=29500 /tmp/collective.py
 '
     exit 0
 fi
