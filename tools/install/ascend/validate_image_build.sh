@@ -28,6 +28,7 @@ if [ "$task" = all ]; then
     docker run "${docker_args[@]}" --entrypoint bash "$candidate" -lc '
 set -euo pipefail
 export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train
+export HCCL_NPU_SOCKET_PORT_RANGE=41000-41099
 . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
 python - <<"PY"
 import torch
@@ -59,6 +60,7 @@ torchrun --nnodes=1 --nproc-per-node=2 \
     docker run "${docker_args[@]}" --entrypoint bash "$candidate" -lc '
 set -euo pipefail
 export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference
+export HCCL_NPU_SOCKET_PORT_RANGE=41100-41199
 . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
 python - <<"PY"
 import torch
