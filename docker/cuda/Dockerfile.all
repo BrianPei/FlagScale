@@ -17,7 +17,9 @@
 # NOTE: This Dockerfile is experimental and requires further testing.
 #       Please report issues at https://github.com/FlagOpen/FlagScale/issues
 #
-# Comprehensive image with all task dependencies (train, inference, rl, hetero_train)
+# Comprehensive image with isolated train and inference/serve runtimes.
+# The all image is a delivery image; train and inference must not share a
+# mutable Conda environment.
 #
 # Multi-stage build producing:
 #   - dev: Development image with all tools and dependencies
@@ -75,7 +77,11 @@ ARG FLAGSCALE_TE_REF
 ARG FLAGSCALE_MEGATRON_REF
 
 LABEL io.flagscale.transformer-engine-fl.revision=${FLAGSCALE_TE_REF} \
-      io.flagscale.megatron-lm-fl.revision=${FLAGSCALE_MEGATRON_REF}
+      io.flagscale.megatron-lm-fl.revision=${FLAGSCALE_MEGATRON_REF} \
+      io.flagscale.runtime.layout=task-isolated \
+      io.flagscale.runtime.train=/opt/flagscale/runtimes/train \
+      io.flagscale.runtime.inference=/opt/flagscale/runtimes/inference \
+      io.flagscale.runtime.serve=/opt/flagscale/runtimes/serve
 
 # Proxy settings (build-time only)
 ARG HTTP_PROXY
@@ -86,7 +92,7 @@ ARG https_proxy=${HTTPS_PROXY}
 ARG no_proxy=${NO_PROXY}
 
 # Root installation directory (single source of truth)
-ARG FLAGSCALE_HOME=/root
+ARG FLAGSCALE_HOME=/opt/flagscale
 
 # Build-time only environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -94,6 +100,7 @@ ENV TZ=Asia/Shanghai
 
 # Copy install scripts for system dependencies
 COPY tools/install /tmp/tools/install
+COPY tools/install/cuda/activate_runtime.sh /opt/flagscale/bin/activate-cuda-runtime.sh
 
 # Install system dependencies (common for all tasks)
 # Uses: install.sh --no-dev --no-base --no-task to only run system phase
@@ -133,7 +140,7 @@ WORKDIR /workspace
 FROM base AS env
 
 ARG PKG_MGR
-ARG FLAGSCALE_HOME=/root
+ARG FLAGSCALE_HOME=/opt/flagscale
 ARG PYTHON_VERSION=3.12
 
 RUN . /etc/profile.d/flagscale-env.sh && \
@@ -145,16 +152,32 @@ RUN . /etc/profile.d/flagscale-env.sh && \
             echo "[ENV] Found uv venv at ${FLAGSCALE_HOME}/venv"; \
         fi; \
     elif [ "$PKG_MGR" = "conda" ]; then \
-        CONDA_ENV_NAME=flagscale-all; \
-        if [ -d "${FLAGSCALE_CONDA}/envs/${CONDA_ENV_NAME}" ]; then \
-            echo "[ENV] Found conda env ${CONDA_ENV_NAME} at ${FLAGSCALE_CONDA}/envs/${CONDA_ENV_NAME}"; \
-        else \
-            echo "[ENV] Creating conda env ${CONDA_ENV_NAME} (python=${PYTHON_VERSION})"; \
-            env CONDA_NO_PLUGINS=true ANACONDA_ACCEPT_TOS=yes "${FLAGSCALE_CONDA}/bin/conda" create -y -n "${CONDA_ENV_NAME}" "python=${PYTHON_VERSION}"; \
-        fi; \
+        for CONDA_ENV_NAME in flagscale-train flagscale-inference; do \
+            if [ -d "${FLAGSCALE_CONDA}/envs/${CONDA_ENV_NAME}" ]; then \
+                echo "[ENV] Found conda env ${CONDA_ENV_NAME} at ${FLAGSCALE_CONDA}/envs/${CONDA_ENV_NAME}"; \
+            else \
+                echo "[ENV] Creating conda env ${CONDA_ENV_NAME} (python=${PYTHON_VERSION})"; \
+                env CONDA_NO_PLUGINS=true ANACONDA_ACCEPT_TOS=yes "${FLAGSCALE_CONDA}/bin/conda" create -y -n "${CONDA_ENV_NAME}" "python=${PYTHON_VERSION}"; \
+            fi; \
+        done; \
     else \
         echo "[ENV] Using system pip (no dedicated env to create)"; \
     fi
+
+RUN set -eux; \
+    mkdir -p "${FLAGSCALE_HOME}/runtimes/train" \
+        "${FLAGSCALE_HOME}/runtimes/inference" \
+        "${FLAGSCALE_HOME}/runtimes/serve"; \
+    printf '%s\n' train > "${FLAGSCALE_HOME}/runtimes/train/task"; \
+    printf '%s\n' inference > "${FLAGSCALE_HOME}/runtimes/inference/task"; \
+    printf '%s\n' serve > "${FLAGSCALE_HOME}/runtimes/serve/task"; \
+    chmod 0755 /opt/flagscale/bin/activate-cuda-runtime.sh; \
+    ln -s /opt/flagscale/bin/activate-cuda-runtime.sh \
+        "${FLAGSCALE_HOME}/runtimes/train/activate.sh"; \
+    ln -s /opt/flagscale/bin/activate-cuda-runtime.sh \
+        "${FLAGSCALE_HOME}/runtimes/inference/activate.sh"; \
+    ln -s /opt/flagscale/bin/activate-cuda-runtime.sh \
+        "${FLAGSCALE_HOME}/runtimes/serve/activate.sh"
 
 # =============================================================================
 # DEPS STAGE - Install all dependencies using install folder
@@ -163,7 +186,7 @@ FROM env AS deps
 
 ARG PYTORCH_INDEX
 ARG PKG_MGR
-ARG FLAGSCALE_HOME=/root
+ARG FLAGSCALE_HOME=/opt/flagscale
 ARG FLAGSCALE_TE_REF
 ARG FLAGSCALE_MEGATRON_REF
 
@@ -203,19 +226,26 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/cuda/*.sh && \
     cd /workspace && \
-    if [ "$PKG_MGR" = "uv" ]; then \
-        UV_EXTRA_INDEX_URL=${PYTORCH_INDEX} \
-        FLAGSCALE_HOME=${FLAGSCALE_HOME} \
-        ./tools/install/install.sh --platform cuda --task all --pkg-mgr uv --no-system; \
-    elif [ "$PKG_MGR" = "conda" ]; then \
-        FLAGSCALE_HOME=${FLAGSCALE_HOME} \
-        ./tools/install/install.sh --platform cuda --task all --pkg-mgr conda --env-name flagscale-all --no-system; \
-    else \
-        PIP_EXTRA_INDEX_URL=${PYTORCH_INDEX} \
-        FLAGSCALE_HOME=${FLAGSCALE_HOME} \
-        ./tools/install/install.sh --platform cuda --task all --pkg-mgr pip --no-system; \
-    fi && \
-    rm -rf /root/deps /root/downloads /workspace
+    if [ "$PKG_MGR" != "conda" ]; then \
+        echo "CUDA all requires PKG_MGR=conda for task isolation" >&2; \
+        exit 1; \
+    fi; \
+    FLAGSCALE_RUNTIME_ROOT=${FLAGSCALE_HOME}/runtimes/train \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; cd /workspace; \
+        FLAGSCALE_HOME="${FLAGSCALE_HOME}" ./tools/install/install.sh \
+            --platform cuda --task train --pkg-mgr conda \
+            --env-name flagscale-train --no-system'; \
+    FLAGSCALE_RUNTIME_ROOT=${FLAGSCALE_HOME}/runtimes/inference \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; cd /workspace; \
+        FLAGSCALE_HOME="${FLAGSCALE_HOME}" ./tools/install/install.sh \
+            --platform cuda --task inference --pkg-mgr conda \
+            --env-name flagscale-inference --no-system'; \
+    FLAGSCALE_RUNTIME_ROOT=${FLAGSCALE_HOME}/runtimes/inference \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; cd /workspace; \
+        FLAGSCALE_HOME="${FLAGSCALE_HOME}" ./tools/install/install.sh \
+            --platform cuda --task serve --pkg-mgr conda \
+            --env-name flagscale-inference --no-system'; \
+    rm -rf ${FLAGSCALE_HOME}/deps ${FLAGSCALE_HOME}/downloads /workspace
 
 # =============================================================================
 # DEV STAGE - Full development image
@@ -223,7 +253,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM deps AS dev
 
 ARG PKG_MGR
-ARG FLAGSCALE_HOME=/root
+ARG FLAGSCALE_HOME=/opt/flagscale
 
 CMD ["/bin/bash"]
 
@@ -234,7 +264,7 @@ FROM env AS release
 
 ARG PYTORCH_INDEX
 ARG PKG_MGR
-ARG FLAGSCALE_HOME=/root
+ARG FLAGSCALE_HOME=/opt/flagscale
 ARG FLAGSCALE_TE_REF
 ARG FLAGSCALE_MEGATRON_REF
 
@@ -272,18 +302,25 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     chmod +x /workspace/tools/install/utils/*.sh && \
     chmod +x /workspace/tools/install/cuda/*.sh && \
     cd /workspace && \
-    if [ "$PKG_MGR" = "uv" ]; then \
-        UV_EXTRA_INDEX_URL=${PYTORCH_INDEX} \
-        FLAGSCALE_HOME=${FLAGSCALE_HOME} \
-        ./tools/install/install.sh --platform cuda --task all --pkg-mgr uv --no-system --no-dev; \
-    elif [ "$PKG_MGR" = "conda" ]; then \
-        FLAGSCALE_HOME=${FLAGSCALE_HOME} \
-        ./tools/install/install.sh --platform cuda --task all --pkg-mgr conda --env-name flagscale-all --no-system --no-dev; \
-    else \
-        PIP_EXTRA_INDEX_URL=${PYTORCH_INDEX} \
-        FLAGSCALE_HOME=${FLAGSCALE_HOME} \
-        ./tools/install/install.sh --platform cuda --task all --pkg-mgr pip --no-system --no-dev; \
-    fi && \
-    rm -rf /root/deps /root/downloads /workspace
+    if [ "$PKG_MGR" != "conda" ]; then \
+        echo "CUDA all requires PKG_MGR=conda for task isolation" >&2; \
+        exit 1; \
+    fi; \
+    FLAGSCALE_RUNTIME_ROOT=${FLAGSCALE_HOME}/runtimes/train \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; cd /workspace; \
+        FLAGSCALE_HOME="${FLAGSCALE_HOME}" ./tools/install/install.sh \
+            --platform cuda --task train --pkg-mgr conda \
+            --env-name flagscale-train --no-system --no-dev'; \
+    FLAGSCALE_RUNTIME_ROOT=${FLAGSCALE_HOME}/runtimes/inference \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; cd /workspace; \
+        FLAGSCALE_HOME="${FLAGSCALE_HOME}" ./tools/install/install.sh \
+            --platform cuda --task inference --pkg-mgr conda \
+            --env-name flagscale-inference --no-system --no-dev'; \
+    FLAGSCALE_RUNTIME_ROOT=${FLAGSCALE_HOME}/runtimes/inference \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; cd /workspace; \
+        FLAGSCALE_HOME="${FLAGSCALE_HOME}" ./tools/install/install.sh \
+            --platform cuda --task serve --pkg-mgr conda \
+            --env-name flagscale-inference --no-system --no-dev'; \
+    rm -rf ${FLAGSCALE_HOME}/deps ${FLAGSCALE_HOME}/downloads /workspace
 
 CMD ["/bin/bash"]

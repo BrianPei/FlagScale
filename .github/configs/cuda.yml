@@ -69,6 +69,17 @@ image_build:
       dockerfile: docker/cuda/Dockerfile.all
       image: flagos-dev/flagscale-all
       base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
+      test_roles: [train, inference]
+      test_environments:
+        train:
+          pkg_mgr: runtime
+          env_path: /opt/flagscale/runtimes/train
+        inference:
+          pkg_mgr: runtime
+          env_path: /opt/flagscale/runtimes/inference
+        serve:
+          pkg_mgr: runtime
+          env_path: /opt/flagscale/runtimes/serve
       build_args:
         CUDA_VERSION: '12.8.1'
         UBUNTU_VERSION: '22.04'
@@ -126,4 +137,5 @@ env_names:
   train: "flagscale-train"
   hetero_train: "flagscale-train"
   inference: "flagscale-inference"
+  serve: "flagscale-inference"
   rl: "flagscale-rl"

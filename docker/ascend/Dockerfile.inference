@@ -44,7 +44,9 @@ RUN chmod +x /workspace/tools/install/*.sh \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/ascend/*.sh && \
     /workspace/tools/install/install.sh --platform ascend --task inference \
-        --pkg-mgr pip --no-system --no-dev --no-base
+        --pkg-mgr pip --no-system --no-dev --no-base && \
+    /workspace/tools/install/install.sh --platform ascend --task serve \
+        --pkg-mgr pip --no-system --no-dev --no-base --only-pip
 
 RUN python -m pip check 2>&1 | sort > /tmp/pip-check.after || true
 

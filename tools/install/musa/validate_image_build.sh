@@ -9,79 +9,106 @@ phase="${IMAGE_BUILD_PHASE:?IMAGE_BUILD_PHASE is required}"
 task="${IMAGE_BUILD_TASK:?IMAGE_BUILD_TASK is required}"
 candidate="${IMAGE_BUILD_CANDIDATE_IMAGE:?IMAGE_BUILD_CANDIDATE_IMAGE is required}"
 nproc="${IMAGE_BUILD_RUNTIME_SMOKE_NPROC:-2}"
+device_count="${IMAGE_BUILD_RUNTIME_DEVICE_COUNT:-}"
 
 [ "$phase" = post ] || exit 0
 
 docker_args=(
-  --privileged
-  --env MTHREADS_VISIBLE_DEVICES=all
-  --env MTHREADS_DRIVER_CAPABILITIES=all
+    --privileged
+    --env MTHREADS_VISIBLE_DEVICES=all
+    --env MTHREADS_DRIVER_CAPABILITIES=all
+    --ipc=host
 )
 
-docker run --rm "${docker_args[@]}" \
-  --env EXPECTED_WORLD_SIZE="$nproc" "$candidate" \
-  python -c '
+validate_runtime() {
+    local runtime_task="$1"
+    local runtime_mode="$2"
+    local runtime_env=()
+
+    if [ "$runtime_task" = train ]; then
+        runtime_env=(
+            --env TORCH_DEVICE_BACKEND_AUTOLOAD=0
+            --env TORCHDYNAMO_DISABLE=1
+            --env TORCH_COMPILE_DISABLE=1
+            --env NVTE_TORCH_COMPILE=0
+        )
+    fi
+
+    docker run --rm "${docker_args[@]}" \
+        "${runtime_env[@]}" \
+        --env FLAGSCALE_RUNTIME_TASK="$runtime_task" \
+        --env FLAGSCALE_RUNTIME_MODE="$runtime_mode" \
+        --env EXPECTED_WORLD_SIZE="$nproc" \
+        --env EXPECTED_DEVICE_COUNT="$device_count" \
+        --entrypoint bash "$candidate" -lc '
+set -euo pipefail
+runtime_task="${FLAGSCALE_RUNTIME_TASK:?}"
+if [ "${FLAGSCALE_RUNTIME_MODE:?}" = isolated ]; then
+    export FLAGSCALE_RUNTIME_ROOT="/opt/flagscale/runtimes/${runtime_task}"
+    . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
+fi
+python - "$runtime_task" <<"PY"
 import os
+import sys
+
 import torch
 import torch_musa
 
+task = sys.argv[1]
 assert torch.musa.is_available()
-assert torch.musa.device_count() >= int(os.environ["EXPECTED_WORLD_SIZE"])
-x = torch.tensor(range(8), dtype=torch.float32, device="musa")
-assert (x * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]
-'
+expected_devices = int(
+    os.environ.get("EXPECTED_DEVICE_COUNT")
+    or os.environ["EXPECTED_WORLD_SIZE"]
+)
+assert torch.musa.device_count() >= expected_devices
+value = torch.tensor(range(8), dtype=torch.float32, device="musa")
+assert (value * 2).cpu().tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
 
-if [ "$task" != train ]; then
-  docker run --rm "${docker_args[@]}" "$candidate" \
-    python -c '
-import torch_musa
-import vllm
+if task == "train":
+    import megatron.core
+    import transformer_engine
+    import transformer_engine_torch as tex
+    from megatron.plugin.platform import get_platform
+    from transformer_engine.pytorch import Linear
 
-assert hasattr(torch_musa, "_MUSAC")
-print(vllm.__version__)
+    assert get_platform().device_name() == "musa"
+    for symbol in ("generic_gemm", "layernorm_fwd", "layernorm_bwd", "rmsnorm_fwd", "rmsnorm_bwd"):
+        assert hasattr(tex, symbol), symbol
+    torch.musa.set_device(0)
+    layer = Linear(16, 8).to("musa")
+    input_value = torch.randn(4, 16, device="musa", requires_grad=True)
+    output = layer(input_value)
+    output.sum().backward()
+    assert bool(output.isfinite().all().item())
+    assert input_value.grad is not None and bool(input_value.grad.isfinite().all().item())
+    assert layer.weight.grad is not None and bool(layer.weight.grad.isfinite().all().item())
+
+    print("MUSA train runtime:", torch.__version__, transformer_engine.__version__)
+    print("Megatron:", megatron.core.__file__)
+else:
+    assert hasattr(torch_musa, "_MUSAC")
+    import vllm
+
+    print("MUSA inference/serve runtime:", torch.__version__, vllm.__version__)
+PY
 '
+}
+
+validate_collective() {
+    local runtime_mode="$1"
+
+    docker run --rm "${docker_args[@]}" \
+        --env FLAGSCALE_RUNTIME_MODE="$runtime_mode" \
+        --env EXPECTED_WORLD_SIZE="$nproc" \
+        --entrypoint bash "$candidate" -lc '
+set -euo pipefail
+if [ "${FLAGSCALE_RUNTIME_MODE:?}" = isolated ]; then
+    export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train
+    . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
 fi
-
-if [ "$task" != inference ]; then
-  docker run --rm "${docker_args[@]}" \
-    --env TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
-    --env TORCHDYNAMO_DISABLE=1 \
-    --env TORCH_COMPILE_DISABLE=1 \
-    --env NVTE_TORCH_COMPILE=0 \
-    "$candidate" python -c '
-import torch
-import torch_musa
-import transformer_engine
-import transformer_engine_torch as tex
-from transformer_engine.pytorch import Linear
-
-for symbol in ("generic_gemm", "layernorm_fwd", "layernorm_bwd", "rmsnorm_fwd", "rmsnorm_bwd"):
-    assert hasattr(tex, symbol), symbol
-torch.musa.set_device(0)
-layer = Linear(16, 8).to("musa")
-value = torch.randn(4, 16, device="musa", requires_grad=True)
-output = layer(value)
-output.sum().backward()
-assert bool(output.isfinite().all().item())
-assert value.grad is not None and bool(value.grad.isfinite().all().item())
-assert layer.weight.grad is not None and bool(layer.weight.grad.isfinite().all().item())
-print("Native MUSA TransformerEngine:", transformer_engine.__version__)
-'
-fi
-
-if [ "$task" != inference ]; then
-  docker run --rm "${docker_args[@]}" "$candidate" python -c '
-import torch_musa
-import megatron.core
-from megatron.plugin.platform import get_platform
-
-assert get_platform().device_name() == "musa"
-'
-
-  docker run --rm --ipc=host "${docker_args[@]}" \
-    --env EXPECTED_WORLD_SIZE="$nproc" "$candidate" \
-    torchrun --standalone --nproc_per_node="$nproc" --no-python python -c '
+cat >/tmp/musa_collective.py <<"PY"
 import os
+
 import torch
 import torch_musa
 
@@ -93,5 +120,27 @@ value = torch.tensor([rank], dtype=torch.int64, device="musa")
 torch.distributed.all_reduce(value)
 assert value.item() == world * (world - 1) // 2
 torch.distributed.destroy_process_group()
+PY
+torchrun --standalone --nproc_per_node="${EXPECTED_WORLD_SIZE}" \
+    --no-python python /tmp/musa_collective.py
 '
-fi
+}
+
+case "$task" in
+    train)
+        validate_runtime train direct
+        validate_collective direct
+        ;;
+    inference)
+        validate_runtime inference direct
+        ;;
+    all)
+        validate_runtime train isolated
+        validate_runtime inference isolated
+        validate_collective isolated
+        ;;
+    *)
+        echo "Unsupported MUSA image task: $task" >&2
+        exit 1
+        ;;
+esac

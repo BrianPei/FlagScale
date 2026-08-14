@@ -18,6 +18,8 @@ FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/metax/inference.txt"
 PLUGIN_REPO="${FLAGSCALE_VLLM_PLUGIN_REPO:-https://github.com/flagos-ai/vllm-plugin-FL.git}"
 PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-}"
+FLAGGEMS_REPO="${FLAGSCALE_FLAGGEMS_REPO:-https://github.com/flagos-ai/FlagGems.git}"
+FLAGGEMS_REF="${FLAGSCALE_FLAGGEMS_REF:-v5.3.0}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac
@@ -28,7 +30,7 @@ checkout_pinned_ref() {
     local ref=$2
     local target=$3
 
-    [ -z "$ref" ] && { log_error "A pinned vllm-plugin-FL ref is required"; return 1; }
+    [ -z "$ref" ] && { log_error "A pinned source ref is required for $repo"; return 1; }
     retry -d "$DEBUG" "$RETRY_COUNT" "rm -rf '$target' && \
         git init -q '$target' && \
         git -C '$target' remote add origin '$repo' && \
@@ -54,6 +56,19 @@ install_plugin() {
         --root-user-action=ignore --no-deps --no-build-isolation ." || return 1
 }
 
+install_flaggems() {
+    set_step "Installing resolved FlagGems for MetaX"
+    mkdir -p "$FLAGSCALE_DEPS"
+    checkout_pinned_ref "$FLAGGEMS_REPO" "$FLAGGEMS_REF" \
+        "$FLAGSCALE_DEPS/FlagGems" || return 1
+
+    local pip_cmd
+    pip_cmd=$(get_pip_cmd)
+    run_cmd -d "$DEBUG" bash -c \
+        "cd '$FLAGSCALE_DEPS/FlagGems' && $pip_cmd install \
+        --root-user-action=ignore --no-deps --no-build-isolation ." || return 1
+}
+
 validate_runtime() {
     [ "$DEBUG" = true ] && return 0
     VLLM_PLUGINS=fl VLLM_FL_PLATFORM=metax python - <<'PY'
@@ -67,12 +82,14 @@ entrypoints = {
 assert entrypoints.get("fl") == "vllm_fl:register", entrypoints
 print("vllm:", metadata.version("vllm"))
 print("vllm-plugin-fl:", metadata.version("vllm-plugin-fl"))
+print("flag-gems:", metadata.version("flag-gems"))
 print("platform entrypoints:", entrypoints)
 PY
 }
 
 main() {
     install_requirements || die "MetaX inference requirements failed"
+    install_flaggems || die "FlagGems installation failed"
     install_plugin || die "vllm-plugin-FL installation failed"
     validate_runtime || die "MetaX inference runtime validation failed"
     log_success "MetaX inference runtime ready"

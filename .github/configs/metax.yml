@@ -39,6 +39,11 @@ image_build:
   target: dev
   network: default
   max_parallel: 1
+  # The C550 runner exposes an eight-device host. Individual image smoke
+  # tests still use runtime_smoke_nproc=2 below because the smoke collective
+  # only needs two processes.
+  runtime_device_count: '8'
+  runtime_smoke_nproc: '2'
   registry_login: true
   validation_script: tools/install/metax/validate_image_build.sh
   tasks:
@@ -58,6 +63,7 @@ image_build:
       base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl@sha256:c83a7b26e5b72fcffa920f32929a76984c78d5ee5520828b6e50feb9864240ed
       source_refs:
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
+        FLAGGEMS_REF: flaggems
     all:
       dockerfile: docker/metax/Dockerfile.all
       image: flagos-dev/flagscale-all
@@ -66,6 +72,11 @@ image_build:
       build_args:
         TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev@sha256:2a59d6df4fb4f9ddb09feb3b266cb44de06492c599d802d50b0477ca80891573
         INFERENCE_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+        FLAGSCALE_TE_REF: transformer_engine_fl
+        VLLM_PLUGIN_FL_REF: vllm_plugin_fl
+        FLAGGEMS_REF: flaggems
       test_environments:
         train:
           pkg_mgr: runtime
@@ -110,4 +121,5 @@ env_names:
   train: "base"
   hetero_train: ""
   inference: ""
+  serve: ""
   rl: ""

@@ -6,20 +6,65 @@
 # different. Serve reuses the inference runtime contract.
 ARG TRAIN_BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train@sha256:2b6ceb58a1dc345ba89b2f8eb22dcc73aeec2048aa8e141abfaaf80f8635b91c
 ARG INFERENCE_BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
+ARG FLAGSCALE_TE_REF=main
+ARG FLAGSCALE_MEGATRON_REF=main
+ARG VLLM_PLUGIN_FL_REF=main
+ARG FLAGGEMS_REF=v5.3.0
 
 FROM ${TRAIN_BASE_IMAGE} AS train_runtime
+ARG FLAGSCALE_TE_REF
+ARG FLAGSCALE_MEGATRON_REF
+ENV FLAGSCALE_HOME=/opt/flagscale \
+    FLAGSCALE_TE_REF=${FLAGSCALE_TE_REF} \
+    FLAGSCALE_MEGATRON_REF=${FLAGSCALE_MEGATRON_REF}
+COPY tools/install /workspace/tools/install
+COPY requirements /workspace/requirements
+RUN chmod +x /workspace/tools/install/*.sh \
+        /workspace/tools/install/utils/*.sh \
+        /workspace/tools/install/ascend/*.sh && \
+    . /etc/profile.d/flagscale-env.sh && \
+    /workspace/tools/install/install.sh --platform ascend --task train \
+        --pkg-mgr pip --no-system --no-dev --no-base --force-build && \
+    rm -rf /workspace/tools /workspace/requirements
+
 FROM ${INFERENCE_BASE_IMAGE} AS inference_runtime
+ARG VLLM_PLUGIN_FL_REF
+ARG FLAGGEMS_REF
+ENV FLAGSCALE_HOME=/opt/flagscale \
+    FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF} \
+    FLAGSCALE_FLAGGEMS_REF=${FLAGGEMS_REF} \
+    VLLM_PLUGINS=fl \
+    VLLM_FL_PLATFORM=ascend
+COPY tools/install /workspace/tools/install
+COPY requirements /workspace/requirements
+RUN chmod +x /workspace/tools/install/*.sh \
+        /workspace/tools/install/utils/*.sh \
+        /workspace/tools/install/ascend/*.sh && \
+    . /etc/profile.d/flagscale-env.sh && \
+    /workspace/tools/install/install.sh --platform ascend --task inference \
+        --pkg-mgr pip --no-system --no-dev --no-base && \
+    /workspace/tools/install/install.sh --platform ascend --task serve \
+        --pkg-mgr pip --no-system --no-dev --no-base --only-pip && \
+    rm -rf /workspace/tools /workspace/requirements
 
 FROM inference_runtime AS dev
 ARG TRAIN_BASE_IMAGE
 ARG INFERENCE_BASE_IMAGE
+ARG FLAGSCALE_TE_REF
+ARG FLAGSCALE_MEGATRON_REF
+ARG VLLM_PLUGIN_FL_REF
+ARG FLAGGEMS_REF
 
 LABEL io.flagscale.runtime.layout=task-isolated \
       io.flagscale.runtime.train=/opt/flagscale/runtimes/train \
       io.flagscale.runtime.inference=/opt/flagscale/runtimes/inference \
       io.flagscale.runtime.serve=/opt/flagscale/runtimes/serve \
       io.flagscale.runtime.train.base=${TRAIN_BASE_IMAGE} \
-      io.flagscale.runtime.inference.base=${INFERENCE_BASE_IMAGE}
+      io.flagscale.runtime.inference.base=${INFERENCE_BASE_IMAGE} \
+      io.flagscale.transformer-engine-fl.revision=${FLAGSCALE_TE_REF} \
+      io.flagscale.megatron-lm-fl.revision=${FLAGSCALE_MEGATRON_REF} \
+      io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF} \
+      io.flagscale.flaggems.revision=${FLAGGEMS_REF}
 
 # The two Python prefixes have different versions and therefore do not
 # overlap. CANN is copied to a task-owned prefix instead of replacing the

@@ -157,6 +157,11 @@ jobs:
             echo "::error::No image tasks selected for $PLATFORM"
             exit 1
           fi
+          all_task_selected=false
+          for selected_task in "${task_names[@]}"; do
+            selected_task="${selected_task//[[:space:]]/}"
+            [ "$selected_task" = all ] && all_task_selected=true
+          done
 
           entries=()
           candidate_test_roles=0
@@ -194,6 +199,7 @@ jobs:
                  "registry_login": ($item.registry_login // .image_build.registry_login // false),
                  "validation_script": ($item.validation_script // .image_build.validation_script // ""),
                  "runtime_smoke_nproc": ($item.runtime_smoke_nproc // .image_build.runtime_smoke_nproc // ""),
+                 "runtime_device_count": ($item.runtime_device_count // .image_build.runtime_device_count // ""),
                  "build_args": ((.image_build.build_args // {}) * ($item.build_args // {})),
                  "source_refs": ((.image_build.source_refs // {}) * ($item.source_refs // {})),
                   "test_roles": ($item.test_roles // []),
@@ -206,6 +212,8 @@ jobs:
             target=$(jq -r '.target // ""' <<< "$entry")
             network=$(jq -r '.network // ""' <<< "$entry")
             validation_script=$(jq -r '.validation_script // ""' <<< "$entry")
+            runtime_smoke_nproc=$(jq -r '.runtime_smoke_nproc // ""' <<< "$entry")
+            runtime_device_count=$(jq -r '.runtime_device_count // ""' <<< "$entry")
             if [ -n "$TARGET_OVERRIDE" ]; then
               target="$TARGET_OVERRIDE"
               entry=$(jq -c --arg target "$target" '.target = $target' <<< "$entry")
@@ -223,6 +231,50 @@ jobs:
             if [ -n "$validation_script" ] && [ ! -f "$validation_script" ]; then
               echo "::error::Validation script not found: $validation_script"
               exit 1
+            fi
+            if [ -n "$runtime_device_count" ] && \
+               ! [[ "$runtime_device_count" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Invalid runtime_device_count: ${PLATFORM}/${task}"
+              exit 1
+            fi
+            if [ -n "$runtime_smoke_nproc" ] && \
+               ! [[ "$runtime_smoke_nproc" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Invalid runtime_smoke_nproc: ${PLATFORM}/${task}"
+              exit 1
+            fi
+            if [ -n "$runtime_smoke_nproc" ] && \
+               [ -n "$runtime_device_count" ] && \
+               [ "$runtime_smoke_nproc" -gt "$runtime_device_count" ]; then
+              echo "::error::runtime_smoke_nproc exceeds runtime_device_count: ${PLATFORM}/${task}"
+              exit 1
+            fi
+
+            test_roles=$(jq -c '.test_roles // []' <<< "$entry")
+            if [ "$(jq -r 'type' <<< "$test_roles")" != array ] || \
+               ! jq -e 'all(.[]; . == "train" or . == "inference")' \
+               <<< "$test_roles" >/dev/null; then
+              echo "::error::Invalid test_roles: ${PLATFORM}/${task}"
+              exit 1
+            fi
+            if [ "$BUILD_IMAGES" = true ] && [ "$RUN_TESTS" = true ] && \
+               [ "$task" = all ] && [ "$(jq 'length' <<< "$test_roles")" -gt 0 ]; then
+              required_roles=()
+              if jq -e 'index("train") != null' <<< "$test_roles" >/dev/null; then
+                required_roles+=(train)
+              fi
+              if jq -e 'index("inference") != null' <<< "$test_roles" >/dev/null; then
+                required_roles+=(inference serve)
+              fi
+              for role in "${required_roles[@]}"; do
+                pkg_mgr=$(jq -r --arg role "$role" \
+                  '.test_environments[$role].pkg_mgr // ""' <<< "$entry")
+                env_path=$(jq -r --arg role "$role" \
+                  '.test_environments[$role].env_path // ""' <<< "$entry")
+                if [ -z "$pkg_mgr" ] || [ -z "$env_path" ]; then
+                  echo "::error::Missing test_environments.${role} for ${PLATFORM}/${task}"
+                  exit 1
+                fi
+              done
             fi
 
             if [[ ! "$image_name" =~ ^[a-z0-9][a-z0-9._/-]*[a-z0-9]$ ]] || \
@@ -290,17 +342,21 @@ jobs:
               while IFS= read -r role; do
                 case "$role" in
                   train)
-                    train_image="$candidate"
-                    train_pkg_mgr=$(jq -r '.test_environments.train.pkg_mgr // ""' <<< "$entry")
-                    train_env_path=$(jq -r '.test_environments.train.env_path // ""' <<< "$entry")
+                    if [ "$all_task_selected" != true ] || [ "$task" = all ]; then
+                      train_image="$candidate"
+                      train_pkg_mgr=$(jq -r '.test_environments.train.pkg_mgr // ""' <<< "$entry")
+                      train_env_path=$(jq -r '.test_environments.train.env_path // ""' <<< "$entry")
+                    fi
                     candidate_test_roles=$((candidate_test_roles + 1))
                     ;;
                   inference)
-                    inference_image="$candidate"
-                    inference_pkg_mgr=$(jq -r '.test_environments.inference.pkg_mgr // ""' <<< "$entry")
-                    inference_env_path=$(jq -r '.test_environments.inference.env_path // ""' <<< "$entry")
-                    serve_pkg_mgr=$(jq -r '.test_environments.serve.pkg_mgr // ""' <<< "$entry")
-                    serve_env_path=$(jq -r '.test_environments.serve.env_path // ""' <<< "$entry")
+                    if [ "$all_task_selected" != true ] || [ "$task" = all ]; then
+                      inference_image="$candidate"
+                      inference_pkg_mgr=$(jq -r '.test_environments.inference.pkg_mgr // ""' <<< "$entry")
+                      inference_env_path=$(jq -r '.test_environments.inference.env_path // ""' <<< "$entry")
+                      serve_pkg_mgr=$(jq -r '.test_environments.serve.pkg_mgr // ""' <<< "$entry")
+                      serve_env_path=$(jq -r '.test_environments.serve.env_path // ""' <<< "$entry")
+                    fi
                     candidate_test_roles=$((candidate_test_roles + 1))
                     ;;
                   '') ;;
@@ -415,6 +471,7 @@ jobs:
           IMAGE_BUILD_BASE_IMAGE: ${{ matrix.base_image }}
           IMAGE_BUILD_CANDIDATE_IMAGE: ${{ matrix.image }}
           IMAGE_BUILD_RUNTIME_SMOKE_NPROC: ${{ matrix.runtime_smoke_nproc }}
+          IMAGE_BUILD_RUNTIME_DEVICE_COUNT: ${{ matrix.runtime_device_count }}
           IMAGE_BUILD_VALIDATION_SCRIPT: ${{ matrix.validation_script }}
         run: bash "$IMAGE_BUILD_VALIDATION_SCRIPT"
 
@@ -484,6 +541,7 @@ jobs:
           IMAGE_BUILD_BASE_IMAGE: ${{ matrix.base_image }}
           IMAGE_BUILD_CANDIDATE_IMAGE: ${{ matrix.image }}
           IMAGE_BUILD_RUNTIME_SMOKE_NPROC: ${{ matrix.runtime_smoke_nproc }}
+          IMAGE_BUILD_RUNTIME_DEVICE_COUNT: ${{ matrix.runtime_device_count }}
           IMAGE_BUILD_VALIDATION_SCRIPT: ${{ matrix.validation_script }}
         run: bash "$IMAGE_BUILD_VALIDATION_SCRIPT"
 

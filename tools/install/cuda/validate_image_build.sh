@@ -22,33 +22,73 @@ candidate="${IMAGE_BUILD_CANDIDATE_IMAGE:?IMAGE_BUILD_CANDIDATE_IMAGE is require
 
 [ "$phase" = post ] || exit 0
 
+validate_runtime() {
+    local runtime_task="$1"
+    local runtime_mode="$2"
+
+    docker run --rm --gpus all \
+        --env FLAGSCALE_RUNTIME_TASK="$runtime_task" \
+        --env FLAGSCALE_RUNTIME_MODE="$runtime_mode" \
+        --entrypoint bash "$candidate" -lc '
+set -euo pipefail
+runtime_task="${FLAGSCALE_RUNTIME_TASK:?}"
+if [ "${FLAGSCALE_RUNTIME_MODE:?}" = isolated ]; then
+    export FLAGSCALE_RUNTIME_ROOT="/opt/flagscale/runtimes/${runtime_task}"
+    . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
+else
+    case "$runtime_task" in
+        train) env_name=flagscale-train ;;
+        inference|serve) env_name=flagscale-inference ;;
+        *) echo "Unsupported CUDA runtime task: $runtime_task" >&2; exit 1 ;;
+    esac
+    conda_root="${FLAGSCALE_CONDA:-}"
+    if [ -n "$conda_root" ] && [ -f "$conda_root/etc/profile.d/conda.sh" ] && \
+       [ -d "$conda_root/envs/$env_name" ]; then
+        . "$conda_root/etc/profile.d/conda.sh"
+        conda activate "$env_name"
+    elif [ -n "${UV_PROJECT_ENVIRONMENT:-}" ] && \
+         [ -f "$UV_PROJECT_ENVIRONMENT/bin/activate" ]; then
+        . "$UV_PROJECT_ENVIRONMENT/bin/activate"
+    fi
+fi
+python - "$runtime_task" <<"PY"
+import sys
+
+import torch
+
+task = sys.argv[1]
+assert torch.cuda.is_available()
+assert torch.cuda.device_count() > 0
+value = torch.tensor(range(8), dtype=torch.float32, device="cuda")
+assert (value * 2).cpu().tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
+
+if task == "train":
+    import megatron.core
+    import transformer_engine
+
+    print("CUDA train runtime:", torch.__version__, transformer_engine.__file__)
+    print("Megatron:", megatron.core.__file__)
+else:
+    import vllm
+
+    print("CUDA inference/serve runtime:", torch.__version__, vllm.__version__)
+PY
+'
+}
+
 case "$task" in
     train)
-        env_name=flagscale-train
-        imports='import megatron.core; import transformer_engine'
+        validate_runtime train direct
         ;;
     inference)
-        env_name=flagscale-inference
-        imports='import vllm'
+        validate_runtime inference direct
         ;;
     all)
-        env_name=flagscale-all
-        imports='import megatron.core; import transformer_engine; import vllm'
+        validate_runtime train isolated
+        validate_runtime inference isolated
         ;;
     *)
         echo "Unsupported CUDA image task: $task" >&2
         exit 1
         ;;
 esac
-
-docker run --rm --gpus all \
-    --entrypoint /root/miniconda3/bin/conda \
-    "$candidate" run -n "$env_name" python -c "
-import torch
-
-assert torch.cuda.is_available()
-value = torch.tensor(range(8), dtype=torch.float32, device='cuda')
-assert (value * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]
-$imports
-print('CUDA image validation passed:', '$task')
-"

@@ -49,6 +49,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     chmod +x /workspace/tools/install/*.sh /workspace/tools/install/utils/*.sh /workspace/tools/install/musa/*.sh && \
     FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_MUSA_BUILD_NO_DEVICE=true \
     ./tools/install/install.sh --platform musa --task inference --pkg-mgr ${PKG_MGR} --no-system && \
+    FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_MUSA_BUILD_NO_DEVICE=true \
+    ./tools/install/install.sh --platform musa --task serve --pkg-mgr ${PKG_MGR} --no-system && \
     rm -rf /workspace/*
 
 FROM deps AS dev
@@ -72,5 +74,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     chmod +x /workspace/tools/install/*.sh /workspace/tools/install/utils/*.sh /workspace/tools/install/musa/*.sh && \
     FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_MUSA_BUILD_NO_DEVICE=true \
     ./tools/install/install.sh --platform musa --task inference --pkg-mgr ${PKG_MGR} --no-system --no-dev && \
+    FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_MUSA_BUILD_NO_DEVICE=true \
+    ./tools/install/install.sh --platform musa --task serve --pkg-mgr ${PKG_MGR} --no-system --no-dev && \
     rm -rf /workspace/*
 CMD ["/bin/bash"]

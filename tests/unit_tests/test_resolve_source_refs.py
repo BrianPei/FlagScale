@@ -92,7 +92,7 @@ def test_platform_source_refs_use_catalog(platform):
             assert re.search(rf"^ARG {build_arg}(?:=|$)", dockerfile, re.MULTILINE)
 
 
-@pytest.mark.parametrize("platform", ["ascend", "metax"])
+@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "metax"])
 def test_split_runtime_all_images_have_explicit_task_environments(platform):
     root = Path(__file__).parents[2]
     config = yaml.safe_load((root / f".github/configs/{platform}.yml").read_text())
@@ -106,7 +106,38 @@ def test_split_runtime_all_images_have_explicit_task_environments(platform):
 
     dockerfile = (root / task["dockerfile"]).read_text()
     assert "io.flagscale.runtime.layout=task-isolated" in dockerfile
-    assert "--task all" not in dockerfile
+    normalized_dockerfile = dockerfile.replace("\\\n", " ")
+    for command in re.split(r"&&|;", normalized_dockerfile):
+        if "install.sh" in command and "--task all" in command:
+            assert "--no-task" in command
+    for role in ("train", "inference", "serve"):
+        assert (
+            f"io.flagscale.runtime.{role}=/opt/flagscale/runtimes/{role}"
+            in dockerfile
+        )
+
+    image_build = config["image_build"]
+    smoke_nproc = task.get("runtime_smoke_nproc", image_build.get("runtime_smoke_nproc"))
+    device_count = task.get("runtime_device_count", image_build.get("runtime_device_count"))
+    if smoke_nproc is not None or device_count is not None:
+        assert smoke_nproc is not None and device_count is not None
+        assert int(smoke_nproc) <= int(device_count)
+
+
+@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "metax"])
+def test_inference_images_include_serve_dependencies(platform):
+    root = Path(__file__).parents[2]
+    config = yaml.safe_load((root / f".github/configs/{platform}.yml").read_text())
+    task = config["image_build"]["tasks"]["inference"]
+    env_names = config.get("env_names", {})
+
+    assert task["test_roles"] == ["inference"]
+    assert env_names.get("serve", "flagscale-inference") == env_names.get(
+        "inference", "flagscale-inference"
+    )
+    dockerfile = (root / task["dockerfile"]).read_text()
+    assert re.search(rf"--platform\s+{platform}\s+--task\s+inference\b", dockerfile)
+    assert re.search(rf"--platform\s+{platform}\s+--task\s+serve\b", dockerfile)
 
 
 def test_validate_catalog_rejects_unknown_policy():
