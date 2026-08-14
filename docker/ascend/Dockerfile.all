@@ -40,9 +40,11 @@ RUN set -eux; \
     ln -s /opt/flagscale/bin/activate-ascend-runtime.sh /opt/flagscale/runtimes/inference/activate.sh; \
     ln -s /opt/flagscale/bin/activate-ascend-runtime.sh /opt/flagscale/runtimes/serve/activate.sh; \
     FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train \
-        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, torch_npu, transformer_engine, megatron.core"'; \
+        TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, transformer_engine, megatron.core"'; \
     FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference \
-        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, torch_npu, vllm, vllm_fl"'
+        TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, vllm, vllm_fl"'
 
 WORKDIR /workspace
 CMD ["/bin/bash"]

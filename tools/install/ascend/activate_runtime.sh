@@ -34,5 +34,5 @@ export ASCEND_OPP_PATH="$toolkit_home/opp"
 # Use deterministic paths so activating the train runtime cannot retain the
 # inference image's Python/CANN libraries (or vice versa).
 export PATH="$python_home/bin:$toolkit_home/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-export LD_LIBRARY_PATH="$toolkit_home/lib64:$ascend_home/nnal/atb/9.0.0/lib:$ascend_home/nnal/asdsip/9.0.0/lib:/usr/local/Ascend/driver/lib64:/usr/local/mpi/lib64:/usr/local/mpi/lib:/usr/local/lib:/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu"
+export LD_LIBRARY_PATH="$toolkit_home/lib64:$ascend_home/nnal/atb/9.0.0/lib:$ascend_home/nnal/asdsip/9.0.0/lib:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64:/usr/local/Ascend/add-ons:/usr/local/mpi/lib64:/usr/local/mpi/lib:/usr/local/lib:/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu"
 export PYTHONNOUSERSITE=1
