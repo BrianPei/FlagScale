@@ -16,7 +16,9 @@ name: Build Docker Images
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'ci/**'
     paths:
       - 'docker/**'
       - 'tools/install/**'

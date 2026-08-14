@@ -75,11 +75,14 @@ def test_platform_source_refs_use_catalog(platform):
     if validation_script:
         validation_path = root / validation_script
         assert validation_path.is_file()
-    for task in config["image_build"]["tasks"].values():
+    for task_name, task in config["image_build"]["tasks"].items():
         assert re.fullmatch(r"[a-z0-9][a-z0-9._/-]*[a-z0-9]", task["image"])
         assert "//" not in task["image"]
         assert ":" not in task["image"]
         assert "@" not in task["image"]
+        if task_name != "all":
+            assert (root / f"requirements/{platform}/{task_name}.txt").is_file()
+            assert (root / f"tools/install/{platform}/install_{task_name}.sh").is_file()
         build_args = task.get("build_args", {})
         source_refs = task.get("source_refs", {})
         assert build_args.keys().isdisjoint(source_refs)

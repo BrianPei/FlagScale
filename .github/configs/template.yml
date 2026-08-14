@@ -55,6 +55,9 @@ image_build:
   registry_login: true  # Needed for private base pulls; pushes always log in
   validation_script: ''
   build_args: {}
+  # Declare only complete image capabilities. Every non-all task needs a
+  # Dockerfile, requirements/<platform>/<task>.txt, and install_<task>.sh.
+  # Unsupported tasks stay absent rather than using placeholder files.
   tasks:
     train:
       dockerfile: docker/my_hardware/Dockerfile.train
