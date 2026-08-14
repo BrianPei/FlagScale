@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This immutable base was built from quay.io/ascend/vllm-ascend:v0.20.2rc1-a3
-# with FlagGems 3e6528cf04f5f964a7b0fa6628de6f0410dbfd02.
+# The immutable base supplies the matching Ascend vLLM runtime. FlagScale
+# overlays the resolved vllm-plugin-FL and FlagGems revisions.
 ARG BASE_IMAGE=harbor.baai.ac.cn/flagscale/vllm-plugin-fl@sha256:5062ac23b8b8247e5b4faa5d2c61b7b8e82e46a9ae7c55fe15c5cdbe3533f4b7
 
 FROM ${BASE_IMAGE} AS dev
 
-ARG VLLM_PLUGIN_FL_REF=43edeb601f4b8f616f56109de64836529e758deb
-ARG FLAGGEMS_REF=3e6528cf04f5f964a7b0fa6628de6f0410dbfd02
+ARG VLLM_PLUGIN_FL_REF=main
+# Direct builds use the current stable release; CI resolves the latest release
+# to an immutable commit before dispatching the platform build.
+ARG FLAGGEMS_REF=v5.3.0
 
 LABEL io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF} \
       io.flagscale.flaggems.revision=${FLAGGEMS_REF}
@@ -28,7 +30,8 @@ ENV VLLM_PLUGINS=fl \
     VLLM_FL_PLATFORM=ascend \
     TRITON_ALL_BLOCKS_PARALLEL=1
 
-ENV FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF}
+ENV FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF} \
+    FLAGSCALE_FLAGGEMS_REF=${FLAGGEMS_REF}
 
 COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements

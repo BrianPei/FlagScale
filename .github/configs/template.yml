@@ -61,6 +61,9 @@ image_build:
       image: flagos-dev/flagscale-train
       base_image: registry.example.com/vendor/train-base:tag
       build_args: {}
+      # Map Docker build argument names to entries in image_sources.yml.
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
       test_roles: [train]
 
 # Container options (hardware-specific settings - update as needed)

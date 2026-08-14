@@ -6,10 +6,10 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-# The pinned Ascend inference base owns torch, torch-npu, vLLM and FlagGems.
-# install_inference.sh installs the matching vllm-plugin-FL from a fixed commit
-# without replacing those core runtime packages.
+# The pinned Ascend inference base owns torch, torch-npu and vLLM.
+# install_inference.sh overlays the resolved vllm-plugin-FL and FlagGems
+# revisions without replacing those core runtime packages.
 
 # No additional Python packages are installed here. The immutable base owns
-# the complete torch/torch-npu/vLLM/FlagGems runtime; replacing any of those
+# the complete torch/torch-npu/vLLM runtime; replacing any of those
 # transitive dependencies would invalidate the vendor-tested stack.

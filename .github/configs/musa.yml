@@ -29,7 +29,7 @@ ci_inference_image: harbor.baai.ac.cn/flagscale/flagscale-inference:dev-musa-s50
 runner_labels: ["flagscale-mthreads-s5000-gpu8"]
 
 # Image build contract consumed by the generic image-build workflow.
-# Builds remain an explicit manual choice while S5000 capacity is constrained.
+# max_parallel keeps the three image tasks serialized on each S5000 runner.
 image_build:
   enabled: true
   registry: harbor.baai.ac.cn
@@ -49,9 +49,9 @@ image_build:
         PKG_MGR: pip
         PIP_INDEX_URL: https://pypi.org/simple
         PIP_DEFAULT_TIMEOUT: '300'
-        FLAGSCALE_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
-        FLAGSCALE_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
         FLAGSCALE_TE_VERSION: 2.0.0+e73781e
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
     inference:
       dockerfile: docker/musa/Dockerfile.inference
       image: flagos-dev/flagscale-inference
@@ -62,9 +62,6 @@ image_build:
         PKG_MGR: pip
         PIP_INDEX_URL: https://pypi.org/simple
         PIP_DEFAULT_TIMEOUT: '300'
-        FLAGSCALE_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
-        FLAGSCALE_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
-        FLAGSCALE_TE_VERSION: 2.0.0+e73781e
     all:
       dockerfile: docker/musa/Dockerfile.all
       image: flagos-dev/flagscale-all
@@ -74,9 +71,9 @@ image_build:
         PKG_MGR: pip
         PIP_INDEX_URL: https://pypi.org/simple
         PIP_DEFAULT_TIMEOUT: '300'
-        FLAGSCALE_MEGATRON_REPO: https://github.com/flagos-ai/Megatron-LM-FL.git
-        FLAGSCALE_MEGATRON_REF: 175ae90ec92a9e6fea2d74ccd24d6a1835d3ae82
         FLAGSCALE_TE_VERSION: 2.0.0+e73781e
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
 
 # Container volumes (hardware-specific paths)
 container_volumes:

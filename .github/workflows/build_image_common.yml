@@ -18,30 +18,39 @@ on:
   workflow_call:
     inputs:
       platform:
-        description: Platform directory below docker/
+        description: Platform config name under .github/configs
         required: true
         type: string
-      runs_on:
-        description: JSON array containing the runner labels
-        required: true
-        type: string
-      matrix:
-        description: JSON matrix with complete image-build entries
-        required: true
-        type: string
-      max_parallel:
-        description: Maximum image tasks to build concurrently
+      resolved_sources:
+        description: JSON source catalog resolved to immutable revisions
         required: false
-        default: 1
-        type: number
+        default: '{}'
+        type: string
+      tasks:
+        description: Comma-separated image tasks, or all_tasks
+        required: false
+        default: all_tasks
+        type: string
+      build_images:
+        required: false
+        default: true
+        type: boolean
+      run_tests:
+        required: false
+        default: true
+        type: boolean
       push:
         required: false
-        default: false
+        default: true
         type: boolean
       no_cache:
         required: false
         default: false
         type: boolean
+      target:
+        required: false
+        default: ''
+        type: string
     secrets:
       REGISTRY_USERNAME:
         required: false
@@ -52,13 +61,244 @@ permissions:
   contents: read
 
 jobs:
+  configure:
+    name: Resolve ${{ inputs.platform }} image contract
+    runs-on: ubuntu-latest
+    outputs:
+      platform: ${{ steps.contract.outputs.platform }}
+      runs_on: ${{ steps.contract.outputs.runs_on }}
+      matrix: ${{ steps.contract.outputs.matrix }}
+      max_parallel: ${{ steps.contract.outputs.max_parallel }}
+      train_image: ${{ steps.contract.outputs.train_image }}
+      inference_image: ${{ steps.contract.outputs.inference_image }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install yq
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Resolve platform contract
+        id: contract
+        shell: bash
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          TASKS: ${{ inputs.tasks }}
+          BUILD_IMAGES: ${{ inputs.build_images }}
+          RUN_TESTS: ${{ inputs.run_tests }}
+          PUSH: ${{ inputs.push }}
+          TARGET_OVERRIDE: ${{ inputs.target }}
+          RESOLVED_SOURCES: ${{ inputs.resolved_sources }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$PLATFORM" =~ ^[a-z0-9_-]+$ ]]; then
+            echo "::error::Invalid platform: $PLATFORM"
+            exit 1
+          fi
+          if ! jq -e 'type == "object"' <<< "$RESOLVED_SOURCES" >/dev/null; then
+            echo "::error::resolved_sources must be a JSON object"
+            exit 1
+          fi
+          if [ "$BUILD_IMAGES" = true ] && [ "$RUN_TESTS" = true ] && \
+             [ "$PUSH" != true ]; then
+            echo "::error::Testing candidate images requires push=true"
+            exit 1
+          fi
+
+          config_file=".github/configs/${PLATFORM}.yml"
+          if [ ! -f "$config_file" ]; then
+            echo "::error::Platform config not found: $config_file"
+            exit 1
+          fi
+          if [ "$(/usr/local/bin/yq -r '.image_build.enabled // false' "$config_file")" != true ]; then
+            echo "::error::Image builds are not enabled for $PLATFORM"
+            exit 1
+          fi
+
+          runs_on=$(/usr/local/bin/yq -o=json -I=0 \
+            '.image_build.runner_labels // .runner_labels' "$config_file")
+          registry=$(/usr/local/bin/yq -r '.image_build.registry // ""' "$config_file")
+          max_parallel=$(/usr/local/bin/yq -r '.image_build.max_parallel // 1' "$config_file")
+          short_sha="${SOURCE_SHA::7}"
+          if [ -z "$registry" ] || \
+             [ "$(jq -r 'type' <<< "$runs_on")" != array ] || \
+             [ "$(jq 'length' <<< "$runs_on")" -eq 0 ]; then
+            echo "::error::Incomplete image-build registry/runner contract: $PLATFORM"
+            exit 1
+          fi
+          if ! [[ "$max_parallel" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid image_build.max_parallel: $PLATFORM"
+            exit 1
+          fi
+
+          if [ "$TASKS" = all_tasks ]; then
+            mapfile -t task_names < <(/usr/local/bin/yq -r \
+              '.image_build.tasks | to_entries | .[].key' "$config_file")
+          else
+            IFS=',' read -r -a task_names <<< "$TASKS"
+          fi
+          if [ "${#task_names[@]}" -eq 0 ]; then
+            echo "::error::No image tasks selected for $PLATFORM"
+            exit 1
+          fi
+
+          entries=()
+          candidate_test_roles=0
+          train_image=$(/usr/local/bin/yq -r '.ci_train_image // .ci_image // ""' "$config_file")
+          inference_image=$(/usr/local/bin/yq -r \
+            '.ci_inference_image // .ci_image // ""' "$config_file")
+
+          for raw_task in "${task_names[@]}"; do
+            task="${raw_task//[[:space:]]/}"
+            if [[ ! "$task" =~ ^[a-z0-9_-]+$ ]]; then
+              echo "::error::Invalid image task: $task"
+              exit 1
+            fi
+            if ! TASK="$task" /usr/local/bin/yq -e \
+              '.image_build.tasks[strenv(TASK)] != null' "$config_file" >/dev/null; then
+              echo "::error::${PLATFORM} does not declare image task $task"
+              exit 1
+            fi
+
+            entry=$(TASK="$task" /usr/local/bin/yq -o=json -I=0 \
+              '.image_build.tasks[strenv(TASK)] as $item |
+               {
+                 "task": strenv(TASK),
+                 "dockerfile": $item.dockerfile,
+                 "image_name": $item.image,
+                 "base_image": $item.base_image,
+                 "target": ($item.target // .image_build.target // "dev"),
+                 "network": ($item.network // .image_build.network // "default"),
+                 "registry_login": ($item.registry_login // .image_build.registry_login // false),
+                 "validation_script": ($item.validation_script // .image_build.validation_script // ""),
+                 "runtime_smoke_nproc": ($item.runtime_smoke_nproc // .image_build.runtime_smoke_nproc // ""),
+                 "build_args": ((.image_build.build_args // {}) * ($item.build_args // {})),
+                 "source_refs": ((.image_build.source_refs // {}) * ($item.source_refs // {})),
+                 "test_roles": ($item.test_roles // [])
+               }' "$config_file")
+
+            dockerfile=$(jq -r '.dockerfile // ""' <<< "$entry")
+            image_name=$(jq -r '.image_name // ""' <<< "$entry")
+            base_image=$(jq -r '.base_image // ""' <<< "$entry")
+            target=$(jq -r '.target // ""' <<< "$entry")
+            network=$(jq -r '.network // ""' <<< "$entry")
+            validation_script=$(jq -r '.validation_script // ""' <<< "$entry")
+            if [ -n "$TARGET_OVERRIDE" ]; then
+              target="$TARGET_OVERRIDE"
+              entry=$(jq -c --arg target "$target" '.target = $target' <<< "$entry")
+            fi
+            if [ -z "$dockerfile" ] || [ ! -f "$dockerfile" ] || \
+               [ -z "$image_name" ] || [ -z "$base_image" ] || \
+               [ -z "$target" ] || [ -z "$network" ]; then
+              echo "::error::Incomplete image task contract: ${PLATFORM}/${task}"
+              exit 1
+            fi
+            if [[ ! "$target" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+              echo "::error::Invalid image target: ${PLATFORM}/${task}: $target"
+              exit 1
+            fi
+            if [ -n "$validation_script" ] && [ ! -f "$validation_script" ]; then
+              echo "::error::Validation script not found: $validation_script"
+              exit 1
+            fi
+
+            if [[ ! "$image_name" =~ ^[a-z0-9][a-z0-9._/-]*[a-z0-9]$ ]] || \
+               [[ "$image_name" == *//* ]] || [[ "$image_name" == *:* ]] || \
+               [[ "$image_name" == *@* ]]; then
+              echo "::error::Invalid image repository for ${PLATFORM}/${task}: $image_name"
+              exit 1
+            fi
+
+            build_args=$(jq -c '.build_args' <<< "$entry")
+            source_metadata='{}'
+            while IFS=$'\t' read -r build_arg source_name; do
+              [ -n "$build_arg" ] || continue
+              source=$(jq -c --arg name "$source_name" '.[$name] // empty' \
+                <<< "$RESOLVED_SOURCES")
+              if [ "$BUILD_IMAGES" = true ] && [ -z "$source" ]; then
+                echo "::error::Source $source_name was not resolved for ${PLATFORM}/${task}"
+                exit 1
+              fi
+              if [ -n "$source" ]; then
+                revision=$(jq -r '.revision' <<< "$source")
+                if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+                  echo "::error::Invalid resolved revision for $source_name: $revision"
+                  exit 1
+                fi
+                build_args=$(jq -c --arg key "$build_arg" --arg value "$revision" \
+                  '. + {($key): $value}' <<< "$build_args")
+                source_metadata=$(jq -c --arg key "$source_name" --argjson value "$source" \
+                  '. + {($key): $value}' <<< "$source_metadata")
+              fi
+            done < <(jq -r '.source_refs | to_entries[]? | [.key, .value] | @tsv' <<< "$entry")
+
+            candidate="${registry}/${image_name}:${short_sha}-${PLATFORM}-${target}"
+            entry=$(jq -c \
+              --arg registry "$registry" \
+              --arg image "$candidate" \
+              --argjson build_args "$build_args" \
+              --argjson resolved_sources "$source_metadata" \
+              '. + {
+                registry: $registry,
+                image: $image,
+                build_args: $build_args,
+                resolved_sources: $resolved_sources
+              }' <<< "$entry")
+            entries+=("$entry")
+
+            if [ "$BUILD_IMAGES" = true ]; then
+              while IFS= read -r role; do
+                case "$role" in
+                  train)
+                    train_image="$candidate"
+                    candidate_test_roles=$((candidate_test_roles + 1))
+                    ;;
+                  inference)
+                    inference_image="$candidate"
+                    candidate_test_roles=$((candidate_test_roles + 1))
+                    ;;
+                  '') ;;
+                  *) echo "::error::Unsupported test role: $role"; exit 1 ;;
+                esac
+              done < <(jq -r '.test_roles[]?' <<< "$entry")
+            fi
+          done
+
+          if [ "$BUILD_IMAGES" = true ] && [ "$RUN_TESTS" = true ] && \
+             [ "$candidate_test_roles" -eq 0 ]; then
+            echo "::error::Selected tasks do not provide a train or inference test image"
+            exit 1
+          fi
+          matrix=$(printf '%s\n' "${entries[@]}" | jq -s -c '{include: .}')
+
+          {
+            echo "platform=$PLATFORM"
+            echo "runs_on=$runs_on"
+            echo "matrix=$matrix"
+            echo "max_parallel=$max_parallel"
+            echo "train_image=$train_image"
+            echo "inference_image=$inference_image"
+          } >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ inputs.platform }} ${{ matrix.task }}
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    needs: configure
+    if: inputs.build_images
+    runs-on: ${{ fromJSON(needs.configure.outputs.runs_on) }}
     strategy:
       fail-fast: false
-      max-parallel: ${{ inputs.max_parallel }}
-      matrix: ${{ fromJSON(inputs.matrix) }}
+      max-parallel: ${{ fromJSON(needs.configure.outputs.max_parallel) }}
+      matrix: ${{ fromJSON(needs.configure.outputs.matrix) }}
     steps:
       - name: Clean workspace
         run: sudo rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true
@@ -90,22 +330,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Validate image-build entry
-        shell: bash
-        env:
-          DOCKERFILE: ${{ matrix.dockerfile }}
-          IMAGE: ${{ matrix.image }}
-          BASE_IMAGE: ${{ matrix.base_image }}
-          VALIDATION_SCRIPT: ${{ matrix.validation_script }}
-        run: |
-          set -euo pipefail
-          test -f "$DOCKERFILE"
-          test -n "$IMAGE"
-          test -n "$BASE_IMAGE"
-          if [ -n "$VALIDATION_SCRIPT" ]; then
-            test -f "$VALIDATION_SCRIPT"
-          fi
-
       - name: Detect runner proxy
         id: proxy
         shell: bash
@@ -114,23 +338,43 @@ jobs:
           echo "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" >> "$GITHUB_OUTPUT"
           echo "no_proxy=${no_proxy:-${NO_PROXY:-}}" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve build arguments
-        id: build_args
+      - name: Resolve build arguments and labels
+        id: metadata
         shell: bash
         env:
           BUILD_ARGS_JSON: ${{ toJSON(matrix.build_args) }}
+          SOURCES_JSON: ${{ toJSON(matrix.resolved_sources) }}
         run: |
           set -euo pipefail
           {
             echo 'args<<EOF_BUILD_ARGS'
             jq -r 'to_entries[] | "\(.key)=\(.value)"' <<< "$BUILD_ARGS_JSON"
             echo 'EOF_BUILD_ARGS'
+            echo 'labels<<EOF_SOURCE_LABELS'
+            jq -r 'to_entries[] | (.key | gsub("_"; "-")) as $label |
+              "io.flagscale.source.\($label).revision=\(.value.revision)\n" +
+              "io.flagscale.source.\($label).selector=\(.value.selector)"' \
+              <<< "$SOURCES_JSON"
+            echo 'EOF_SOURCE_LABELS'
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker
+
+      - name: Validate registry credentials
+        if: inputs.push || matrix.registry_login
+        shell: bash
+        env:
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.CONTAINER_REGISTRY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REGISTRY_USERNAME" ] || [ -z "$REGISTRY_PASSWORD" ]; then
+            echo "::error::Registry credentials are required for this image build"
+            exit 1
+          fi
 
       - name: Log in to registry
         if: inputs.push || matrix.registry_login
@@ -166,7 +410,7 @@ jobs:
           no-cache: ${{ inputs.no_cache }}
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
-            ${{ steps.build_args.outputs.args }}
+            ${{ steps.metadata.outputs.args }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -177,10 +421,10 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
             org.opencontainers.image.base.name=${{ matrix.base_image }}
+            ${{ steps.metadata.outputs.labels }}
 
       - name: Wait before build retry
         if: steps.build_attempt_1.outcome == 'failure'
-        shell: bash
         run: sleep 15
 
       - name: Build image (attempt 2)
@@ -196,7 +440,7 @@ jobs:
           no-cache: ${{ inputs.no_cache }}
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
-            ${{ steps.build_args.outputs.args }}
+            ${{ steps.metadata.outputs.args }}
             HTTP_PROXY=${{ steps.proxy.outputs.http_proxy }}
             HTTPS_PROXY=${{ steps.proxy.outputs.https_proxy }}
             NO_PROXY=${{ steps.proxy.outputs.no_proxy }}
@@ -207,6 +451,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
             org.opencontainers.image.base.name=${{ matrix.base_image }}
+            ${{ steps.metadata.outputs.labels }}
 
       - name: Run platform post-build contract
         if: matrix.validation_script != ''
@@ -244,11 +489,12 @@ jobs:
           TASK: ${{ matrix.task }}
           IMAGE: ${{ matrix.image }}
           BASE_IMAGE: ${{ matrix.base_image }}
+          SOURCES_JSON: ${{ toJSON(matrix.resolved_sources) }}
         run: |
           set -euo pipefail
-          digest="$(docker image inspect "$IMAGE" \
-            --format '{{range .RepoDigests}}{{println .}}{{end}}' | head -n 1)"
-          [ -n "$digest" ] || digest="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          digest=$(docker image inspect "$IMAGE" \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' | head -n 1)
+          [ -n "$digest" ] || digest=$(docker image inspect "$IMAGE" --format '{{.Id}}')
           {
             echo '### Image build result'
             echo
@@ -257,4 +503,27 @@ jobs:
             echo "- Image: \`$IMAGE\`"
             echo "- Base: \`$BASE_IMAGE\`"
             echo "- Digest/ID: \`$digest\`"
+            if [ "$SOURCES_JSON" != '{}' ]; then
+              echo
+              echo '| Source | Selector | Revision |'
+              echo '|---|---|---|'
+              jq -r 'to_entries[] |
+                "| `\(.key)` | `\(.value.selector)` | `\(.value.revision)` |"' \
+                <<< "$SOURCES_JSON"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  tests:
+    name: Test ${{ inputs.platform }} images
+    needs: [configure, build]
+    if: >-
+      always() &&
+      inputs.run_tests &&
+      needs.configure.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    uses: ./.github/workflows/all_tests_common.yml
+    secrets: inherit
+    with:
+      platform: ${{ needs.configure.outputs.platform }}
+      ci_train_image: ${{ needs.configure.outputs.train_image }}
+      ci_inference_image: ${{ needs.configure.outputs.inference_image }}

@@ -19,9 +19,9 @@ FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/metax/train.txt"
 MEGATRON_REPO="${FLAGSCALE_MEGATRON_REPO:-https://github.com/flagos-ai/Megatron-LM-FL.git}"
-MEGATRON_REF="${FLAGSCALE_MEGATRON_REF:-409c1ed949675ddf9aa540aaae48652f446351cc}"
+MEGATRON_REF="${FLAGSCALE_MEGATRON_REF:-main}"
 TE_REPO="${FLAGSCALE_TE_REPO:-https://github.com/flagos-ai/TransformerEngine-FL.git}"
-TE_REF="${FLAGSCALE_TE_REF:-94c7007c84107028919b4e52213d1bcb4ca3f7cf}"
+TE_REF="${FLAGSCALE_TE_REF:-main}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac

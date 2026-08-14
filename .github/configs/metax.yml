@@ -47,9 +47,10 @@ image_build:
       image: flagos-dev/flagscale-train
       test_roles: [train]
       base_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te@sha256:c6bc75f8512a3ba385339a536a33dfc1dcbeb0c42b6ca1e2d5f0f0e4e9d6200f
-      build_args:
-        FLAGSCALE_MEGATRON_REF: 409c1ed949675ddf9aa540aaae48652f446351cc
-        FLAGSCALE_TE_REF: 94c7007c84107028919b4e52213d1bcb4ca3f7cf
+      build_args: {}
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+        FLAGSCALE_TE_REF: transformer_engine_fl
 
 # Container options for MetaX C550 (MACA runtime)
 container_options: >-

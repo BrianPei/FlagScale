@@ -19,8 +19,10 @@ RETRY_COUNT="${FLAGSCALE_RETRY_COUNT:-3}"
 FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/ascend/inference.txt"
+FLAGGEMS_REPO="${FLAGSCALE_FLAGGEMS_REPO:-https://github.com/flagos-ai/FlagGems.git}"
+FLAGGEMS_REF="${FLAGSCALE_FLAGGEMS_REF:-v5.3.0}"
 VLLM_PLUGIN_REPO="${FLAGSCALE_VLLM_PLUGIN_REPO:-https://github.com/flagos-ai/vllm-plugin-FL.git}"
-VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-43edeb601f4b8f616f56109de64836529e758deb}"
+VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-main}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac
@@ -47,7 +49,7 @@ install_pip() {
 }
 
 install_vllm_plugin() {
-    set_step "Installing pinned vllm-plugin-FL"
+    set_step "Installing resolved vllm-plugin-FL"
     mkdir -p "$FLAGSCALE_DEPS"
     checkout_pinned_ref "$VLLM_PLUGIN_REPO" "$VLLM_PLUGIN_REF" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
@@ -57,6 +59,19 @@ install_vllm_plugin() {
         "cd '$FLAGSCALE_DEPS/vllm-plugin-FL' && $pip_cmd install \
         --root-user-action=ignore --no-build-isolation --no-deps ." || return 1
     log_success "vllm-plugin-FL ready at $VLLM_PLUGIN_REF"
+}
+
+install_flaggems() {
+    set_step "Installing resolved FlagGems"
+    mkdir -p "$FLAGSCALE_DEPS"
+    checkout_pinned_ref "$FLAGGEMS_REPO" "$FLAGGEMS_REF" \
+        "$FLAGSCALE_DEPS/FlagGems" || return 1
+    local pip_cmd
+    pip_cmd=$(get_pip_cmd)
+    run_cmd -d "$DEBUG" bash -c \
+        "cd '$FLAGSCALE_DEPS/FlagGems' && $pip_cmd install \
+        --root-user-action=ignore --no-deps ." || return 1
+    log_success "FlagGems ready at $FLAGGEMS_REF"
 }
 
 validate_inference_stack() {
@@ -84,6 +99,7 @@ PY
 
 main() {
     install_pip || die "Ascend inference pip failed"
+    install_flaggems || die "FlagGems failed"
     install_vllm_plugin || die "vllm-plugin-FL failed"
     validate_inference_stack || die "Ascend inference validation failed"
 }

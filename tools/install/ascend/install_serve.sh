@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Serve task (Ascend): install FlagScale dependencies plus pinned FlagOS sources.
+# Serve task (Ascend): install FlagScale dependencies plus resolved FlagOS sources.
 # The Ascend runtime image owns vLLM; source installs must not replace it.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,13 +29,9 @@ FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/ascend/serve.txt"
 FLAGGEMS_REPO="${FLAGSCALE_FLAGGEMS_REPO:-https://github.com/flagos-ai/FlagGems.git}"
-# This is the first upstream revision containing the Ascend zero-element
-# tensor fix from FlagGems PR #5410. No released tag contains that fix yet.
-FLAGGEMS_REF="${FLAGSCALE_FLAGGEMS_REF:-61f3ff2773bc9c8e86b97489775ef9668a96a33c}"
+FLAGGEMS_REF="${FLAGSCALE_FLAGGEMS_REF:-v5.3.0}"
 VLLM_PLUGIN_REPO="${FLAGSCALE_VLLM_PLUGIN_REPO:-https://github.com/flagos-ai/vllm-plugin-FL.git}"
-# This revision contains the consolidated Ascend 910C and vLLM 0.20.2 updates
-# from vllm-plugin-FL PR #347. Pin the commit until that support is released.
-VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-43edeb601f4b8f616f56109de64836529e758deb}"
+VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-main}"
 
 SRC_DEPS_LIST="flaggems vllm-plugin"
 
@@ -73,20 +69,18 @@ checkout_source() {
 }
 
 install_flaggems() {
-    should_build_package "flag_gems" || return 0
-    set_step "Installing pinned FlagGems"
+    set_step "Installing resolved FlagGems"
     mkdir -p "$FLAGSCALE_DEPS"
     checkout_source "$FLAGGEMS_REPO" "$FLAGSCALE_DEPS/FlagGems" "$FLAGGEMS_REF" || return 1
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
     run_cmd -d "$DEBUG" bash -c "cd '$FLAGSCALE_DEPS/FlagGems' && \
-        $pip_cmd install --root-user-action=ignore --no-build-isolation ." || return 1
+        $pip_cmd install --root-user-action=ignore --no-deps ." || return 1
     log_success "FlagGems ready at $FLAGGEMS_REF"
 }
 
 install_vllm_plugin() {
-    should_build_package "vllm_plugin_fl" || return 0
-    set_step "Installing pinned vllm-plugin-FL"
+    set_step "Installing resolved vllm-plugin-FL"
     mkdir -p "$FLAGSCALE_DEPS"
     checkout_source \
         "$VLLM_PLUGIN_REPO" "$FLAGSCALE_DEPS/vllm-plugin-FL" "$VLLM_PLUGIN_REF" || return 1

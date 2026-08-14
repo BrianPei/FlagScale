@@ -13,7 +13,8 @@
 # limitations under the License.
 
 # Ascend serve-specific FlagScale dependencies. vLLM comes from the Ascend
-# runtime image; install_serve.sh pins the matching FlagGems and plugin sources.
+# runtime image; install_serve.sh overlays the selected FlagGems and
+# vllm-plugin-FL revision without replacing vendor runtime dependencies.
 
 -r ./base.txt
 

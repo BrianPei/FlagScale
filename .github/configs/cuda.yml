@@ -36,6 +36,7 @@ image_build:
   max_parallel: 1
   registry_login: false
   runner_labels: [self-hosted, Linux, X64, nvidia-0, gpus-8]
+  validation_script: tools/install/cuda/validate_image_build.sh
   tasks:
     train:
       dockerfile: docker/cuda/Dockerfile.train
@@ -49,6 +50,9 @@ image_build:
         UV_VERSION: '0.7.2'
         PKG_MGR: conda
         PYTORCH_INDEX: https://download.pytorch.org/whl/cu128
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+        FLAGSCALE_TE_REF: transformer_engine_fl
     inference:
       dockerfile: docker/cuda/Dockerfile.inference
       image: flagos-dev/flagscale-inference
@@ -72,6 +76,9 @@ image_build:
         UV_VERSION: '0.7.2'
         PKG_MGR: conda
         PYTORCH_INDEX: https://download.pytorch.org/whl/cu128
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+        FLAGSCALE_TE_REF: transformer_engine_fl
 
 # Container volumes (hardware-specific paths)
 container_volumes:
