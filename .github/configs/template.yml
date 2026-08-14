@@ -23,9 +23,9 @@ display_name: "My Hardware Tests"  # Display name for GitHub Actions
 
 # Validated images consumed by the shared test workflow. Use a registry that
 # every runner can reach; prefer immutable digests for real platform configs.
-ci_image: registry.example.com/namespace/flagscale-all:validated-tag
-ci_train_image: registry.example.com/namespace/flagscale-train:validated-tag
-ci_inference_image: registry.example.com/namespace/flagscale-inference:validated-tag
+ci_image: registry.example.com/flagos-dev/flagscale-all:validated-tag
+ci_train_image: registry.example.com/flagos-dev/flagscale-train:validated-tag
+ci_inference_image: registry.example.com/flagos-dev/flagscale-inference:validated-tag
 
 # Runner labels for this hardware (CRITICAL - update these for your runners)
 runner_labels:
@@ -58,7 +58,7 @@ image_build:
   tasks:
     train:
       dockerfile: docker/my_hardware/Dockerfile.train
-      image: namespace/flagscale-train
+      image: flagos-dev/flagscale-train
       base_image: registry.example.com/vendor/train-base:tag
       build_args: {}
       test_roles: [train]

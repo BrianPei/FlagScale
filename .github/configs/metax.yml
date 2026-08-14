@@ -44,7 +44,7 @@ image_build:
   tasks:
     train:
       dockerfile: docker/metax/Dockerfile.train
-      image: flagos-dev/flagscale
+      image: flagos-dev/flagscale-train
       test_roles: [train]
       base_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te@sha256:c6bc75f8512a3ba385339a536a33dfc1dcbeb0c42b6ca1e2d5f0f0e4e9d6200f
       build_args:

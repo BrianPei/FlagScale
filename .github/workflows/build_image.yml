@@ -412,7 +412,17 @@ jobs:
               exit 1
             fi
 
-            candidate="${registry}/${image_name}:${short_sha}-${PLATFORM}-${task}-${target}"
+            expected_image="flagos-dev/flagscale-${task}"
+            if [ "$image_name" != "$expected_image" ]; then
+              echo "::error::Invalid FlagScale image repository for ${PLATFORM}/${task}: $image_name"
+              echo "::error::Expected $expected_image (Harbor governance convention)"
+              exit 1
+            fi
+
+            # The repository carries the runtime role (train/inference/all),
+            # while the tag follows the image governance convention:
+            # <git-short-sha>-<platform>-<stage>.
+            candidate="${registry}/${image_name}:${short_sha}-${PLATFORM}-${target}"
             entry=$(jq -c --arg registry "$registry" --arg image "$candidate" \
               '. + {registry: $registry, image: $image}' <<< "$entry")
             entries+=("$entry")
