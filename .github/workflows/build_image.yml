@@ -155,8 +155,9 @@ jobs:
             target=''
             if [ "$EVENT_NAME" = pull_request ] && \
                [ "$HEAD_REPOSITORY" != "$BASE_REPOSITORY" ]; then
-              execute=false
-              echo "::notice::Fork PR validated successfully; run this workflow with platform=all in the head repository for the full build/test matrix"
+              build_images=false
+              push=false
+              echo "::notice::Fork PR will run tests with the validated Harbor images; image build and push are disabled for this event"
             fi
           fi
 
@@ -195,6 +196,9 @@ jobs:
              [ "$push" != true ]; then
             echo "::error::Testing candidate images requires push=true"
             exit 1
+          fi
+          if [ "$build_images" != true ]; then
+            push=false
           fi
 
           platforms=()
