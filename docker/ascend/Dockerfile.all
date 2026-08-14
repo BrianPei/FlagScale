@@ -44,7 +44,7 @@ RUN set -eux; \
         bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, transformer_engine, megatron.core"'; \
     FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference \
         TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
-        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, vllm, vllm_fl"'
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import importlib.metadata as m, importlib.util as u; [print(p, m.version(p)) for p in (\"torch\", \"vllm\", \"vllm-plugin-fl\", \"flag-gems\")]; assert u.find_spec(\"vllm_fl\")"'
 
 WORKDIR /workspace
 CMD ["/bin/bash"]
