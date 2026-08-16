@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Ascend serve-specific dependencies. The immutable inference image owns the
-# Python and vLLM dependency closure, so this file must not include base.txt or
-# resolve transitive packages that can replace the vendor-tested runtime.
+# The immutable inference image owns the complete Python, vLLM, FlagTree and
+# Triton dependency closure. Installing FlagTree over that image would replace
+# files in the shared triton namespace and invalidate the tested compiler stack.
 
-# FlagTree for Ascend (extra index so PyPI remains available for build deps)
-# [--extra-index-url https://resource.flagos.net/repository/flagos-pypi-hosted/simple]
+# Keep the ascend-serve packaging extra explicit. The image installer validates
+# this base-owned package instead of reinstalling it.
 # [--no-deps]
 flagtree==0.4.0+ascend3.2

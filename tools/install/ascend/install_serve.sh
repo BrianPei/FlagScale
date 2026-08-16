@@ -28,6 +28,7 @@ RETRY_COUNT="${FLAGSCALE_RETRY_COUNT:-3}"
 FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/ascend/serve.txt"
+EXPECTED_FLAGTREE_VERSION="0.4.0+ascend3.2"
 FLAGGEMS_REPO="${FLAGSCALE_FLAGGEMS_REPO:-https://github.com/flagos-ai/FlagGems.git}"
 FLAGGEMS_REF="${FLAGSCALE_FLAGGEMS_REF:-v5.3.0}"
 VLLM_PLUGIN_REPO="${FLAGSCALE_VLLM_PLUGIN_REPO:-https://github.com/flagos-ai/vllm-plugin-FL.git}"
@@ -45,10 +46,20 @@ done
 install_pip() {
     if is_phase_enabled task; then
         [ ! -f "$REQ_FILE" ] && { log_info "serve.txt not found"; return 0; }
-        set_step "Installing serve requirements"
-        retry_pip_install -d $DEBUG "$REQ_FILE" "$RETRY_COUNT" || return 1
-        [ "$DEBUG" = true ] || python -m pip show flagtree >/dev/null || return 1
-        log_success "Serve requirements installed"
+        set_step "Validating base-owned Ascend serve runtime"
+        if [ "$DEBUG" != true ]; then
+            EXPECTED_FLAGTREE_VERSION="$EXPECTED_FLAGTREE_VERSION" python - <<'PY' || return 1
+import importlib.metadata as metadata
+import os
+
+expected = os.environ["EXPECTED_FLAGTREE_VERSION"]
+actual = metadata.version("flagtree")
+assert actual == expected, f"FlagTree version mismatch: expected {expected}, found {actual}"
+
+import triton  # noqa: F401, E402
+PY
+        fi
+        log_success "Ascend serve runtime validated"
     else
         local pkgs=$(get_pip_deps_for_requirements "$REQ_FILE")
         [ -z "$pkgs" ] && return 0
