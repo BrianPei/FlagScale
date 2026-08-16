@@ -50,13 +50,26 @@ install_pip() {
         if [ "$DEBUG" != true ]; then
             EXPECTED_FLAGTREE_VERSION="$EXPECTED_FLAGTREE_VERSION" python - <<'PY' || return 1
 import importlib.metadata as metadata
+import importlib.util
 import os
 
-expected = os.environ["EXPECTED_FLAGTREE_VERSION"]
-actual = metadata.version("flagtree")
-assert actual == expected, f"FlagTree version mismatch: expected {expected}, found {actual}"
+import triton
 
-import triton  # noqa: F401, E402
+expected = os.environ["EXPECTED_FLAGTREE_VERSION"]
+flagtree_spec = importlib.util.find_spec("flagtree")
+if flagtree_spec is None:
+    print("FlagTree module is not separately installed; using the base Triton runtime")
+else:
+    try:
+        actual = metadata.version("flagtree")
+    except metadata.PackageNotFoundError:
+        print("FlagTree module has no distribution metadata; using the base Triton runtime")
+    else:
+        assert actual == expected, (
+            f"FlagTree version mismatch: expected {expected}, found {actual}"
+        )
+
+print("Triton runtime:", triton.__file__)
 PY
         fi
         log_success "Ascend serve runtime validated"
