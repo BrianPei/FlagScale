@@ -33,7 +33,7 @@ ascend910:
     functional:
       # Add or remove test cases per model
       train:
-        qwen3: ["0_6b_ascend_smoke"]
+        qwen3: ["0_6b_ascend"]
       hetero_train: {}
       benchmark: {}
       inference:

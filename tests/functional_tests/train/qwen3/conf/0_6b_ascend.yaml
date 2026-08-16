@@ -14,11 +14,11 @@
 
 defaults:
   - _self_
-  - train: 0_6b_ascend_smoke
+  - train: 0_6b_ascend
 
 experiment:
-  exp_name: 0_6b_ascend_smoke
-  exp_dir: tests/functional_tests/train/qwen3/test_results/0_6b_ascend_smoke
+  exp_name: 0_6b_ascend
+  exp_dir: tests/functional_tests/train/qwen3/test_results/0_6b_ascend
   task:
     type: train
     backend: megatron
