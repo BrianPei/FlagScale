@@ -34,7 +34,8 @@ RUN chmod +x /workspace/tools/install/*.sh \
 
 RUN python -m pip check 2>&1 | sort > /tmp/pip-check.after || true
 
-RUN diff -u /tmp/pip-check.before /tmp/pip-check.after && \
+RUN bash /workspace/tools/install/utils/check_pip_conflicts.sh \
+        /tmp/pip-check.before /tmp/pip-check.after && \
     rm -f /tmp/pip-check.before /tmp/pip-check.after && \
     rm -rf /opt/flagscale/deps /workspace/tools /workspace/requirements
 

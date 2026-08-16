@@ -47,6 +47,7 @@ install_pip() {
         [ ! -f "$REQ_FILE" ] && { log_info "serve.txt not found"; return 0; }
         set_step "Installing serve requirements"
         retry_pip_install -d $DEBUG "$REQ_FILE" "$RETRY_COUNT" || return 1
+        [ "$DEBUG" = true ] || python -m pip show flagtree >/dev/null || return 1
         log_success "Serve requirements installed"
     else
         local pkgs=$(get_pip_deps_for_requirements "$REQ_FILE")

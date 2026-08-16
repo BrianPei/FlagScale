@@ -21,7 +21,7 @@ COPY requirements /workspace/requirements
 RUN chmod +x /workspace/tools/install/*.sh \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/metax/*.sh && \
-    . /etc/profile.d/flagscale-env.sh && \
+    . /workspace/tools/install/metax/env.sh && \
     /workspace/tools/install/install.sh --platform metax --task train \
         --pkg-mgr pip --no-system --no-dev --no-base --force-build && \
     rm -rf /workspace/tools /workspace/requirements && \
@@ -35,14 +35,19 @@ ENV FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF} \
     VLLM_FL_PLATFORM=metax
 COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.before || true
 RUN chmod +x /workspace/tools/install/*.sh \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/metax/*.sh && \
-    . /etc/profile.d/flagscale-env.sh && \
+    . /workspace/tools/install/metax/env.sh && \
     /workspace/tools/install/install.sh --platform metax --task inference \
         --pkg-mgr pip --no-system --no-dev --no-base && \
     /workspace/tools/install/install.sh --platform metax --task serve \
-        --pkg-mgr pip --no-system --no-dev --no-base && \
+        --pkg-mgr pip --no-system --no-dev --no-base
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.after || true
+RUN bash /workspace/tools/install/utils/check_pip_conflicts.sh \
+        /tmp/pip-check.before /tmp/pip-check.after && \
+    rm -f /tmp/pip-check.before /tmp/pip-check.after && \
     rm -rf /workspace/tools /workspace/requirements
 
 FROM inference_runtime AS dev

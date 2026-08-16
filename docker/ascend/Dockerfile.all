@@ -22,7 +22,7 @@ COPY requirements /workspace/requirements
 RUN chmod +x /workspace/tools/install/*.sh \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/ascend/*.sh && \
-    . /etc/profile.d/flagscale-env.sh && \
+    . /workspace/tools/install/ascend/env.sh && \
     /workspace/tools/install/install.sh --platform ascend --task train \
         --pkg-mgr pip --no-system --no-dev --no-base --force-build && \
     rm -rf /workspace/tools /workspace/requirements
@@ -37,14 +37,19 @@ ENV FLAGSCALE_HOME=/opt/flagscale \
     VLLM_FL_PLATFORM=ascend
 COPY tools/install /workspace/tools/install
 COPY requirements /workspace/requirements
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.before || true
 RUN chmod +x /workspace/tools/install/*.sh \
         /workspace/tools/install/utils/*.sh \
         /workspace/tools/install/ascend/*.sh && \
-    . /etc/profile.d/flagscale-env.sh && \
+    . /workspace/tools/install/ascend/env.sh && \
     /workspace/tools/install/install.sh --platform ascend --task inference \
         --pkg-mgr pip --no-system --no-dev --no-base && \
     /workspace/tools/install/install.sh --platform ascend --task serve \
-        --pkg-mgr pip --no-system --no-dev --no-base --only-pip && \
+        --pkg-mgr pip --no-system --no-dev --no-base --only-pip
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.after || true
+RUN bash /workspace/tools/install/utils/check_pip_conflicts.sh \
+        /tmp/pip-check.before /tmp/pip-check.after && \
+    rm -f /tmp/pip-check.before /tmp/pip-check.after && \
     rm -rf /workspace/tools /workspace/requirements
 
 FROM inference_runtime AS dev
