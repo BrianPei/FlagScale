@@ -63,7 +63,6 @@ image_build:
       base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl@sha256:c83a7b26e5b72fcffa920f32929a76984c78d5ee5520828b6e50feb9864240ed
       source_refs:
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
-        FLAGGEMS_REF: flaggems
     all:
       dockerfile: docker/metax/Dockerfile.all
       image: flagos-dev/flagscale-all
@@ -76,7 +75,6 @@ image_build:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
         FLAGSCALE_TE_REF: transformer_engine_fl
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
-        FLAGGEMS_REF: flaggems
       test_environments:
         train:
           pkg_mgr: runtime

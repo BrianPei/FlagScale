@@ -10,7 +10,6 @@ ARG INFERENCE_BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e5
 ARG FLAGSCALE_MEGATRON_REF=main
 ARG FLAGSCALE_TE_REF=main
 ARG VLLM_PLUGIN_FL_REF=main
-ARG FLAGGEMS_REF=v5.3.0
 
 FROM ${TRAIN_BASE_IMAGE} AS train_runtime
 ARG FLAGSCALE_MEGATRON_REF
@@ -31,9 +30,7 @@ RUN chmod +x /workspace/tools/install/*.sh \
 
 FROM ${INFERENCE_BASE_IMAGE} AS inference_runtime
 ARG VLLM_PLUGIN_FL_REF
-ARG FLAGGEMS_REF
 ENV FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF} \
-    FLAGSCALE_FLAGGEMS_REF=${FLAGGEMS_REF} \
     VLLM_PLUGINS=fl \
     VLLM_FL_PLATFORM=metax
 COPY tools/install /workspace/tools/install
@@ -54,7 +51,6 @@ ARG INFERENCE_BASE_IMAGE
 ARG FLAGSCALE_MEGATRON_REF
 ARG FLAGSCALE_TE_REF
 ARG VLLM_PLUGIN_FL_REF
-ARG FLAGGEMS_REF
 
 LABEL io.flagscale.runtime.layout=task-isolated \
       io.flagscale.runtime.train=/opt/flagscale/runtimes/train \
@@ -64,8 +60,7 @@ LABEL io.flagscale.runtime.layout=task-isolated \
       io.flagscale.runtime.inference.base=${INFERENCE_BASE_IMAGE} \
       io.flagscale.megatron-lm-fl.revision=${FLAGSCALE_MEGATRON_REF} \
       io.flagscale.transformer-engine-fl.revision=${FLAGSCALE_TE_REF} \
-      io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF} \
-      io.flagscale.flaggems.revision=${FLAGGEMS_REF}
+      io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF}
 
 COPY --from=train_runtime /tmp/train-conda.tar.gz /tmp/train-conda.tar.gz
 COPY --from=train_runtime /opt/maca /opt/flagscale/runtimes/train/maca

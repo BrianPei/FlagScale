@@ -1,6 +1,6 @@
 # FlagScale inference and serve image for MetaX C550.
-# The immutable base owns Torch, MACA and vLLM-MetaX. This image overlays the
-# workflow-resolved vllm-plugin-FL and FlagGems source revisions.
+# The immutable base owns Torch, MACA, vLLM-MetaX and its validated FlagGems.
+# This image only installs the workflow-resolved vllm-plugin-FL revision.
 
 ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl@sha256:c83a7b26e5b72fcffa920f32929a76984c78d5ee5520828b6e50feb9864240ed
 
@@ -8,15 +8,12 @@ FROM ${BASE_IMAGE} AS dev
 
 ARG FLAGSCALE_HOME=/opt/flagscale
 ARG VLLM_PLUGIN_FL_REF=main
-ARG FLAGGEMS_REF=v5.3.0
 
-LABEL io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF} \
-      io.flagscale.flaggems.revision=${FLAGGEMS_REF}
+LABEL io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF}
 
 ENV FLAGSCALE_HOME=${FLAGSCALE_HOME} \
     FLAGSCALE_DEPS=${FLAGSCALE_HOME}/deps \
     FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF} \
-    FLAGSCALE_FLAGGEMS_REF=${FLAGGEMS_REF} \
     VLLM_PLUGINS=fl \
     VLLM_FL_PLATFORM=metax
 
