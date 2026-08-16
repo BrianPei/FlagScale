@@ -22,6 +22,7 @@ docker_args=(
     --device /dev/hisi_hdc
     --volume /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
     --volume /usr/local/Ascend/add-ons:/usr/local/Ascend/add-ons:ro
+    --volume /usr/local/Ascend/nnal:/usr/local/Ascend/nnal:ro
     --volume /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro
     --privileged
 )
