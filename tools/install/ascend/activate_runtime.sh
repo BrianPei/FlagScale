@@ -35,7 +35,10 @@ export ASCEND_OPP_PATH="$toolkit_home/opp"
 # inference image's Python/CANN libraries (or vice versa).
 export PATH="$python_home/bin:$toolkit_home/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 nnal_library_paths=""
-for library_path in "$ascend_home"/nnal/atb/*/lib "$ascend_home"/nnal/asdsip/*/lib; do
+for library_path in \
+    "$ascend_home"/nnal/atb/*/atb/cxx_abi_*/lib \
+    "$ascend_home"/nnal/atb/*/lib \
+    "$ascend_home"/nnal/asdsip/*/lib; do
     [ -d "$library_path" ] || continue
     nnal_library_paths="$nnal_library_paths:$library_path"
 done

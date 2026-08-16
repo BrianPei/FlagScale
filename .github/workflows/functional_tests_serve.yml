@@ -233,6 +233,10 @@ jobs:
               ;;
             pip)
               echo "Running tests with pip/system Python"
+              PLATFORM_ENV_SCRIPT="./tools/install/$PLATFORM/env.sh"
+              if [ -f "$PLATFORM_ENV_SCRIPT" ]; then
+                source "$PLATFORM_ENV_SCRIPT"
+              fi
               ;;
           esac
 
