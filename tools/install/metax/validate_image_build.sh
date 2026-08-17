@@ -109,9 +109,15 @@ torchrun --nnodes=1 --nproc-per-node="${EXPECTED_WORLD_SIZE}" \
 set -euo pipefail
 export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference
 . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
+deep_ep_so=$(python -c 'import importlib.util; print(importlib.util.find_spec("deep_ep_cpp").origin)')
+if ldd "$deep_ep_so" | tee /tmp/deep_ep_cpp.ldd | grep -q "not found"; then
+    cat /tmp/deep_ep_cpp.ldd >&2
+    exit 1
+fi
 python - <<"PY"
 import os
 import torch
+import deep_ep_cpp
 import vllm_fl
 from vllm.platforms import current_platform
 
@@ -154,6 +160,7 @@ import importlib.metadata as metadata
 import pandas
 import os
 import torch
+import deep_ep_cpp
 import vllm_fl
 from vllm.platforms import current_platform
 
