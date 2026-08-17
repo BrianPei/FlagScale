@@ -86,7 +86,7 @@ RUN . /etc/profile.d/flagscale-env.sh && \
     chmod +x /workspace/tools/install/kunlunxin/*.sh && \
     cd /workspace && \
     FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_CONDA=${FLAGSCALE_CONDA} \
-    ./tools/install/install.sh --platform kunlunxin --task all --pkg-mgr ${PKG_MGR} --env-name python310_torch29_cuda --no-system --no-dev && \
+    ./tools/install/install.sh --platform kunlunxin --task all --pkg-mgr ${PKG_MGR} --env-name python310_torch29_cuda --no-system --no-dev --no-base && \
     rm -rf /workspace
 
 FROM deps AS dev
@@ -124,7 +124,7 @@ RUN . /etc/profile.d/flagscale-env.sh && \
     chmod +x /workspace/tools/install/kunlunxin/*.sh && \
     cd /workspace && \
     FLAGSCALE_HOME=${FLAGSCALE_HOME} FLAGSCALE_CONDA=${FLAGSCALE_CONDA} \
-    ./tools/install/install.sh --platform kunlunxin --task all --pkg-mgr ${PKG_MGR} --env-name python310_torch29_cuda --no-system --no-dev && \
+    ./tools/install/install.sh --platform kunlunxin --task all --pkg-mgr ${PKG_MGR} --env-name python310_torch29_cuda --no-system --no-dev --no-base && \
     rm -rf /workspace
 
 CMD ["/bin/bash"]
