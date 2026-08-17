@@ -1,14 +1,4 @@
-# Kunlunxin platform-specific base dependencies
-
--r ../common.txt
-
-# for robotics
-datasets==4.5.0
-diffusers==0.36.0
-draccus==0.11.5
-einops==0.8.2
-epath==0.7
-flask_cors==6.0.2
-multi-storage-client==0.42.0
-qwen_vl_utils==0.0.14
-webdataset==1.0.2
+# Kunlunxin platform-specific base dependencies.
+# The vendor image already provides the runtime stack required by the first
+# P800 CI smoke path. Keep base minimal so image builds do not fail on
+# unrelated optional robotics or multimodal dependencies.
