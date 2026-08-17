@@ -20,9 +20,9 @@ hardware_name: ascend
 display_name: "Ascend NPU Tests"
 
 # Docker image for this hardware
-ci_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
-ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train@sha256:2b6ceb58a1dc345ba89b2f8eb22dcc73aeec2048aa8e141abfaaf80f8635b91c
-ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
+ci_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
 
 # Runner labels for this hardware
 runner_labels: ["flagscale-ascend-ascend910-gpu2-32c-128g"]
@@ -51,7 +51,7 @@ image_build:
       dockerfile: docker/ascend/Dockerfile.train
       image: flagos-dev/flagscale-train
       test_roles: [train]
-      base_image: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev@sha256:1384b5cb596c3e1012c9f9fca64ed9e2960e27addc73b17704b3c1abcaf1fa02
+      base_image: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev
       build_args:
         PKG_MGR: pip
       source_refs:
@@ -61,7 +61,7 @@ image_build:
       dockerfile: docker/ascend/Dockerfile.inference
       image: flagos-dev/flagscale-inference
       test_roles: [inference]
-      base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
+      base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
       build_args: {}
       source_refs:
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
@@ -70,10 +70,10 @@ image_build:
       dockerfile: docker/ascend/Dockerfile.all
       image: flagos-dev/flagscale-all
       test_roles: [train, inference]
-      base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
+      base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
       build_args:
-        TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train@sha256:2b6ceb58a1dc345ba89b2f8eb22dcc73aeec2048aa8e141abfaaf80f8635b91c
-        INFERENCE_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
+        TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train
+        INFERENCE_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
       source_refs:
         FLAGSCALE_TE_REF: transformer_engine_fl
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl

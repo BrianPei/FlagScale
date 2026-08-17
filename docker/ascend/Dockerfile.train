@@ -3,7 +3,7 @@
 # driver is mounted at container runtime; credentials and drivers are never
 # baked into this image.
 
-ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev@sha256:1384b5cb596c3e1012c9f9fca64ed9e2960e27addc73b17704b3c1abcaf1fa02
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev
 ARG PKG_MGR=pip
 ARG FLAGSCALE_HOME=/opt/flagscale
 ARG FLAGSCALE_TE_REPO=https://github.com/flagos-ai/TransformerEngine-FL.git

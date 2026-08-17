@@ -2,7 +2,7 @@
 # The immutable base owns Torch, MACA, vLLM-MetaX and its validated FlagGems.
 # This image only installs the workflow-resolved vllm-plugin-FL revision.
 
-ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl@sha256:c83a7b26e5b72fcffa920f32929a76984c78d5ee5520828b6e50feb9864240ed
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-metax-ci
 
 FROM ${BASE_IMAGE} AS dev
 

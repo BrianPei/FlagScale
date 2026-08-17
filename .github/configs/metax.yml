@@ -21,8 +21,8 @@ display_name: "MetaX C550 Tests"
 
 # Docker images for MetaX C550 (MACA-based)
 ci_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
-ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev@sha256:2a59d6df4fb4f9ddb09feb3b266cb44de06492c599d802d50b0477ca80891573
-ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev
 
 # Runner labels for MetaX C550 hardware
 runner_labels: ["flagscale-metax-c550-gpu2-8c-256g"]
@@ -51,7 +51,7 @@ image_build:
       dockerfile: docker/metax/Dockerfile.train
       image: flagos-dev/flagscale-train
       test_roles: [train]
-      base_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te@sha256:c6bc75f8512a3ba385339a536a33dfc1dcbeb0c42b6ca1e2d5f0f0e4e9d6200f
+      base_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te:202603231839
       build_args: {}
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
@@ -60,17 +60,17 @@ image_build:
       dockerfile: docker/metax/Dockerfile.inference
       image: flagos-dev/flagscale-inference
       test_roles: [inference]
-      base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl@sha256:c83a7b26e5b72fcffa920f32929a76984c78d5ee5520828b6e50feb9864240ed
+      base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-metax-ci
       source_refs:
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
     all:
       dockerfile: docker/metax/Dockerfile.all
       image: flagos-dev/flagscale-all
       test_roles: [train, inference]
-      base_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
+      base_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev
       build_args:
-        TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev@sha256:2a59d6df4fb4f9ddb09feb3b266cb44de06492c599d802d50b0477ca80891573
-        INFERENCE_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
+        TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev
+        INFERENCE_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
         FLAGSCALE_TE_REF: transformer_engine_fl
