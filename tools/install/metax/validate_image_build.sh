@@ -75,12 +75,22 @@ python - <<"PY"
 import os
 import torch
 import transformer_engine
+import transformer_engine_metax
+from transformer_engine.plugin.core.manager import get_default_manager
 from megatron.core.models.gpt import GPTModel
 
 assert "+metax" in torch.__version__.lower()
 assert torch.cuda.device_count() >= int(os.environ["EXPECTED_DEVICE_COUNT"])
 value = torch.ones(16, device="cuda:0")
 assert value.sum().item() == 16
+manager = get_default_manager()
+manager.ensure_initialized()
+impls = {
+    impl.impl_id
+    for implementations in manager.registry.snapshot().impls_by_op.values()
+    for impl in implementations
+}
+assert "vendor.metax" in impls, sorted(impls)
 print("train runtime:", torch.__version__, transformer_engine.__file__, GPTModel)
 PY
 cat >/tmp/collective.py <<"PY"
@@ -107,14 +117,16 @@ torchrun --nnodes=1 --nproc-per-node="${EXPECTED_WORLD_SIZE}" \
         --device=/dev/dri --device=/dev/mxcd --device=/dev/infiniband \
         --entrypoint bash "$candidate" -lc '
 set -euo pipefail
-export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference
+for runtime_task in inference serve; do
+(
+export FLAGSCALE_RUNTIME_ROOT="/opt/flagscale/runtimes/$runtime_task"
 . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
-deep_ep_so=$(python -c 'import importlib.util; print(importlib.util.find_spec("deep_ep_cpp").origin)')
-if ldd "$deep_ep_so" | tee /tmp/deep_ep_cpp.ldd | grep -q "not found"; then
-    cat /tmp/deep_ep_cpp.ldd >&2
+deep_ep_so=$(python -c 'import importlib.util; spec = importlib.util.find_spec("deep_ep_cpp"); assert spec and spec.origin; print(spec.origin)')
+ldd "$deep_ep_so" | tee "/tmp/deep_ep_cpp.${runtime_task}.ldd"
+if grep -q "not found" "/tmp/deep_ep_cpp.${runtime_task}.ldd"; then
     exit 1
 fi
-python - <<"PY"
+RUNTIME_TASK="$runtime_task" python - <<"PY"
 import os
 import torch
 import deep_ep_cpp
@@ -128,8 +140,10 @@ assert current_platform.vendor_name == "metax"
 assert current_platform.device_type == "cuda"
 value = torch.ones(16, device="cuda:0")
 assert value.sum().item() == 16
-print("inference runtime:", torch.__version__, type(current_platform))
+print(os.environ["RUNTIME_TASK"], "runtime:", torch.__version__, type(current_platform))
 PY
+)
+done
 cat >/tmp/collective.py <<"PY"
 import os
 import torch

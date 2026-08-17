@@ -106,6 +106,13 @@ container_options: >-
   --cap-add NET_ADMIN
   --security-opt seccomp=unconfined
 
+# MetaX vLLM may spend about three minutes loading the first model. Keep this
+# platform allowance in configuration so the common serve workflow stays
+# hardware-neutral.
+timeouts:
+  inference_minutes: 15
+  serve_ready_seconds: 600
+
 # =============================================================================
 # Package Manager Configuration
 # =============================================================================

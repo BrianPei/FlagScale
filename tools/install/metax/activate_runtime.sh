@@ -36,20 +36,33 @@ export CONDA_PREFIX="$python_prefix"
 export FLAGSCALE_CONDA="$python_prefix"
 export MACA_HOME="$maca_home"
 export CUDA_HOME="$maca_home"
+export MACA_PATH="$maca_home"
+export MACA_CLANG_PATH="$maca_home/mxgpu_llvm/bin"
+export CUCC_PATH="$maca_home/tools/cu-bridge"
+export CUDA_PATH="$maca_home/tools/cu-bridge"
+export LIBRARY_PATH="$maca_home/lib:/opt/mxdriver/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+
+torch_lib=$(
+    "$python_prefix/bin/python" -c \
+        'import importlib.util, pathlib; spec = importlib.util.find_spec("torch"); assert spec and spec.origin; print(pathlib.Path(spec.origin).parent / "lib")'
+)
+test -d "$torch_lib" || {
+    echo "Torch library directory missing: $torch_lib" >&2
+    return 1
+}
+
+vendor_path="$maca_home/bin:$maca_home/tools/cu-bridge/bin:$maca_home/mxgpu_llvm/bin:$maca_home/ompi/bin:$maca_home/ucx/bin:/opt/mxdriver/bin"
+vendor_ld="$maca_home/lib:$maca_home/mxgpu_llvm/lib:$maca_home/mxshmem/lib:$maca_home/ompi/lib:$maca_home/ucx/lib:/opt/mxdriver/lib"
 
 if [ "$preserve_base_runtime" = true ]; then
     # The inference base image owns the vendor MPI/UCX runtime paths. Preserve
     # that contract instead of guessing a system MPI installation.
-    torch_lib=$(
-        "$python_prefix/bin/python" -c \
-            'import importlib.util, pathlib; spec = importlib.util.find_spec("torch"); print(pathlib.Path(spec.origin).parent / "lib")'
-    )
-    export PATH="$python_prefix/bin:$maca_home/bin:$inherited_path"
-    export LD_LIBRARY_PATH="$torch_lib:$python_prefix/lib:$maca_home/lib:$inherited_ld_library_path"
+    export PATH="$python_prefix/bin:$vendor_path:$inherited_path"
+    export LD_LIBRARY_PATH="$torch_lib:$python_prefix/lib:$vendor_ld${inherited_ld_library_path:+:$inherited_ld_library_path}"
 else
     # Do not inherit inference Conda or MACA paths into the relocated train
     # runtime. Every vendor path below is rooted in the train-owned prefix.
-    export PATH="$python_prefix/bin:$maca_home/bin:/usr/local/mpi/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    export LD_LIBRARY_PATH="$python_prefix/lib:$maca_home/lib:/usr/local/mpi/lib64:/usr/local/mpi/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu"
+    export PATH="$python_prefix/bin:$vendor_path:/usr/local/mpi/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    export LD_LIBRARY_PATH="$torch_lib:$python_prefix/lib:$vendor_ld:/usr/local/mpi/lib64:/usr/local/mpi/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu"
 fi
 export PYTHONNOUSERSITE=1

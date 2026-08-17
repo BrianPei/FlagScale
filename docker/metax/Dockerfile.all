@@ -78,6 +78,7 @@ RUN set -eux; \
     tar -xzf /tmp/train-conda.tar.gz -C /opt/flagscale/runtimes/train/conda; \
     /opt/flagscale/runtimes/train/conda/bin/conda-unpack; \
     rm -f /tmp/train-conda.tar.gz; \
+    ln -sfn libmcruntime.so /opt/flagscale/runtimes/train/maca/lib/libnvrtc.so; \
     printf '%s\n' train > /opt/flagscale/runtimes/train/task; \
     printf '%s\n' inference > /opt/flagscale/runtimes/inference/task; \
     printf '%s\n' serve > /opt/flagscale/runtimes/serve/task; \
@@ -88,7 +89,7 @@ RUN set -eux; \
     FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train \
         bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, transformer_engine, megatron.core"'; \
     FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference \
-        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, vllm, vllm_fl, pandas"'
+        bash -c '. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"; python --version; python -c "import torch, vllm, vllm_fl, deep_ep_cpp, pandas"'
 
 WORKDIR /workspace
 CMD ["/bin/bash"]
