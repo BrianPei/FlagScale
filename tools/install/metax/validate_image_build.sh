@@ -112,7 +112,6 @@ export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/inference
 python - <<"PY"
 import os
 import torch
-import deep_ep_cpp
 import vllm_fl
 from vllm.platforms import current_platform
 
@@ -155,7 +154,6 @@ import importlib.metadata as metadata
 import pandas
 import os
 import torch
-import deep_ep_cpp
 import vllm_fl
 from vllm.platforms import current_platform
 
