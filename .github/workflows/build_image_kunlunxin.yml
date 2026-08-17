@@ -27,7 +27,7 @@ on:
       - 'tests/test_utils/runners/**'
       - 'tests/functional_tests/train/qwen3/**'
   push:
-    branches: ["main", "kunlunxin-p800-ci"]
+    branches: ["main", "kunlunxin-p800-ci-new"]
     paths:
       - 'docker/kunlunxin/**'
       - 'tools/install/kunlunxin/**'
