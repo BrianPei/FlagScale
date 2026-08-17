@@ -78,7 +78,7 @@ activate_python_env() {
 }
 
 install_common_python_deps() {
-    python -m pip install coverage pytest-mock diffusers==0.36.0 transformers==4.57.6 --quiet --root-user-action=ignore
+    python -m pip install coverage pytest pytest-mock diffusers==0.36.0 transformers==4.57.6 --quiet --root-user-action=ignore
 }
 
 install_flagscale_cli() {

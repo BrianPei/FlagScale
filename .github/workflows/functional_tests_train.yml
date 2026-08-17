@@ -148,6 +148,7 @@ jobs:
             --pkg-mgr '${{ inputs.pkg_mgr }}' \
             --env-name '${{ inputs.env_name }}' \
             --env-path '${{ inputs.env_path }}' \
+            --install-common-deps \
             --install-cli
         timeout-minutes: 30
 
