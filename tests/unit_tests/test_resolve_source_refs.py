@@ -76,10 +76,7 @@ def test_platform_source_refs_use_catalog(platform):
         validation_path = root / validation_script
         assert validation_path.is_file()
     for task_name, task in config["image_build"]["tasks"].items():
-        assert re.fullmatch(r"[a-z0-9][a-z0-9._/-]*[a-z0-9]", task["image"])
-        assert "//" not in task["image"]
-        assert ":" not in task["image"]
-        assert "@" not in task["image"]
+        assert re.fullmatch(r"[a-z0-9][a-z0-9._-]*[a-z0-9]", task["image"])
         if task_name != "all":
             assert (root / f"requirements/{platform}/{task_name}.txt").is_file()
             assert (root / f"tools/install/{platform}/install_{task_name}.sh").is_file()
@@ -90,6 +87,16 @@ def test_platform_source_refs_use_catalog(platform):
         dockerfile = (root / task["dockerfile"]).read_text()
         for build_arg in source_refs:
             assert re.search(rf"^ARG {build_arg}(?:=|$)", dockerfile, re.MULTILINE)
+
+
+def test_dev_image_name_matches_harbor_governance_contract():
+    root = Path(__file__).parents[2]
+    workflow = (root / ".github/workflows/build_image_common.yml").read_text()
+
+    assert (
+        'candidate="${registry}/flagos-dev/${image_name}:'
+        '${short_sha}-${PLATFORM}-dev"' in workflow
+    )
 
 
 @pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "metax"])

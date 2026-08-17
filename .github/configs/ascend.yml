@@ -49,7 +49,7 @@ image_build:
   tasks:
     train:
       dockerfile: docker/ascend/Dockerfile.train
-      image: flagos-dev/flagscale-train
+      image: flagscale-train
       test_roles: [train]
       base_image: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260717-ascend-dev@sha256:1384b5cb596c3e1012c9f9fca64ed9e2960e27addc73b17704b3c1abcaf1fa02
       build_args:
@@ -59,7 +59,7 @@ image_build:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
     inference:
       dockerfile: docker/ascend/Dockerfile.inference
-      image: flagos-dev/flagscale-inference
+      image: flagscale-inference
       test_roles: [inference]
       base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
       build_args: {}
@@ -68,7 +68,7 @@ image_build:
         FLAGGEMS_REF: flaggems
     all:
       dockerfile: docker/ascend/Dockerfile.all
-      image: flagos-dev/flagscale-all
+      image: flagscale-all
       test_roles: [train, inference]
       base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference@sha256:e5b8e3b2c37584f980dffa1c08649b44e9edd2415522e123502e8d82a7854ef1
       build_args:

@@ -61,7 +61,9 @@ image_build:
   tasks:
     train:
       dockerfile: docker/my_hardware/Dockerfile.train
-      image: flagos-dev/flagscale-train
+      # Repository basename only. The common workflow publishes it as:
+      # ${registry}/flagos-dev/${image}:${short_sha}-${platform}-dev
+      image: flagscale-train
       base_image: registry.example.com/vendor/train-base:tag
       build_args: {}
       # Map Docker build argument names to entries in image_sources.yml.

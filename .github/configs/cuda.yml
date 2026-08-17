@@ -40,7 +40,7 @@ image_build:
   tasks:
     train:
       dockerfile: docker/cuda/Dockerfile.train
-      image: flagos-dev/flagscale-train
+      image: flagscale-train
       base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
       test_roles: [train]
       build_args:
@@ -55,7 +55,7 @@ image_build:
         FLAGSCALE_TE_REF: transformer_engine_fl
     inference:
       dockerfile: docker/cuda/Dockerfile.inference
-      image: flagos-dev/flagscale-inference
+      image: flagscale-inference
       base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
       test_roles: [inference]
       build_args:
@@ -67,7 +67,7 @@ image_build:
         PYTORCH_INDEX: https://download.pytorch.org/whl/cu128
     all:
       dockerfile: docker/cuda/Dockerfile.all
-      image: flagos-dev/flagscale-all
+      image: flagscale-all
       base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
       test_roles: [train, inference]
       test_environments:
