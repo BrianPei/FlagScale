@@ -2,3 +2,4 @@
 # The vendor image already provides the runtime stack required by the first
 # P800 CI smoke path. Keep base minimal so image builds do not fail on
 # unrelated optional robotics or multimodal dependencies.
+-r ../common.txt
