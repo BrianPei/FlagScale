@@ -45,4 +45,4 @@ p800:
         - tests/unit_tests/test_init.py::test_get_version_fallback_to_pyproject
         - tests/unit_tests/test_init.py::test_get_version_fallback_to_default
         - tests/unit_tests/test_parallel_context.py::test_parallel_config
-        - tests/unit_tests/models/vla/test_qwen_gr00t_config.py
+        - tests/unit_tests/models/vla
