@@ -49,7 +49,7 @@ image_build:
   tasks:
     train:
       dockerfile: docker/metax/Dockerfile.train
-      image: flagscale-train
+      image: flagos-dev/flagscale-train
       test_roles: [train]
       base_image: harbor.baai.ac.cn/flagscale/megatron-lm-with-te@sha256:c6bc75f8512a3ba385339a536a33dfc1dcbeb0c42b6ca1e2d5f0f0e4e9d6200f
       build_args: {}
@@ -58,14 +58,14 @@ image_build:
         FLAGSCALE_TE_REF: transformer_engine_fl
     inference:
       dockerfile: docker/metax/Dockerfile.inference
-      image: flagscale-inference
+      image: flagos-dev/flagscale-inference
       test_roles: [inference]
       base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl@sha256:c83a7b26e5b72fcffa920f32929a76984c78d5ee5520828b6e50feb9864240ed
       source_refs:
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
     all:
       dockerfile: docker/metax/Dockerfile.all
-      image: flagscale-all
+      image: flagos-dev/flagscale-all
       test_roles: [train, inference]
       base_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev@sha256:8d9a8ac56cb127eb4fee94e2c14da1fe9cd3cd0b0d70d8875ca5edf46b9c4a65
       build_args:

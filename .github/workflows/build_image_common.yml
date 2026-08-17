@@ -277,8 +277,10 @@ jobs:
               done
             fi
 
-            if [[ ! "$image_name" =~ ^[a-z0-9][a-z0-9._-]*[a-z0-9]$ ]]; then
-              echo "::error::Invalid image name for ${PLATFORM}/${task}: $image_name"
+            if [[ ! "$image_name" =~ ^[a-z0-9][a-z0-9._/-]*[a-z0-9]$ ]] || \
+               [[ "$image_name" == *//* ]] || [[ "$image_name" == *:* ]] || \
+               [[ "$image_name" == *@* ]]; then
+              echo "::error::Invalid image repository for ${PLATFORM}/${task}: $image_name"
               exit 1
             fi
 
@@ -316,7 +318,7 @@ jobs:
               'to_entries[] |
                "| `\(.key)` | `\(.value.selector)` | `\(.value.revision)` |"' \
               <<< "$source_metadata")
-            candidate="${registry}/flagos-dev/${image_name}:${short_sha}-${PLATFORM}-dev"
+            candidate="${registry}/${image_name}:${short_sha}-${PLATFORM}-${target}"
             entry=$(jq -c \
               --arg registry "$registry" \
               --arg image "$candidate" \

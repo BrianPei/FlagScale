@@ -245,8 +245,10 @@ jobs:
                 echo "::error::Incomplete image task contract: ${platform}/${task}"
                 exit 1
               fi
-              if [[ ! "$image" =~ ^[a-z0-9][a-z0-9._-]*[a-z0-9]$ ]]; then
-                echo "::error::Invalid image name for ${platform}/${task}: $image"
+              if [[ ! "$image" =~ ^[a-z0-9][a-z0-9._/-]*[a-z0-9]$ ]] || \
+                 [[ "$image" == *//* ]] || [[ "$image" == *:* ]] || \
+                 [[ "$image" == *@* ]]; then
+                echo "::error::Invalid image repository for ${platform}/${task}: $image"
                 exit 1
               fi
               if [[ ! "$target_value" =~ ^[A-Za-z0-9_.-]+$ ]]; then
