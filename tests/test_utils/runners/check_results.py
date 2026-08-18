@@ -335,6 +335,11 @@ def test_inference_equal(path, task, model, case):
     print("Gold Result: ", gold_value_lines)
     print("len(result_lines), (gold_value_lines): ", len(result_lines), len(gold_value_lines))
 
+    if not result_lines and gold_value_lines:
+        print("\nInference log tail:")
+        for line in lines[-120:]:
+            print(line.rstrip("\n"))
+
     assert len(result_lines) == len(gold_value_lines)
 
     # Compare actual output and golden reference output line by line (ignoring newline character differences)
