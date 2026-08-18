@@ -38,10 +38,15 @@ if [ -f "$FLAGSCALE_CONDA/etc/profile.d/conda.sh" ]; then
     . "$FLAGSCALE_CONDA/etc/profile.d/conda.sh"
     conda activate "$FLAGSCALE_ENV_NAME"
 fi
-export PYTHONPATH="/opt/Megatron-LM-FL:/opt/flagscale/deps/Megatron-LM-FL:${PYTHONPATH:-}"
+if [ -f /etc/profile.d/flagscale-env.sh ]; then
+    . /etc/profile.d/flagscale-env.sh
+else
+    export PYTHONPATH="/opt/Megatron-LM-FL:${PYTHONPATH:-}"
+fi
 python - "$FLAGSCALE_RUNTIME_TASK" "$FLAGSCALE_RUNTIME_PHASE" <<"PY"
 import os
 import sys
+from pathlib import Path
 
 import torch
 
@@ -61,14 +66,13 @@ if task == "train":
     import megatron.core
     import transformer_engine
     import transformer_engine_torch
-    from megatron.core.jit import disable_jit_fuser
-    from megatron.core.models.gpt.gpt_layer_specs import get_gpt_decoder_layer_specs
 
-    assert callable(disable_jit_fuser)
-    assert callable(get_gpt_decoder_layer_specs)
     assert flagcx is not None
     assert transformer_engine is not None
     assert transformer_engine_torch is not None
+    expected = Path(os.environ.get("FLAGSCALE_MEGATRON_PATH", "/opt/flagscale/deps/Megatron-LM-FL")).resolve()
+    actual = Path(megatron.core.__file__).resolve()
+    assert actual.is_relative_to(expected), (actual, expected)
     print("Kunlunxin train runtime:", torch.__version__, megatron.core.__file__)
 elif task == "inference":
     import sentencepiece
@@ -95,6 +99,9 @@ elif task == "all":
     assert transformers is not None
     assert transformer_engine is not None
     assert transformer_engine_torch is not None
+    expected = Path(os.environ.get("FLAGSCALE_MEGATRON_PATH", "/opt/flagscale/deps/Megatron-LM-FL")).resolve()
+    actual = Path(megatron.core.__file__).resolve()
+    assert actual.is_relative_to(expected), (actual, expected)
     print("Kunlunxin all runtime:", torch.__version__, megatron.core.__file__)
 else:
     raise SystemExit(f"Unsupported Kunlunxin runtime task: {task}")
