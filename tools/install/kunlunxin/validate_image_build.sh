@@ -21,6 +21,7 @@ validate_cuda_runtime() {
     local image="$1"
     local runtime_task="$2"
     local expected_world_size="$3"
+    local runtime_phase="$4"
 
     docker run --rm \
         --privileged \
@@ -28,20 +29,32 @@ validate_cuda_runtime() {
         --shm-size=64g \
         --env EXPECTED_WORLD_SIZE="$expected_world_size" \
         --env FLAGSCALE_RUNTIME_TASK="$runtime_task" \
+        --env FLAGSCALE_RUNTIME_PHASE="$runtime_phase" \
         --entrypoint bash "$image" -lc '
 set -euo pipefail
-python - "$FLAGSCALE_RUNTIME_TASK" <<"PY"
+export FLAGSCALE_CONDA="${FLAGSCALE_CONDA:-/root/miniconda}"
+export FLAGSCALE_ENV_NAME="${FLAGSCALE_ENV_NAME:-python310_torch29_cuda}"
+if [ -f "$FLAGSCALE_CONDA/etc/profile.d/conda.sh" ]; then
+    . "$FLAGSCALE_CONDA/etc/profile.d/conda.sh"
+    conda activate "$FLAGSCALE_ENV_NAME"
+fi
+export PYTHONPATH="/opt/Megatron-LM-FL:/opt/flagscale/deps/Megatron-LM-FL:${PYTHONPATH:-}"
+python - "$FLAGSCALE_RUNTIME_TASK" "$FLAGSCALE_RUNTIME_PHASE" <<"PY"
 import os
 import sys
 
 import torch
 
 task = sys.argv[1]
+phase = sys.argv[2]
 expected_world_size = int(os.environ["EXPECTED_WORLD_SIZE"])
 
 assert torch.cuda.is_available()
 assert torch.cuda.device_count() >= expected_world_size
 assert torch.tensor([1.0], device="cuda").item() == 1.0
+if phase == "pre":
+    print("Kunlunxin base runtime:", torch.__version__, torch.cuda.device_count())
+    raise SystemExit(0)
 
 if task == "train":
     import flagcx
@@ -98,10 +111,10 @@ case "$phase" in
             echo "Use a registry-qualified base image or load the vendor image on the P800 runner." >&2
             exit 1
         fi
-        validate_cuda_runtime "$base_image" "$task" "$expected_devices"
+        validate_cuda_runtime "$base_image" "$task" "$expected_devices" pre
         ;;
     post)
-        validate_cuda_runtime "$candidate" "$task" "$smoke_nproc"
+        validate_cuda_runtime "$candidate" "$task" "$smoke_nproc" post
         ;;
     *)
         exit 0
