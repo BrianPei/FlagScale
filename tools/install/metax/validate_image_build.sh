@@ -13,7 +13,7 @@ expected_devices="${IMAGE_BUILD_RUNTIME_DEVICE_COUNT:-2}"
 smoke_nproc="${IMAGE_BUILD_RUNTIME_SMOKE_NPROC:-$expected_devices}"
 
 case "$task" in
-    train|inference|all) ;;
+    train|inference) ;;
     *) exit 0 ;;
 esac
 
@@ -60,109 +60,6 @@ torchrun --nnodes=1 --nproc-per-node="${EXPECTED_WORLD_SIZE}" \
 fi
 
 [ "$phase" = post ] || exit 0
-
-if [ "$task" = all ]; then
-    docker run --rm \
-        --env EXPECTED_DEVICE_COUNT="$expected_devices" \
-        --env EXPECTED_WORLD_SIZE="$smoke_nproc" \
-        --ipc=host --group-add video \
-        --device=/dev/dri --device=/dev/mxcd --device=/dev/infiniband \
-        --entrypoint bash "$candidate" -lc '
-set -euo pipefail
-export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train
-. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
-python - <<"PY"
-import os
-import torch
-import transformer_engine
-import transformer_engine_metax
-from transformer_engine.plugin.core.manager import get_default_manager
-from megatron.core.models.gpt import GPTModel
-
-assert "+metax" in torch.__version__.lower()
-assert torch.cuda.device_count() >= int(os.environ["EXPECTED_DEVICE_COUNT"])
-value = torch.ones(16, device="cuda:0")
-assert value.sum().item() == 16
-manager = get_default_manager()
-manager.ensure_initialized()
-impls = {
-    impl.impl_id
-    for implementations in manager.registry.snapshot().impls_by_op.values()
-    for impl in implementations
-}
-assert "vendor.metax" in impls, sorted(impls)
-print("train runtime:", torch.__version__, transformer_engine.__file__, GPTModel)
-PY
-cat >/tmp/collective.py <<"PY"
-import os
-import torch
-import torch.distributed as dist
-
-rank = int(os.environ["LOCAL_RANK"])
-world = int(os.environ["WORLD_SIZE"])
-torch.cuda.set_device(rank)
-dist.init_process_group("nccl")
-value = torch.tensor([rank + 1.0], device=f"cuda:{rank}")
-dist.all_reduce(value)
-assert value.item() == world * (world + 1) / 2, value
-dist.destroy_process_group()
-PY
-torchrun --nnodes=1 --nproc-per-node="${EXPECTED_WORLD_SIZE}" \
-    --master-addr=127.0.0.1 --master-port=29500 /tmp/collective.py
-'
-    docker run --rm \
-        --env EXPECTED_DEVICE_COUNT="$expected_devices" \
-        --env EXPECTED_WORLD_SIZE="$smoke_nproc" \
-        --ipc=host --group-add video \
-        --device=/dev/dri --device=/dev/mxcd --device=/dev/infiniband \
-        --entrypoint bash "$candidate" -lc '
-set -euo pipefail
-for runtime_task in inference serve; do
-(
-export FLAGSCALE_RUNTIME_ROOT="/opt/flagscale/runtimes/$runtime_task"
-. "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
-deep_ep_so=$(python -c 'import importlib.util; spec = importlib.util.find_spec("deep_ep_cpp"); assert spec and spec.origin; print(spec.origin)')
-ldd "$deep_ep_so" | tee "/tmp/deep_ep_cpp.${runtime_task}.ldd"
-if grep -q "not found" "/tmp/deep_ep_cpp.${runtime_task}.ldd"; then
-    exit 1
-fi
-RUNTIME_TASK="$runtime_task" python - <<"PY"
-import os
-import torch
-import deep_ep_cpp
-import vllm_fl
-from vllm.platforms import current_platform
-
-assert "+metax" in torch.__version__.lower()
-assert torch.cuda.device_count() >= int(os.environ["EXPECTED_DEVICE_COUNT"])
-assert type(current_platform).__module__ == "vllm_fl.platform"
-assert current_platform.vendor_name == "metax"
-assert current_platform.device_type == "cuda"
-value = torch.ones(16, device="cuda:0")
-assert value.sum().item() == 16
-print(os.environ["RUNTIME_TASK"], "runtime:", torch.__version__, type(current_platform))
-PY
-)
-done
-cat >/tmp/collective.py <<"PY"
-import os
-import torch
-import torch.distributed as dist
-
-rank = int(os.environ["LOCAL_RANK"])
-world = int(os.environ["WORLD_SIZE"])
-torch.cuda.set_device(rank)
-dist.init_process_group("nccl")
-value = torch.tensor([rank + 1.0], device=f"cuda:{rank}")
-dist.all_reduce(value)
-assert value.item() == world * (world + 1) / 2, value
-dist.destroy_process_group()
-PY
-torchrun --nnodes=1 --nproc-per-node="${EXPECTED_WORLD_SIZE}" \
-    --master-addr=127.0.0.1 --master-port=29500 /tmp/collective.py
-'
-    exit 0
-fi
 
 if [ "$task" = inference ]; then
     docker run --rm \

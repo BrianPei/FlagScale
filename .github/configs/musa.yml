@@ -18,10 +18,9 @@
 hardware_name: musa
 display_name: "MThreads MUSA Tests"
 
-# Latest train/inference/all images validated end-to-end on S5000.
-# Keep all tasks on the same FlagScale revision so common tests use a
-# consistent software stack without rebuilding images for every PR.
-ci_image: harbor.baai.ac.cn/flagscale/flagscale-all:dev-musa-s5000-py3.10-8aa5314e94bc
+# Latest train/inference images validated end-to-end on S5000.
+# The platform currently does not publish an all-in-one image.
+ci_image: harbor.baai.ac.cn/flagscale/flagscale-train:dev-musa-s5000-py3.10-8aa5314e94bc
 ci_train_image: harbor.baai.ac.cn/flagscale/flagscale-train:dev-musa-s5000-py3.10-8aa5314e94bc
 ci_inference_image: harbor.baai.ac.cn/flagscale/flagscale-inference:dev-musa-s5000-py3.10-8aa5314e94bc
 
@@ -63,30 +62,6 @@ image_build:
         PKG_MGR: pip
         PIP_INDEX_URL: https://pypi.org/simple
         PIP_DEFAULT_TIMEOUT: '300'
-    all:
-      dockerfile: docker/musa/Dockerfile.all
-      image: flagos-dev/flagscale-all
-      base_image: harbor.baai.ac.cn/flagos-dev/transformerengine-fl:manual-20260802-musa-torch2.7.1-e73781e-vllm29ceebd
-      runtime_smoke_nproc: '2'
-      test_roles: [train, inference]
-      test_environments:
-        train:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/train
-        inference:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/inference
-        serve:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/serve
-      build_args:
-        PKG_MGR: pip
-        PIP_INDEX_URL: https://pypi.org/simple
-        PIP_DEFAULT_TIMEOUT: '300'
-        FLAGSCALE_TE_VERSION: 2.0.0+e73781e
-      source_refs:
-        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-
 # Container volumes (hardware-specific paths)
 container_volumes:
   - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data

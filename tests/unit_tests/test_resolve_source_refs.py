@@ -92,33 +92,40 @@ def test_platform_source_refs_use_catalog(platform):
             assert re.search(rf"^ARG {build_arg}(?:=|$)", dockerfile, re.MULTILINE)
 
 
-@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "metax"])
-def test_split_runtime_all_images_have_explicit_task_environments(platform):
+def test_declared_all_images_use_one_python_environment():
     root = Path(__file__).parents[2]
-    config = yaml.safe_load((root / f".github/configs/{platform}.yml").read_text())
-    task = config["image_build"]["tasks"]["all"]
+    declared_all_images = 0
+    for config_path in sorted((root / ".github/configs").glob("*.yml")):
+        config = yaml.safe_load(config_path.read_text())
+        task = config.get("image_build", {}).get("tasks", {}).get("all")
+        if task is None:
+            continue
+        declared_all_images += 1
 
-    assert task["test_roles"] == ["train", "inference"]
-    assert set(task["test_environments"]) == {"train", "inference", "serve"}
-    for role, environment in task["test_environments"].items():
-        assert environment["pkg_mgr"] == "runtime"
-        assert environment["env_path"] == f"/opt/flagscale/runtimes/{role}"
+        assert task["test_roles"] == ["train", "inference"]
+        environments = task["test_environments"]
+        assert set(environments) == {"train", "inference", "serve"}
 
-    dockerfile = (root / task["dockerfile"]).read_text()
-    assert "io.flagscale.runtime.layout=task-isolated" in dockerfile
-    normalized_dockerfile = dockerfile.replace("\\\n", " ")
-    for command in re.split(r"&&|;", normalized_dockerfile):
-        if "install.sh" in command and "--task all" in command:
-            assert "--no-task" in command
-    for role in ("train", "inference", "serve"):
-        assert f"io.flagscale.runtime.{role}=/opt/flagscale/runtimes/{role}" in dockerfile
+        env_contracts = list(environments.values())
+        assert all(environment == env_contracts[0] for environment in env_contracts)
+        assert env_contracts[0]["pkg_mgr"] in {"conda", "pip", "uv"}
+        assert env_contracts[0]["env_path"]
 
-    image_build = config["image_build"]
-    smoke_nproc = task.get("runtime_smoke_nproc", image_build.get("runtime_smoke_nproc"))
-    device_count = task.get("runtime_device_count", image_build.get("runtime_device_count"))
-    if smoke_nproc is not None or device_count is not None:
-        assert smoke_nproc is not None and device_count is not None
-        assert int(smoke_nproc) <= int(device_count)
+        dockerfile = (root / task["dockerfile"]).read_text()
+        normalized_dockerfile = dockerfile.replace("\\\n", " ")
+        install_commands = [
+            command
+            for command in re.split(r"&&|;", normalized_dockerfile)
+            if "install.sh" in command and "--task all" in command
+        ]
+        assert any("--no-task" not in command for command in install_commands)
+        if env_contracts[0]["pkg_mgr"] == "conda":
+            env_name = env_contracts[0]["env_name"]
+            assert env_name
+            assert any(f"--env-name {env_name}" in command for command in install_commands)
+        assert "/opt/flagscale/runtimes/" not in dockerfile
+
+    assert declared_all_images > 0
 
 
 @pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "metax"])

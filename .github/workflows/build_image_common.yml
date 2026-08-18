@@ -72,10 +72,13 @@ jobs:
       train_image: ${{ steps.contract.outputs.train_image }}
       inference_image: ${{ steps.contract.outputs.inference_image }}
       train_pkg_mgr: ${{ steps.contract.outputs.train_pkg_mgr }}
+      train_env_name: ${{ steps.contract.outputs.train_env_name }}
       train_env_path: ${{ steps.contract.outputs.train_env_path }}
       inference_pkg_mgr: ${{ steps.contract.outputs.inference_pkg_mgr }}
+      inference_env_name: ${{ steps.contract.outputs.inference_env_name }}
       inference_env_path: ${{ steps.contract.outputs.inference_env_path }}
       serve_pkg_mgr: ${{ steps.contract.outputs.serve_pkg_mgr }}
+      serve_env_name: ${{ steps.contract.outputs.serve_env_name }}
       serve_env_path: ${{ steps.contract.outputs.serve_env_path }}
     steps:
       - name: Checkout source
@@ -169,10 +172,13 @@ jobs:
           inference_image=$(/usr/local/bin/yq -r \
             '.ci_inference_image // .ci_image // ""' "$config_file")
           train_pkg_mgr=""
+          train_env_name=""
           train_env_path=""
           inference_pkg_mgr=""
+          inference_env_name=""
           inference_env_path=""
           serve_pkg_mgr=""
+          serve_env_name=""
           serve_env_path=""
 
           for raw_task in "${task_names[@]}"; do
@@ -265,13 +271,34 @@ jobs:
               if jq -e 'index("inference") != null' <<< "$test_roles" >/dev/null; then
                 required_roles+=(inference serve)
               fi
+              reference_role="${required_roles[0]}"
               for role in "${required_roles[@]}"; do
                 pkg_mgr=$(jq -r --arg role "$role" \
                   '.test_environments[$role].pkg_mgr // ""' <<< "$entry")
+                env_name=$(jq -r --arg role "$role" \
+                  '.test_environments[$role].env_name // ""' <<< "$entry")
                 env_path=$(jq -r --arg role "$role" \
                   '.test_environments[$role].env_path // ""' <<< "$entry")
                 if [ -z "$pkg_mgr" ] || [ -z "$env_path" ]; then
                   echo "::error::Missing test_environments.${role} for ${PLATFORM}/${task}"
+                  exit 1
+                fi
+                case "$pkg_mgr" in
+                  conda|pip|uv) ;;
+                  *)
+                    echo "::error::Unsupported test environment package manager: ${PLATFORM}/${task}/${role}: $pkg_mgr"
+                    exit 1
+                    ;;
+                esac
+                if [ "$pkg_mgr" = conda ] && [ -z "$env_name" ]; then
+                  echo "::error::Missing test_environments.${role}.env_name for ${PLATFORM}/${task}"
+                  exit 1
+                fi
+                if ! jq -e --arg role "$role" \
+                  --arg reference_role "$reference_role" \
+                  '.test_environments[$role] == .test_environments[$reference_role]' \
+                  <<< "$entry" >/dev/null; then
+                  echo "::error::All image test roles must share one environment: ${PLATFORM}/${task}"
                   exit 1
                 fi
               done
@@ -345,6 +372,7 @@ jobs:
                     if [ "$all_task_selected" != true ] || [ "$task" = all ]; then
                       train_image="$candidate"
                       train_pkg_mgr=$(jq -r '.test_environments.train.pkg_mgr // ""' <<< "$entry")
+                      train_env_name=$(jq -r '.test_environments.train.env_name // ""' <<< "$entry")
                       train_env_path=$(jq -r '.test_environments.train.env_path // ""' <<< "$entry")
                     fi
                     candidate_test_roles=$((candidate_test_roles + 1))
@@ -353,8 +381,10 @@ jobs:
                     if [ "$all_task_selected" != true ] || [ "$task" = all ]; then
                       inference_image="$candidate"
                       inference_pkg_mgr=$(jq -r '.test_environments.inference.pkg_mgr // ""' <<< "$entry")
+                      inference_env_name=$(jq -r '.test_environments.inference.env_name // ""' <<< "$entry")
                       inference_env_path=$(jq -r '.test_environments.inference.env_path // ""' <<< "$entry")
                       serve_pkg_mgr=$(jq -r '.test_environments.serve.pkg_mgr // ""' <<< "$entry")
+                      serve_env_name=$(jq -r '.test_environments.serve.env_name // ""' <<< "$entry")
                       serve_env_path=$(jq -r '.test_environments.serve.env_path // ""' <<< "$entry")
                     fi
                     candidate_test_roles=$((candidate_test_roles + 1))
@@ -381,10 +411,13 @@ jobs:
             echo "train_image=$train_image"
             echo "inference_image=$inference_image"
             echo "train_pkg_mgr=$train_pkg_mgr"
+            echo "train_env_name=$train_env_name"
             echo "train_env_path=$train_env_path"
             echo "inference_pkg_mgr=$inference_pkg_mgr"
+            echo "inference_env_name=$inference_env_name"
             echo "inference_env_path=$inference_env_path"
             echo "serve_pkg_mgr=$serve_pkg_mgr"
+            echo "serve_env_name=$serve_env_name"
             echo "serve_env_path=$serve_env_path"
           } >> "$GITHUB_OUTPUT"
 
@@ -622,8 +655,11 @@ jobs:
       ci_train_image: ${{ needs.configure.outputs.train_image }}
       ci_inference_image: ${{ needs.configure.outputs.inference_image }}
       train_pkg_mgr: ${{ needs.configure.outputs.train_pkg_mgr }}
+      train_env_name: ${{ needs.configure.outputs.train_env_name }}
       train_env_path: ${{ needs.configure.outputs.train_env_path }}
       inference_pkg_mgr: ${{ needs.configure.outputs.inference_pkg_mgr }}
+      inference_env_name: ${{ needs.configure.outputs.inference_env_name }}
       inference_env_path: ${{ needs.configure.outputs.inference_env_path }}
       serve_pkg_mgr: ${{ needs.configure.outputs.serve_pkg_mgr }}
+      serve_env_name: ${{ needs.configure.outputs.serve_env_name }}
       serve_env_path: ${{ needs.configure.outputs.serve_env_path }}

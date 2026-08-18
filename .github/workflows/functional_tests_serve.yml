@@ -167,9 +167,6 @@ jobs:
                 activate_uv_env "$ENV_PATH"
               fi
               ;;
-            runtime)
-              activate_runtime_env "$ENV_PATH"
-              ;;
             pip)
               ;;
             *)
@@ -227,9 +224,6 @@ jobs:
               if [ -n "$ENV_PATH" ] && [ -d "$ENV_PATH" ]; then
                 activate_uv_env "$ENV_PATH" || echo "UV activation failed"
               fi
-              ;;
-            runtime)
-              activate_runtime_env "$ENV_PATH" || { echo "Runtime activation failed"; exit 1; }
               ;;
             pip)
               echo "Running tests with pip/system Python"

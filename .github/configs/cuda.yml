@@ -72,14 +72,17 @@ image_build:
       test_roles: [train, inference]
       test_environments:
         train:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/train
+          pkg_mgr: conda
+          env_name: flagscale-all
+          env_path: /opt/flagscale/miniconda3
         inference:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/inference
+          pkg_mgr: conda
+          env_name: flagscale-all
+          env_path: /opt/flagscale/miniconda3
         serve:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/serve
+          pkg_mgr: conda
+          env_name: flagscale-all
+          env_path: /opt/flagscale/miniconda3
       build_args:
         CUDA_VERSION: '12.8.1'
         UBUNTU_VERSION: '22.04'

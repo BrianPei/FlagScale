@@ -22,7 +22,6 @@ docker_args=(
 
 validate_runtime() {
     local runtime_task="$1"
-    local runtime_mode="$2"
     local runtime_env=()
 
     if [ "$runtime_task" = train ]; then
@@ -37,16 +36,11 @@ validate_runtime() {
     docker run --rm "${docker_args[@]}" \
         "${runtime_env[@]}" \
         --env FLAGSCALE_RUNTIME_TASK="$runtime_task" \
-        --env FLAGSCALE_RUNTIME_MODE="$runtime_mode" \
         --env EXPECTED_WORLD_SIZE="$nproc" \
         --env EXPECTED_DEVICE_COUNT="$device_count" \
         --entrypoint bash "$candidate" -lc '
 set -euo pipefail
 runtime_task="${FLAGSCALE_RUNTIME_TASK:?}"
-if [ "${FLAGSCALE_RUNTIME_MODE:?}" = isolated ]; then
-    export FLAGSCALE_RUNTIME_ROOT="/opt/flagscale/runtimes/${runtime_task}"
-    . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
-fi
 python - "$runtime_task" <<"PY"
 import os
 import sys
@@ -95,17 +89,10 @@ PY
 }
 
 validate_collective() {
-    local runtime_mode="$1"
-
     docker run --rm "${docker_args[@]}" \
-        --env FLAGSCALE_RUNTIME_MODE="$runtime_mode" \
         --env EXPECTED_WORLD_SIZE="$nproc" \
         --entrypoint bash "$candidate" -lc '
 set -euo pipefail
-if [ "${FLAGSCALE_RUNTIME_MODE:?}" = isolated ]; then
-    export FLAGSCALE_RUNTIME_ROOT=/opt/flagscale/runtimes/train
-    . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
-fi
 cat >/tmp/musa_collective.py <<"PY"
 import os
 
@@ -128,16 +115,11 @@ torchrun --standalone --nproc_per_node="${EXPECTED_WORLD_SIZE}" \
 
 case "$task" in
     train)
-        validate_runtime train direct
-        validate_collective direct
+        validate_runtime train
+        validate_collective
         ;;
     inference)
-        validate_runtime inference direct
-        ;;
-    all)
-        validate_runtime train isolated
-        validate_runtime inference isolated
-        validate_collective isolated
+        validate_runtime inference
         ;;
     *)
         echo "Unsupported MUSA image task: $task" >&2

@@ -63,29 +63,6 @@ image_build:
       base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-metax-ci
       source_refs:
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
-    all:
-      dockerfile: docker/metax/Dockerfile.all
-      image: flagos-dev/flagscale-all
-      test_roles: [train, inference]
-      base_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev
-      build_args:
-        TRAIN_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale:0a6cc4b-metax-train-dev
-        INFERENCE_BASE_IMAGE: harbor.baai.ac.cn/flagos-dev/flagscale-inference:86c8e54-metax-dev
-      source_refs:
-        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-        FLAGSCALE_TE_REF: transformer_engine_fl
-        VLLM_PLUGIN_FL_REF: vllm_plugin_fl
-      test_environments:
-        train:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/train
-        inference:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/inference
-        serve:
-          pkg_mgr: runtime
-          env_path: /opt/flagscale/runtimes/serve
-
 # Container options for MetaX C550 (MACA runtime)
 container_options: >-
   --hostname=flagscale-ci

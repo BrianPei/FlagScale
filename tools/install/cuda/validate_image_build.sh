@@ -32,9 +32,13 @@ validate_runtime() {
         --entrypoint bash "$candidate" -lc '
 set -euo pipefail
 runtime_task="${FLAGSCALE_RUNTIME_TASK:?}"
-if [ "${FLAGSCALE_RUNTIME_MODE:?}" = isolated ]; then
-    export FLAGSCALE_RUNTIME_ROOT="/opt/flagscale/runtimes/${runtime_task}"
-    . "$FLAGSCALE_RUNTIME_ROOT/activate.sh"
+if [ "${FLAGSCALE_RUNTIME_MODE:?}" = all ]; then
+    conda_root="${FLAGSCALE_CONDA:?}"
+    env_name="${FLAGSCALE_ENV_NAME:?}"
+    test -f "$conda_root/etc/profile.d/conda.sh"
+    test -d "$conda_root/envs/$env_name"
+    . "$conda_root/etc/profile.d/conda.sh"
+    conda activate "$env_name"
 else
     case "$runtime_task" in
         train) env_name=flagscale-train ;;
@@ -84,8 +88,8 @@ case "$task" in
         validate_runtime inference direct
         ;;
     all)
-        validate_runtime train isolated
-        validate_runtime inference isolated
+        validate_runtime train all
+        validate_runtime inference all
         ;;
     *)
         echo "Unsupported CUDA image task: $task" >&2

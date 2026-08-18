@@ -60,37 +60,6 @@ activate_uv_env() {
     return 0
 }
 
-# Activate an image-owned runtime prefix. Unlike a Python virtual environment,
-# a runtime prefix may also select vendor libraries (CANN, MACA, etc.). The
-# image must provide an auditable activation contract at <prefix>/activate.sh.
-# Usage: activate_runtime_env [-d debug] <runtime_path>
-activate_runtime_env() {
-    local debug=false
-    [[ "${1:-}" == "-d" ]] && { debug="${2:-false}"; shift 2; }
-
-    local runtime_path=${1:-}
-    [ -z "$runtime_path" ] && { log_error "runtime_path required"; return 1; }
-
-    if [ "$debug" = true ]; then
-        log_info "[dry-run] Activate runtime prefix: $runtime_path"
-        return 0
-    fi
-
-    [ ! -d "$runtime_path" ] && {
-        log_error "Runtime prefix not found: $runtime_path"
-        return 1
-    }
-    [ ! -f "$runtime_path/activate.sh" ] && {
-        log_error "Runtime activation contract not found: $runtime_path/activate.sh"
-        return 1
-    }
-
-    export FLAGSCALE_RUNTIME_ROOT="$runtime_path"
-    source "$runtime_path/activate.sh"
-    log_info "Activated runtime prefix: $runtime_path"
-    return 0
-}
-
 # =============================================================================
 # Conda Environment
 # =============================================================================
