@@ -25,8 +25,9 @@ p800:
         qwen3: ["0_6b_kunlunxin"]
       hetero_train: {}
       benchmark: {}
-      inference:
-        qwen3: ["4b_tp2_kunlunxin"]
+      # Disabled until vllm-plugin-FL can load on P800 without hitting the
+      # FlagGems/Triton autotune(generate_configs=...) compatibility issue.
+      inference: {}
       serve: {}
     unit:
       nproc_per_node: 8
