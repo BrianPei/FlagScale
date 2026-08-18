@@ -25,7 +25,8 @@ p800:
         qwen3: ["0_6b_kunlunxin"]
       hetero_train: {}
       benchmark: {}
-      inference: {}
+      inference:
+        qwen3: ["4b_tp2_kunlunxin"]
       serve: {}
     unit:
       nproc_per_node: 8
