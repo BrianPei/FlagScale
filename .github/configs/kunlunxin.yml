@@ -35,6 +35,9 @@ image_build:
   registry_login: true
   validation_script: tools/install/kunlunxin/validate_image_build.sh
   runner_labels: ["flagscale-kunlun-p800-gpu8"]
+  build_args:
+    PIP_INDEX_URL: https://pypi.org/simple
+    PIP_DEFAULT_TIMEOUT: '300'
   tasks:
     train:
       dockerfile: docker/kunlunxin/Dockerfile.train
