@@ -1,0 +1,103 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Kunlunxin P800 Hardware Configuration
+
+hardware_name: kunlunxin
+display_name: "Kunlunxin P800 Tests"
+
+# Validated task-specific P800 images.
+ci_image: harbor.baai.ac.cn/flagos-dev/flagscale-all:manual-20260817-kunlunxin-p800-dev
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale-train:manual-20260817-kunlunxin-p800-dev
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:manual-20260817-kunlunxin-p800-dev
+
+runner_labels: ["flagscale-kunlun-p800-gpu8"]
+
+image_build:
+  enabled: true
+  registry: harbor.baai.ac.cn
+  target: dev
+  network: default
+  max_parallel: 1
+  runtime_device_count: '8'
+  runtime_smoke_nproc: '2'
+  registry_login: true
+  validation_script: tools/install/kunlunxin/validate_image_build.sh
+  runner_labels: ["flagscale-kunlun-p800-gpu8"]
+  tasks:
+    train:
+      dockerfile: docker/kunlunxin/Dockerfile.train
+      image: flagos-dev/flagscale-train
+      base_image: torch29_xte2.12:v4
+      test_roles: [train]
+      build_args:
+        PKG_MGR: conda
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+    inference:
+      dockerfile: docker/kunlunxin/Dockerfile.inference
+      image: flagos-dev/flagscale-inference
+      base_image: torch29_xte2.12:v4
+      test_roles: [inference]
+      build_args:
+        PKG_MGR: conda
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+    all:
+      dockerfile: docker/kunlunxin/Dockerfile.all
+      image: flagos-dev/flagscale-all
+      base_image: torch29_xte2.12:v4
+      test_roles: [train, inference]
+      test_environments:
+        train:
+          pkg_mgr: conda
+          env_name: python310_torch29_cuda
+          env_path: /root/miniconda
+        inference:
+          pkg_mgr: conda
+          env_name: python310_torch29_cuda
+          env_path: /root/miniconda
+        serve:
+          pkg_mgr: conda
+          env_name: python310_torch29_cuda
+          env_path: /root/miniconda
+      build_args:
+        PKG_MGR: conda
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+
+container_volumes:
+  - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
+  - /mnt/airs-business/cicd/baai_tokenizers:/home/gitlab-runner/tokenizers
+
+container_options: >-
+  --hostname=flagscale-ci
+  --privileged
+  --ipc=host
+  --shm-size=64g
+  --user root
+  --ulimit nofile=65535:65535
+
+timeouts:
+  inference_minutes: 15
+  serve_ready_seconds: 600
+
+pkg_mgr: "conda"
+env_path: "/root/miniconda"
+env_names:
+  train: "python310_torch29_cuda"
+  hetero_train: ""
+  inference: "python310_torch29_cuda"
+  serve: "python310_torch29_cuda"
+  rl: ""
