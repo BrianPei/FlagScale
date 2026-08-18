@@ -57,6 +57,7 @@ image_build:
         PKG_MGR: conda
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+        FLAGSCALE_VLLM_PLUGIN_REF: vllm_plugin_fl
     all:
       dockerfile: docker/kunlunxin/Dockerfile.all
       image: flagos-dev/flagscale-all
@@ -79,6 +80,7 @@ image_build:
         PKG_MGR: conda
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+        FLAGSCALE_VLLM_PLUGIN_REF: vllm_plugin_fl
 
 container_volumes:
   - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
