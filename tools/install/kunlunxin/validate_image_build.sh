@@ -88,9 +88,11 @@ PY
 
 case "$phase" in
     pre)
-        if ! docker image inspect "$base_image" >/dev/null 2>&1; then
-            echo "Kunlunxin base image is not available on this runner: $base_image" >&2
-            echo "Load or pre-pull the vendor image on the P800 runner before building." >&2
+        if [[ "$base_image" == */* ]]; then
+            docker pull "$base_image"
+        elif ! docker image inspect "$base_image" >/dev/null 2>&1; then
+            echo "Kunlunxin base image is not available locally: $base_image" >&2
+            echo "Use a registry-qualified base image or load the vendor image on the P800 runner." >&2
             exit 1
         fi
         validate_cuda_runtime "$base_image" "$task" "$expected_devices"

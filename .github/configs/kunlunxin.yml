@@ -39,7 +39,7 @@ image_build:
     train:
       dockerfile: docker/kunlunxin/Dockerfile.train
       image: flagos-dev/flagscale-train
-      base_image: torch29_xte2.12:v4
+      base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
       test_roles: [train]
       build_args:
         PKG_MGR: conda
@@ -48,7 +48,7 @@ image_build:
     inference:
       dockerfile: docker/kunlunxin/Dockerfile.inference
       image: flagos-dev/flagscale-inference
-      base_image: torch29_xte2.12:v4
+      base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
       test_roles: [inference]
       build_args:
         PKG_MGR: conda
@@ -57,7 +57,7 @@ image_build:
     all:
       dockerfile: docker/kunlunxin/Dockerfile.all
       image: flagos-dev/flagscale-all
-      base_image: torch29_xte2.12:v4
+      base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-kunlunxin-p800-dev
       test_roles: [train, inference]
       test_environments:
         train:
