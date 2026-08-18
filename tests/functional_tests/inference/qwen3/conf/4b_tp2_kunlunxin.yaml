@@ -30,6 +30,9 @@ experiment:
       source /root/miniconda/etc/profile.d/conda.sh && conda activate python310_torch29_cuda && . /etc/profile.d/flagscale-env.sh
   envs:
     HYDRA_FULL_ERROR: 1
+    VLLM_PLUGINS: "fl"
+    VLLM_FL_PLATFORM: "kunlunxin"
+    VLLM_WORKER_MULTIPROC_METHOD: "spawn"
     CUDA_VISIBLE_DEVICES: "0,1"
     CUDA_DEVICE_MAX_CONNECTIONS: 1
     CUBLAS_WORKSPACE_CONFIG: ":4096:8"
