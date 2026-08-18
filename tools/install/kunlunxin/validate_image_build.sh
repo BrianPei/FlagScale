@@ -22,7 +22,10 @@ validate_cuda_runtime() {
     local runtime_task="$2"
     local expected_world_size="$3"
 
-    docker run --rm --gpus all --ipc=host \
+    docker run --rm \
+        --privileged \
+        --ipc=host \
+        --shm-size=64g \
         --env EXPECTED_WORLD_SIZE="$expected_world_size" \
         --env FLAGSCALE_RUNTIME_TASK="$runtime_task" \
         --entrypoint bash "$image" -lc '
