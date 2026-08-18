@@ -77,10 +77,35 @@ assert entrypoints.get("fl") == "vllm_fl:register", entrypoints
 PY
 }
 
+# Install the triton.autotune compat shim into the target conda env so it is
+# auto-imported (via the .pth file) before any `import flag_gems`, for every
+# Python process in that env -- including vLLM spawn workers. Without it,
+# vllm_fl:register -> vllm_fl/utils.py -> import flag_gems crashes at import
+# time because the Kunlunxin flag_gems ops use triton.autotune(generate_configs=...),
+# a keyword the P800 runtime triton does not accept. See triton_autotune_compat.py.
+install_triton_autotune_compat() {
+    set_step "Installing triton.autotune compat shim (generate_configs)"
+    local conda_path="${FLAGSCALE_CONDA:-/root/miniconda}"
+    local env_name="${FLAGSCALE_ENV_NAME:-python310_torch29_cuda}"
+    local env_python="$conda_path/envs/$env_name/bin/python"
+    [ -x "$env_python" ] || env_python="python"
+
+    local site_dir
+    site_dir="$("$env_python" -c 'import site; print(site.getsitepackages()[0])')" \
+        || { log_error "Could not resolve site-packages for triton shim"; return 1; }
+
+    install -m 0644 "$SCRIPT_DIR/triton_autotune_compat.py" \
+        "$site_dir/flagscale_triton_autotune_compat.py"
+    echo "import flagscale_triton_autotune_compat" \
+        > "$site_dir/_flagscale_triton_autotune_compat.pth"
+    log_success "triton.autotune compat shim installed at $site_dir"
+}
+
 main() {
     install_pip || die "Inference pip failed"
     install_vllm_plugin || die "vllm-plugin-FL failed"
     validate_vllm_plugin || die "vllm-plugin-FL validation failed"
+    install_triton_autotune_compat || die "triton.autotune compat shim failed"
 }
 
 main

@@ -83,6 +83,23 @@ elif task == "inference":
     assert tiktoken is not None
     assert transformers is not None
     print("Kunlunxin inference runtime:", torch.__version__, transformers.__version__)
+
+    # Verify the triton.autotune compat shim lets flag_gems import on P800 and
+    # that vLLM loads the fl plugin onto the Kunlunxin platform. Without the
+    # shim, `import flag_gems` raises TypeError (generate_configs) and vLLM
+    # falls back to UnspecifiedPlatform ("Device string must not be empty").
+    import flag_gems
+    os.environ.setdefault("VLLM_PLUGINS", "fl")
+    os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
+    os.environ.setdefault("USE_FLAGGEMS", "false")
+    from vllm.platforms import current_platform
+    platform_module = type(current_platform).__module__
+    platform_class = type(current_platform).__name__
+    print("flag_gems:", getattr(flag_gems, "__file__", "built-in"))
+    print("platform_module:", platform_module, "platform_class:", platform_class)
+    assert "vllm_fl" in platform_module, (
+        f"vLLM did not load fl plugin; platform={platform_module}.{platform_class}"
+    )
 elif task == "all":
     import flagcx
     import megatron.core
@@ -102,6 +119,22 @@ elif task == "all":
     expected = Path(os.environ.get("FLAGSCALE_MEGATRON_PATH", "/opt/flagscale/deps/Megatron-LM-FL")).resolve()
     actual = Path(megatron.core.__file__).resolve()
     assert actual.is_relative_to(expected), (actual, expected)
+
+    # Same flag_gems / vLLM platform probe as the inference task. Catches the
+    # triton.autotune(generate_configs) import failure at build time instead of
+    # at the inference functional test.
+    import flag_gems
+    os.environ.setdefault("VLLM_PLUGINS", "fl")
+    os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
+    os.environ.setdefault("USE_FLAGGEMS", "false")
+    from vllm.platforms import current_platform
+    platform_module = type(current_platform).__module__
+    platform_class = type(current_platform).__name__
+    print("flag_gems:", getattr(flag_gems, "__file__", "built-in"))
+    print("platform_module:", platform_module, "platform_class:", platform_class)
+    assert "vllm_fl" in platform_module, (
+        f"vLLM did not load fl plugin; platform={platform_module}.{platform_class}"
+    )
     print("Kunlunxin all runtime:", torch.__version__, megatron.core.__file__)
 else:
     raise SystemExit(f"Unsupported Kunlunxin runtime task: {task}")
