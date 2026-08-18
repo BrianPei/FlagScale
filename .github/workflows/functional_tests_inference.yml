@@ -241,7 +241,7 @@ jobs:
             python -c 'import importlib.metadata as metadata; print("vllm:", metadata.version("vllm")); print("vllm-plugin-fl:", metadata.version("vllm-plugin-fl") if "vllm-plugin-fl" in {dist.metadata["Name"].lower() for dist in metadata.distributions()} else "not-installed"); print("platform_plugins:", {entry.name: entry.value for entry in metadata.entry_points(group="vllm.platform_plugins")})' || true
             for candidate in kunlunxin kunlunxin_p800 xpu cuda; do
               echo "VLLM_FL_PLATFORM=$candidate"
-              VLLM_PLUGINS=fl VLLM_FL_PLATFORM="$candidate" python -c 'from vllm.platforms import current_platform; print("platform_module:", type(current_platform).__module__); print("platform_class:", type(current_platform).__name__); print("vendor_name:", getattr(current_platform, "vendor_name", None)); print("device_type:", getattr(current_platform, "device_type", None)); print("dist_backend:", getattr(current_platform, "dist_backend", None))' || true
+              USE_FLAGGEMS=0 VLLM_PLUGINS=fl VLLM_FL_PLATFORM="$candidate" python -c 'from vllm.platforms import current_platform; print("platform_module:", type(current_platform).__module__); print("platform_class:", type(current_platform).__name__); print("vendor_name:", getattr(current_platform, "vendor_name", None)); print("device_type:", getattr(current_platform, "device_type", None)); print("dist_backend:", getattr(current_platform, "dist_backend", None))' || true
             done
           fi
 
