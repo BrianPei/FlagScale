@@ -13,7 +13,11 @@ FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/kunlunxin/inference.txt"
 VLLM_PLUGIN_REPO="${FLAGSCALE_VLLM_PLUGIN_REPO:-https://github.com/flagos-ai/vllm-plugin-FL.git}"
-VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-main}"
+# Pin to the vllm-plugin-FL release that targets vllm 0.13.0 (the version
+# preinstalled in the P800 base image). Tracking `main` pulls code adapted for
+# vllm 0.20.2, whose `from vllm.v1.attention.backends.registry import ...` does
+# not exist on 0.13.0, so vLLM fails to resolve current_platform at import.
+VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-v0.1.1+vllm0.13.0}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac
