@@ -72,6 +72,13 @@ patch, before flag_gems' ``@triton.autotune`` decorators execute. Startup
 therefore touches neither triton nor any CUDA library, and torch loads exactly as
 it does without the shim.
 
+A second finder, ``_FlagGemsCompatFinder``, re-runs ``_apply_patch`` before
+every fresh ``import flag_gems``. This covers the ``all`` image, where
+``import torch`` pulls in TE-FL which imports flag_gems (and thus triton)
+while torch is still half-initialised -- the triton finder's single shot at
+``_apply_patch`` then fails in that context, so the flag_gems finder defers
+the flag_gems import and retries once torch is fully up.
+
 Installed next to a ``.pth`` file by ``install_inference.sh`` so it auto-imports
 for every Python process in the Kunlunxin inference/serve/all conda env (including
 vLLM ``spawn`` workers).
@@ -192,7 +199,58 @@ class _TritonCompatFinder(importlib.abc.MetaPathFinder):
         return real_spec
 
 
-# Insert at the front so we see ``import triton`` before the cached/builtin
-# finders. Pure registration -- no triton import happens here.
-if not any(isinstance(f, _TritonCompatFinder) for f in sys.meta_path):
-    sys.meta_path.insert(0, _TritonCompatFinder())
+class _FlagGemsCompatFinder(importlib.abc.MetaPathFinder):
+    """Re-run ``_apply_patch`` right before every fresh ``import flag_gems``.
+
+    The triton finder above only catches the *first* ``import triton``. In the
+    ``all`` image, ``import torch`` triggers TE-FL to ``import flag_gems`` (and
+    thus triton) while torch is still half-initialised; ``_apply_patch``'s
+    ``import triton.language.math`` then fails and is swallowed by the triton
+    finder's ``except: pass``, leaving ``triton.language.math`` without the
+    ``__getattr__`` shim. TE-FL catches the flag_gems failure, but triton is now
+    cached unpatched, so the later probe ``import flag_gems`` dies on
+    ``arcsin``'s ``tl_extra_shim.asin``.
+
+    This finder re-runs ``_apply_patch`` (idempotent) immediately before
+    flag_gems executes. If triton.language.math still cannot load, it defers
+    the flag_gems import by raising ImportError so the caller catches it and
+    the next attempt -- by which time torch is fully up -- patches cleanly.
+    """
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname != "flag_gems":
+            return None
+        real_spec = importlib.machinery.PathFinder.find_spec("flag_gems", path)
+        if real_spec is None or real_spec.loader is None:
+            return real_spec
+        real_loader = real_spec.loader
+
+        class _PatchingLoader(importlib.abc.Loader):
+            def create_module(self, spec):
+                if hasattr(real_loader, "create_module"):
+                    return real_loader.create_module(spec)
+                return None
+
+            def exec_module(self, module):
+                try:
+                    _apply_patch()
+                except Exception:
+                    # triton.language.math not importable yet (torch still
+                    # half-initialised inside TE-FL's flag_gems import). Defer
+                    # this import; the caller (TE-FL) catches it and we retry
+                    # on the next flag_gems import, once torch is fully up.
+                    raise ImportError(
+                        "flagscale triton compat patch pending; "
+                        "deferring flag_gems import"
+                    ) from None
+                real_loader.exec_module(module)
+
+        real_spec.loader = _PatchingLoader()
+        return real_spec
+
+
+# Insert at the front so we see ``import triton`` / ``import flag_gems`` before
+# the cached/builtin finders. Pure registration -- no triton import happens here.
+for _finder in (_TritonCompatFinder, _FlagGemsCompatFinder):
+    if not any(isinstance(f, _finder) for f in sys.meta_path):
+        sys.meta_path.insert(0, _finder())
