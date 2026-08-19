@@ -57,6 +57,13 @@ install_vllm_plugin() {
     checkout_pinned_ref "$VLLM_PLUGIN_REPO" "$VLLM_PLUGIN_REF" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
 
+    # Patch upstream vllm-plugin-FL for Kunlunxin P800: register the
+    # kunlunxin vendor (VENDOR_DEVICE_MAP + supported_device) and fall back
+    # to flag_gems' device_finder DeviceDetector on flag_gems >=5.0.3.
+    # See patch_vllm_fl_kunlunxin.py; remove once upstream supports kunlunxin.
+    python "$SCRIPT_DIR/patch_vllm_fl_kunlunxin.py" \
+        "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
+
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
     run_cmd -d "$DEBUG" bash -c \
