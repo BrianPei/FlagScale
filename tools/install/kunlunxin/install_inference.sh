@@ -71,6 +71,16 @@ install_vllm_plugin() {
     python "$SCRIPT_DIR/patch_flagcx_kunlunxin.py" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
 
+    # Patch vllm_fl platform.py so kunlunxin uses the TORCH_SDPA attention
+    # backend. vllm_fl's get_attn_backend_cls ignores the case yaml's
+    # attention_backend and resolves via dispatch, whose built-ins return
+    # TRITON_ATTN (flagos) or FLASH_ATTN (reference) -- neither runs on the P800
+    # (no NVIDIA flash_attn => reshape_and_cache_flash NameError; triton-attn
+    # kernel not XPU-compatible). See patch_attention_backend_kunlunxin.py;
+    # remove once vllm_fl dispatch has a kunlunxin attention_backend impl.
+    python "$SCRIPT_DIR/patch_attention_backend_kunlunxin.py" \
+        "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
+
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
     run_cmd -d "$DEBUG" bash -c \
