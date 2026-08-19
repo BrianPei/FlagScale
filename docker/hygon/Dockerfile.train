@@ -74,7 +74,7 @@ COPY requirements/common.txt /tmp/requirements/common.txt
 COPY requirements/hygon /tmp/requirements/hygon
 
 RUN set -eux; \
-    python -c "from pathlib import Path; import torch; Path('/tmp/flagscale-vendor-torch').write_text(torch.__version__ + '\\n' + torch.__file__); Path('/tmp/flagscale-torch-constraint.txt').write_text('torch==' + torch.__version__ + '\\n')"; \
+    python -c "from importlib.metadata import distribution; from pathlib import Path; dist=distribution('torch'); location=str(dist.locate_file('torch')); Path('/tmp/flagscale-vendor-torch').write_text(dist.version + '\\n' + location); Path('/tmp/flagscale-torch-constraint.txt').write_text('torch==' + dist.version + '\\n')"; \
     python -m pip install \
         "setuptools>=64.0,<77.0" \
         "setuptools-scm>=8.0,<10.0" \
@@ -121,7 +121,7 @@ RUN set -eux; \
     TE_FL_SKIP_CUDA=1 python -m pip install --no-build-isolation --no-deps \
         -e "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
     python -m pip show transformer-engine >/dev/null; \
-    python -c "from pathlib import Path; import torch; expected=Path('/tmp/flagscale-vendor-torch').read_text().splitlines(); actual=[torch.__version__, torch.__file__]; assert actual == expected, f'vendor torch changed: expected {expected}, found {actual}'"; \
+    python -c "from importlib.metadata import distribution; from pathlib import Path; dist=distribution('torch'); expected=Path('/tmp/flagscale-vendor-torch').read_text().splitlines(); actual=[dist.version, str(dist.locate_file('torch'))]; assert actual == expected, f'vendor torch changed: expected {expected}, found {actual}'"; \
     rm /tmp/flagscale-vendor-torch /tmp/flagscale-torch-constraint.txt
 
 FROM deps AS dev
