@@ -40,11 +40,14 @@ vendor kernels.
 
 What the shim does
 ------------------
-1. ``triton.language.math``: PEP 562 ``__getattr__`` returns a dummy callable for
-   any missing math intrinsic (``asin``, ``acos``, ``atan``, ...) so module-level
-   attribute access in flag_gems ops does not raise. The dummy raises loudly if
-   ever actually called, so a real dispatch through a missing intrinsic fails
-   visibly instead of silently computing wrong values.
+1. ``triton.language.math``: PEP 562 ``__getattr__`` returns a real, existing
+   intrinsic (``sin``) as a stand-in for any missing one (``asin``, ``acos``,
+   ``atan``, ...), so module-level attribute access in flag_gems ops does not
+   raise AND triton's AST dependency analyser (run by ``pointwise_dynamic``'s
+   ``cache_key`` at import) accepts it -- a bare dummy callable makes that
+   analyser raise ``Unsupported function referenced`` and kills the import. The
+   stand-in is never dispatched (``USE_FLAGGEMS=false``), so its wrong semantics
+   are inert.
 2. ``triton.autotune``: tolerate newer-triton kwargs (``generate_configs``, ...)
    the P800 runtime rejects, by retrying without them on ``TypeError``.
 
@@ -94,17 +97,6 @@ import sys
 _COMPAT_AUTOTUNE_DROP = ("generate_configs",)
 
 
-def _make_missing_math_dummy(name):
-    def _missing_math(*args, **kwargs):  # pragma: no cover - only on real dispatch
-        raise RuntimeError(
-            f"triton.language.math.{name} is not provided by the P800 runtime "
-            "triton; the flag_gems op using it must not be dispatched "
-            "(set USE_FLAGGEMS=false)."
-        )
-    _missing_math.__name__ = name
-    return _missing_math
-
-
 def _apply_patch():
     """Patch the already-imported ``triton`` package. Idempotent.
 
@@ -115,9 +107,18 @@ def _apply_patch():
     import triton
     import triton.language.math as _tl_math
 
-    # --- triton.language.math: synthesize dummies for missing intrinsics -----
+    # --- triton.language.math: stand-in for missing intrinsics -------------
     if not getattr(_tl_math, "_flagscale_math_compat", False):
         _orig_math_getattr = getattr(_tl_math, "__getattr__", None)
+        # flag_gems ops reference intrinsics the P800 runtime triton lacks
+        # (e.g. asin). A bare dummy callable breaks triton's AST dependency
+        # analyser (jit dependencies_finder, run by pointwise_dynamic's
+        # cache_key at import): it raises "Unsupported function referenced"
+        # and the whole flag_gems import dies. Return a real, existing
+        # intrinsic (sin) instead -- the analyser accepts known intrinsics.
+        # It is never dispatched: USE_FLAGGEMS=false keeps flag_gems ops off
+        # the dispatch path, so the wrong-semantics stand-in is inert.
+        _standin = _tl_math.sin
 
         def _math_getattr(name):
             if _orig_math_getattr is not None:
@@ -125,7 +126,7 @@ def _apply_patch():
                     return _orig_math_getattr(name)
                 except AttributeError:
                     pass
-            return _make_missing_math_dummy(name)
+            return _standin
 
         _tl_math.__getattr__ = _math_getattr
         _tl_math._flagscale_math_compat = True
