@@ -64,6 +64,13 @@ install_vllm_plugin() {
     python "$SCRIPT_DIR/patch_vllm_fl_kunlunxin.py" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
 
+    # Patch vllm_fl flagcx.py for the FlagCX wrapper API shipped in the P800
+    # base image (flagcxGetUniqueId returns an object, flagcxCommInitRank takes
+    # the object not a byref). See patch_flagcx_kunlunxin.py; remove once
+    # vllm_fl matches the base-image FlagCX wrapper API.
+    python "$SCRIPT_DIR/patch_flagcx_kunlunxin.py" \
+        "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
+
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
     run_cmd -d "$DEBUG" bash -c \
