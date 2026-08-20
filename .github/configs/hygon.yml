@@ -15,15 +15,15 @@
 hardware_name: hygon
 display_name: "Hygon BW1000 Tests"
 
-# Stable BW1000 training image validated by the Hygon functional test.
+# Stable BW1000 images validated by the Hygon functional tests.
 ci_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
 ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:8b5c7f1-hygon-dev
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:vllm-plugin-fl-hygon-vllm0.20.2-dtk26.04-py3.10-ci
 
 runner_labels: ["flagscale-hygon-bw1000-gpu8"]
 
-# Image build contract consumed by the generic build workflow. Hygon currently
-# provides a training image only; inference dependencies are intentionally
-# excluded from this image.
+# Image build contract consumed by the generic build workflow. Training and
+# inference remain separate so the vLLM runtime never enters the train image.
 image_build:
   enabled: true
   registry: harbor.baai.ac.cn
@@ -49,6 +49,24 @@ image_build:
         TRANSFORMER_ENGINE_REF: transformer_engine_fl
       test_environments:
         train:
+          pkg_mgr: pip
+          env_name: ""
+          env_path: /usr/local
+    inference:
+      dockerfile: docker/hygon/Dockerfile.inference
+      image: flagos-dev/flagscale-inference
+      test_roles: [inference]
+      base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:vllm-plugin-fl-hygon-vllm0.20.2-dtk26.04-py3.10-ci
+      build_args: {}
+      source_refs:
+        FLAGGEMS_REF: flaggems
+        VLLM_PLUGIN_FL_REF: vllm_plugin_fl
+      test_environments:
+        inference:
+          pkg_mgr: pip
+          env_name: ""
+          env_path: /usr/local
+        serve:
           pkg_mgr: pip
           env_name: ""
           env_path: /usr/local

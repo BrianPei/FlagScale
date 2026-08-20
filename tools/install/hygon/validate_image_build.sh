@@ -11,7 +11,7 @@ candidate="${IMAGE_BUILD_CANDIDATE_IMAGE:?IMAGE_BUILD_CANDIDATE_IMAGE is require
 nproc="${IMAGE_BUILD_RUNTIME_SMOKE_NPROC:?IMAGE_BUILD_RUNTIME_SMOKE_NPROC is required}"
 device_count="${IMAGE_BUILD_RUNTIME_DEVICE_COUNT:?IMAGE_BUILD_RUNTIME_DEVICE_COUNT is required}"
 
-if [ "$phase" != post ] || [ "$task" != train ]; then
+if [ "$phase" != post ]; then
     exit 0
 fi
 
@@ -30,9 +30,10 @@ runtime_options=(
     --security-opt seccomp=unconfined
 )
 
-docker run "${runtime_options[@]}" \
-    --env EXPECTED_DEVICE_COUNT="$device_count" \
-    --entrypoint python "$candidate" -c '
+if [ "$task" = train ]; then
+    docker run "${runtime_options[@]}" \
+        --env EXPECTED_DEVICE_COUNT="$device_count" \
+        --entrypoint python "$candidate" -c '
 import os
 import torch
 import flag_gems
@@ -50,9 +51,42 @@ assert get_manager().get_selected_impl_id("generic_gemm") == "default.flagos"
 value = torch.tensor(list(range(8)), dtype=torch.float32, device="cuda")
 assert (value * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]
 '
+elif [ "$task" = inference ]; then
+    docker run "${runtime_options[@]}" \
+        --env EXPECTED_DEVICE_COUNT="$device_count" \
+        --env GEMS_VENDOR=hygon \
+        --env VLLM_PLUGINS=fl \
+        --env VLLM_FL_PLATFORM=hygon \
+        --entrypoint python "$candidate" -c '
+import importlib.metadata as metadata
+import os
+
+import flag_gems
+import torch
+import vllm
+import vllm_fl
+
+required = int(os.environ["EXPECTED_DEVICE_COUNT"])
+plugins = {
+    entry.name: entry.value
+    for entry in metadata.entry_points(group="vllm.platform_plugins")
+}
+assert torch.cuda.is_available()
+assert torch.cuda.device_count() >= required
+assert flag_gems.vendor_name == "hygon"
+assert vllm.__version__.startswith("0.20.2"), vllm.__version__
+assert plugins.get("fl") == "vllm_fl:register", plugins
+value = torch.tensor([1.0, 2.0], device="cuda")
+assert (value + 1).cpu().tolist() == [2.0, 3.0]
+'
+else
+    echo "Unsupported Hygon image task: $task" >&2
+    exit 1
+fi
 
 docker run "${runtime_options[@]}" \
     --env EXPECTED_WORLD_SIZE="$nproc" \
+    --env GEMS_VENDOR=hygon \
     "$candidate" \
     torchrun --standalone --nproc_per_node="$nproc" \
         --no-python python -c '

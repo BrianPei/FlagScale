@@ -23,8 +23,10 @@ bw1000:
         qwen3: ["0_6b_hygon"]
       hetero_train: {}
       benchmark: {}
-      inference: {}
-      serve: {}
+      inference:
+        qwen3: ["4b_tp2_hygon"]
+      serve:
+        qwen3: ["4b_tp2_hygon"]
     unit:
       # Exercise the real two-rank NCCL path instead of an empty pytest smoke.
       nproc_per_node: 2
