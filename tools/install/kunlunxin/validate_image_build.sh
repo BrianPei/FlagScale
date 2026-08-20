@@ -92,6 +92,17 @@ elif task == "inference":
     os.environ.setdefault("VLLM_PLUGINS", "fl")
     os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
     os.environ.setdefault("USE_FLAGGEMS", "false")
+    # The vllm plugin loader swallows register() failures, leaving
+    # current_platform as UnspecifiedPlatform with no traceback. Run
+    # register() explicitly so the real exception -- which step of
+    # vllm_fl:register fails on the P800 -- surfaces in the CI log.
+    import vllm_fl
+    try:
+        print("vllm_fl.register() ->", vllm_fl.register())
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        raise SystemExit(1)
     from vllm.platforms import current_platform
     platform_module = type(current_platform).__module__
     platform_class = type(current_platform).__name__
@@ -127,6 +138,17 @@ elif task == "all":
     os.environ.setdefault("VLLM_PLUGINS", "fl")
     os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
     os.environ.setdefault("USE_FLAGGEMS", "false")
+    # The vllm plugin loader swallows register() failures, leaving
+    # current_platform as UnspecifiedPlatform with no traceback. Run
+    # register() explicitly so the real exception -- which step of
+    # vllm_fl:register fails on the P800 -- surfaces in the CI log.
+    import vllm_fl
+    try:
+        print("vllm_fl.register() ->", vllm_fl.register())
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        raise SystemExit(1)
     from vllm.platforms import current_platform
     platform_module = type(current_platform).__module__
     platform_class = type(current_platform).__name__

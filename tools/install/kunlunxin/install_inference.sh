@@ -56,6 +56,38 @@ checkout_pinned_ref() {
         git -C '$target' checkout -q --detach FETCH_HEAD"
 }
 
+# vLLM ref. The P800 base image ships a vendor vllm that is NOT 0.20.2, which
+# breaks vllm-plugin-FL main's register() (the plugin imports vllm 0.20.2 APIs
+# the base vllm lacks -> register() throws -> vllm swallows it ->
+# current_platform stays UnspecifiedPlatform). The official Kunlunxin record
+# (/home/wyi/下载/kunlunxin+vllm0.20.2+vllm-plugin-fl.pdf) uninstalls the image
+# vllm and rebuilds v0.20.2+empty before installing the plugin; mirror that.
+# VLLM_TARGET_DEVICE=empty skips CUDA/Triton compile (reuses the image's
+# torch_xmlir/triton); --no-deps keeps image deps (torch/triton/flag_gems) intact.
+VLLM_REF="${FLAGSCALE_VLLM_REF:-v0.20.2}"
+VLLM_REPO="${FLAGSCALE_VLLM_REPO:-https://github.com/vllm-project/vllm.git}"
+
+install_vllm() {
+    set_step "Installing vLLM $VLLM_REF (VLLM_TARGET_DEVICE=empty)"
+    mkdir -p "$FLAGSCALE_DEPS"
+    checkout_pinned_ref "$VLLM_REPO" "$VLLM_REF" \
+        "$FLAGSCALE_DEPS/vllm" || return 1
+
+    local pip_cmd
+    pip_cmd=$(get_pip_cmd)
+    # Uninstall the image's vendor vllm so the 0.20.2 build takes precedence.
+    run_cmd -d "$DEBUG" bash -c "$pip_cmd uninstall -y vllm vllm_xpu" || true
+    # setuptools_scm is required to build vllm from source.
+    run_cmd -d "$DEBUG" $pip_cmd install --root-user-action=ignore setuptools_scm || return 1
+    # empty target = no CUDA/Triton compile; --no-deps keeps image torch/triton.
+    run_cmd -d "$DEBUG" bash -c \
+        "cd '$FLAGSCALE_DEPS/vllm' && VLLM_TARGET_DEVICE=empty $pip_cmd install -v \
+        --no-build-isolation --no-deps ." || return 1
+    # vllm 0.20.2 requires numpy<2.0 (official record pins this).
+    run_cmd -d "$DEBUG" $pip_cmd install --root-user-action=ignore "numpy<2.0" || return 1
+    log_success "vLLM $VLLM_REF (VLLM_TARGET_DEVICE=empty) installed"
+}
+
 install_vllm_plugin() {
     set_step "Installing resolved vllm-plugin-FL"
     mkdir -p "$FLAGSCALE_DEPS"
@@ -137,6 +169,7 @@ install_triton_autotune_compat() {
 
 main() {
     install_pip || die "Inference pip failed"
+    install_vllm || die "vLLM install failed"
     install_vllm_plugin || die "vllm-plugin-FL failed"
     validate_vllm_plugin || die "vllm-plugin-FL validation failed"
     install_triton_autotune_compat || die "triton.autotune compat shim failed"
