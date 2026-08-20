@@ -33,7 +33,23 @@ experiment:
     VLLM_PLUGINS: "fl"
     VLLM_FL_PLATFORM: "kunlunxin"
     VLLM_WORKER_MULTIPROC_METHOD: "spawn"
-    USE_FLAGGEMS: "false"
+    # Kunlunxin P800 attention runs on the vllm-plugin-FL main native kunlunxin
+    # vendor backend (PR #268). VLLM_FL_PREFER=vendor makes vllm_fl's
+    # use_flaggems() return False (utils.py: prefer_backend != "flagos" short-
+    # circuits before USE_FLAGGEMS is read), so attention dispatches to the
+    # vendor backend (torch_xmlir XFlashAttention, not triton) -- avoiding the
+    # libcuda.so.1 assert that killed the FlagGems triton path (server.md).
+    # Aligns with the FlagRelease Qwen3.6-35B-A3B-nomtp-kunlunxin-FlagOS env.
+    VLLM_FL_PREFER: "vendor"
+    # vendor backend uses reshape_and_cache_flash; official FlagRelease sets 1.
+    USE_RESHAPE_AND_CACHE_FLASH: "1"
+    # Log vllm_fl dispatch routing (which backend each op resolves to).
+    VLLM_FL_DISPATCH_DEBUG: "1"
+    # flag_gems library vendor selection (used at import by DeviceDetector /
+    # backend init). vllm_fl op dispatch is disabled by VLLM_FL_PREFER=vendor,
+    # but flag_gems itself still needs the kunlunxin vendor to init correctly
+    # (its quick-cmd probe has no kunlunxin entry).
+    GEMS_VENDOR: "kunlunxin"
     CUDA_VISIBLE_DEVICES: "0,1"
     CUDA_DEVICE_MAX_CONNECTIONS: 1
     CUBLAS_WORKSPACE_CONFIG: ":4096:8"

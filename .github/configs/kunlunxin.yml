@@ -55,8 +55,16 @@ image_build:
       test_roles: [inference]
       build_args:
         PKG_MGR: conda
+      # Pull vllm-plugin-FL from main (PR #268 native kunlunxin backend:
+      # VENDOR_DEVICE_MAP + vendor attention backend + is_cuda fast path) so
+      # the image ships native kunlunxin support, instead of the v0.1.1 pin
+      # (no kunlunxin support) that needs the 4 source patches. The build
+      # workflow resolves vllm_plugin_fl (image_sources.yml: branch main) to
+      # the main HEAD sha and passes it as the FLAGSCALE_VLLM_PLUGIN_REF
+      # Dockerfile ARG, overriding the v0.1.1 default.
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+        FLAGSCALE_VLLM_PLUGIN_REF: vllm_plugin_fl
     all:
       dockerfile: docker/kunlunxin/Dockerfile.all
       image: flagos-dev/flagscale-all
@@ -77,8 +85,11 @@ image_build:
           env_path: /root/miniconda
       build_args:
         PKG_MGR: conda
+      # Same as the inference task: pull vllm-plugin-FL main (PR #268 native
+      # kunlunxin) over the v0.1.1 default. See inference source_refs above.
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
+        FLAGSCALE_VLLM_PLUGIN_REF: vllm_plugin_fl
 
 container_volumes:
   - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data

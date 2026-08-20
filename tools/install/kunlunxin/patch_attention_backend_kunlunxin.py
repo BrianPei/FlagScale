@@ -38,6 +38,16 @@ and the wider FlagOS stack runs Kunlunxin on flash attention (see
 TransformerEngine-FL PRs #27/#29/#30). Under ``enforce_eager=True`` vLLM calls
 the selected backend's forward directly, so the backend choice is decisive.
 
+This backend only runs under ``USE_FLAGGEMS=true``: its forward calls
+``flag_gems`` ops, which are never dispatched when ``USE_FLAGGEMS=false`` (the
+shim only imports flag_gems for platform detection). The case yaml must set
+``USE_FLAGGEMS=true`` and ``GEMS_VENDOR=kunlunxin`` (FlagGems auto-detection
+has no quick-cmd probe for kunlunxin, so the vendor must be set explicitly,
+matching the DeepSeek-R1-FlagOS-Kunlunxin deployment). FlagGems' kunlunxin
+ops are triton kernels, so the box must provide a Triton that JITs on the
+P800 (FlagTree xpu backend) -- otherwise triton falls back to the nvidia
+driver and asserts on libcuda.so.1.
+
 Force ``AttentionFLBackend`` for kunlunxin -- this is the v0.1.1 patch
 equivalent of upstream PR #34's "enable FlagGems attention backend" intent.
 

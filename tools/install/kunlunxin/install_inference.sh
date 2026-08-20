@@ -13,10 +13,15 @@ FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
 REQ_FILE="$PROJECT_ROOT/requirements/kunlunxin/inference.txt"
 VLLM_PLUGIN_REPO="${FLAGSCALE_VLLM_PLUGIN_REPO:-https://github.com/flagos-ai/vllm-plugin-FL.git}"
-# Pin to the vllm-plugin-FL release that targets vllm 0.13.0 (the version
-# preinstalled in the P800 base image). Tracking `main` pulls code adapted for
-# vllm 0.20.2, whose `from vllm.v1.attention.backends.registry import ...` does
-# not exist on 0.13.0, so vLLM fails to resolve current_platform at import.
+# vllm-plugin-FL ref. CI image builds inject the main HEAD sha via the
+# FLAGSCALE_VLLM_PLUGIN_REF Dockerfile ARG (.github/configs/kunlunxin.yml
+# source_refs -> vllm_plugin_fl, image_sources.yml branch main), so main is
+# used in CI. main (PR #268) ships native kunlunxin support (VENDOR_DEVICE_MAP
+# + vendor attention backend + is_cuda fast path), replacing the v0.1.1 +
+# 4-source-patch path. The P800 base vllm (0.2.0+g38e7dbc...) shares the
+# vllm-plugin-FL main tree sha, so the two are the same ecosystem -- main is
+# the supported match, not a mismatch. The v0.1.1 default below is only a
+# local fallback when the ARG is unset (running this script outside a build).
 VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-v0.1.1+vllm0.13.0}"
 
 while [[ $# -gt 0 ]]; do
@@ -57,10 +62,10 @@ install_vllm_plugin() {
     checkout_pinned_ref "$VLLM_PLUGIN_REPO" "$VLLM_PLUGIN_REF" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
 
-    # Patch upstream vllm-plugin-FL for Kunlunxin P800: register the
-    # kunlunxin vendor (VENDOR_DEVICE_MAP + supported_device) and fall back
-    # to flag_gems' device_finder DeviceDetector on flag_gems >=5.0.3.
-    # See patch_vllm_fl_kunlunxin.py; remove once upstream supports kunlunxin.
+    # Register the kunlunxin vendor (VENDOR_DEVICE_MAP + supported_device).
+    # On main (PR #268) this is already native, so the patch's old anchor is
+    # absent and it idempotently skips. Kept for the v0.1.1 local fallback.
+    # See patch_vllm_fl_kunlunxin.py.
     python "$SCRIPT_DIR/patch_vllm_fl_kunlunxin.py" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
 
@@ -71,13 +76,14 @@ install_vllm_plugin() {
     python "$SCRIPT_DIR/patch_flagcx_kunlunxin.py" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
 
-    # Patch vllm_fl platform.py so kunlunxin uses the TORCH_SDPA attention
-    # backend. vllm_fl's get_attn_backend_cls ignores the case yaml's
-    # attention_backend and resolves via dispatch, whose built-ins return
-    # TRITON_ATTN (flagos) or FLASH_ATTN (reference) -- neither runs on the P800
-    # (no NVIDIA flash_attn => reshape_and_cache_flash NameError; triton-attn
-    # kernel not XPU-compatible). See patch_attention_backend_kunlunxin.py;
-    # remove once vllm_fl dispatch has a kunlunxin attention_backend impl.
+    # Force the FlagGems AttentionFLBackend for kunlunxin (v0.1.1-only patch).
+    # On main the anchor is gone -- get_attn_backend_cls now calls the
+    # module-level _attention_backend CachedOp, not call_op("attention_backend",
+    # ...) -- so it idempotently skips. main uses VLLM_FL_PREFER=vendor (set in
+    # the case yaml) -> the native kunlunxin vendor attention backend
+    # (torch_xmlir XFlashAttention, not triton), which is the supported path and
+    # avoids the libcuda.so.1 assert of the FlagGems triton path. Kept for the
+    # v0.1.1 local fallback. See patch_attention_backend_kunlunxin.py.
     python "$SCRIPT_DIR/patch_attention_backend_kunlunxin.py" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
 
