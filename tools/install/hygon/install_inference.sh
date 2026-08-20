@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/../utils/utils.sh"
 source "$SCRIPT_DIR/../utils/pkg_utils.sh"
 source "$SCRIPT_DIR/../utils/retry_utils.sh"
 
+PROJECT_ROOT=$(get_project_root)
 DEBUG="${FLAGSCALE_DEBUG:-false}"
 RETRY_COUNT="${FLAGSCALE_RETRY_COUNT:-3}"
 FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
