@@ -84,11 +84,15 @@ else
     exit 1
 fi
 
+# Each smoke test runs in its own container network namespace. Use a fixed
+# local rendezvous port because torchrun's automatic port selection is flaky
+# with the DTK TCPStore and can resolve to localhost:0 on this runner.
 docker run "${runtime_options[@]}" \
     --env EXPECTED_WORLD_SIZE="$nproc" \
     --env GEMS_VENDOR=hygon \
     "$candidate" \
-    torchrun --standalone --nproc_per_node="$nproc" \
+    torchrun --nnodes=1 --node_rank=0 --nproc_per_node="$nproc" \
+        --master_addr=127.0.0.1 --master_port=29500 \
         --no-python python -c '
 import os
 import torch
