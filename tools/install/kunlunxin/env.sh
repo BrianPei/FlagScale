@@ -29,7 +29,27 @@ fi
 # flagcx (FlagOS collective lib over XCCL) + its python wrapper. Setting
 # FLAGCX_PATH switches vllm_fl PlatformFL.dist_backend to "flagcx" so
 # CommunicatorFL (real flagcx, full op coverage incl. reduce_scatter/all_gather)
-# is used instead of CudaCommunicator (NCCL, unusable on P800).
+# is used instead of CudaCommunicator (NCCL, unusable on P800). The wrapper
+# ships differently per base image, so auto-detect (like XRE_HOME):
+#  - Official Kunlunxin runtime image: pip editable install. An egg-link sits
+#    in site-packages but its source dir is NOT on sys.path (no
+#    easy-install.pth / conda site skips .pth), so `import flagcx` (re-issued
+#    by the torch_xmlir import hook via __origin__import__) misses. Point
+#    FLAGCX_PATH at the egg-link source dir so PYTHONPATH picks it up.
+#  - flagos-dev manual base: flagcx under /opt/FlagCX (no egg-link) -> the
+#    /opt/FlagCX default below covers it. (A /plugin subdir check was tried
+#    first but it matched /opt/FlagCX on the runtime image too -- which has a
+#    /plugin dir but not the flagcx package -- shadowing the egg-link fallback.)
+# A caller-set value wins.
+if [ -z "${FLAGCX_PATH:-}" ]; then
+    for _el in \
+        "$FLAGSCALE_CONDA"/envs/"$FLAGSCALE_ENV_NAME"/lib/python*/site-packages/flagcx.egg-link \
+        /usr/lib/python*/site-packages/flagcx.egg-link; do
+        [ -f "$_el" ] || continue
+        _dir=$(head -1 "$_el" 2>/dev/null)
+        [ -n "$_dir" ] && [ -d "$_dir" ] && FLAGCX_PATH="$_dir" && break
+    done
+fi
 : "${FLAGCX_PATH:=/opt/FlagCX}"
 
 : "${UV_HTTP_TIMEOUT:=500}"

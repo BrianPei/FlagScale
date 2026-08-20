@@ -134,6 +134,24 @@ elif task == "inference":
         f"vLLM did not load fl plugin; platform={platform_module}.{platform_class}"
     )
 elif task == "all":
+    # Surface the flagcx install root before importing. The runtime image
+    # ships flagcx0.13.0 as a pip editable install (egg-link in site-packages
+    # whose source dir env.sh adds to PYTHONPATH). If import still fails, the
+    # flagcx pkg glob + sys.path below reveal why (wrong layout / not on path).
+    import glob as _g, site as _site
+    print("FLAGCX_PATH:", os.environ.get("FLAGCX_PATH"))
+    _sp = _site.getsitepackages()[0]
+    _el = _sp + "/flagcx.egg-link"
+    _src = ""
+    if os.path.exists(_el):
+        _lines = Path(_el).read_text().splitlines()
+        _src = _lines[0] if _lines else ""
+        print("egg-link source:", _src)
+    if _src:
+        print("flagcx pkg dirs:",
+              _g.glob(_src + "/flagcx") + _g.glob(_src + "/src/flagcx")
+              + _g.glob(_src + "/*/flagcx"))
+    print("sys.path:", sys.path)
     import flagcx
     import megatron.core
     import sentencepiece
