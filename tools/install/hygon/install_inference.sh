@@ -14,6 +14,7 @@ DEBUG="${FLAGSCALE_DEBUG:-false}"
 RETRY_COUNT="${FLAGSCALE_RETRY_COUNT:-3}"
 FLAGSCALE_HOME="${FLAGSCALE_HOME:-/opt/flagscale}"
 FLAGSCALE_DEPS="${FLAGSCALE_DEPS:-$FLAGSCALE_HOME/deps}"
+REQ_FILE="$PROJECT_ROOT/requirements/hygon/inference.txt"
 FLAGGEMS_REF="${FLAGSCALE_FLAGGEMS_REF:-62d70b9e858ec407572153ee8cdf65cc24a637d5}"
 VLLM_PLUGIN_FL_REF="${FLAGSCALE_VLLM_PLUGIN_FL_REF:-ffa2ee3eb3831f3873dd0966d12fc8e0b4e6e3d4}"
 
@@ -30,6 +31,12 @@ fetch_source() {
           'https://codeload.github.com/flagos-ai/$repository/tar.gz/$ref' && \
         tar -xzf '$archive' --strip-components=1 -C '$target' && \
         rm -f '$archive'"
+}
+
+install_requirements() {
+    set_step "Installing Hygon inference requirements"
+    [ -f "$REQ_FILE" ] || die "Hygon inference requirements not found"
+    retry_pip_install -d "$DEBUG" "$REQ_FILE" "$RETRY_COUNT"
 }
 
 install_flaggems() {
@@ -70,6 +77,7 @@ assert plugins.get("fl") == "vllm_fl:register", plugins
 PY
 }
 
+install_requirements || die "Hygon inference requirements installation failed"
 install_flaggems || die "Hygon FlagGems installation failed"
 install_vllm_plugin || die "Hygon vllm-plugin-FL installation failed"
 validate_stack || die "Hygon inference package validation failed"
