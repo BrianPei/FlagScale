@@ -103,6 +103,28 @@ elif task == "inference":
         import traceback
         traceback.print_exc()
         raise SystemExit(1)
+    # Diagnose the Kunlunxin vendor attention deps. The functional test
+    # crashes at attention __init__ when torch_xmlir or xtorch_ops are not
+    # importable; surface the real state at image-build time so we know
+    # whether to install the missing lib or fix env / PYTHONPATH.
+    import importlib as _il, subprocess as _sp, sys, glob, site
+    _sp_dirs = site.getsitepackages()
+    for _mod in ("torch_xmlir", "xtorch_ops"):
+        try:
+            _m = _il.import_module(_mod)
+            print(_mod, "OK:", getattr(_m, "__file__", "built-in"))
+        except Exception as _e:
+            print(_mod, "IMPORT FAIL:", repr(_e))
+            try:
+                _out = _sp.check_output(
+                    [sys.executable, "-m", "pip", "show", _mod],
+                    stderr=_sp.STDOUT, text=True, timeout=30)
+                print(_mod, "pip show:", _out.strip()[-500:])
+            except Exception as _pe:
+                print(_mod, "pip show err:", repr(_pe))
+    print("site-packages:", _sp_dirs[0])
+    print("glob xmlir/xtorch:",
+          glob.glob(_sp_dirs[0] + "/*xmlir*") + glob.glob(_sp_dirs[0] + "/*xtorch*"))
     from vllm.platforms import current_platform
     platform_module = type(current_platform).__module__
     platform_class = type(current_platform).__name__
@@ -149,6 +171,28 @@ elif task == "all":
         import traceback
         traceback.print_exc()
         raise SystemExit(1)
+    # Diagnose the Kunlunxin vendor attention deps. The functional test
+    # crashes at attention __init__ when torch_xmlir or xtorch_ops are not
+    # importable; surface the real state at image-build time so we know
+    # whether to install the missing lib or fix env / PYTHONPATH.
+    import importlib as _il, subprocess as _sp, sys, glob, site
+    _sp_dirs = site.getsitepackages()
+    for _mod in ("torch_xmlir", "xtorch_ops"):
+        try:
+            _m = _il.import_module(_mod)
+            print(_mod, "OK:", getattr(_m, "__file__", "built-in"))
+        except Exception as _e:
+            print(_mod, "IMPORT FAIL:", repr(_e))
+            try:
+                _out = _sp.check_output(
+                    [sys.executable, "-m", "pip", "show", _mod],
+                    stderr=_sp.STDOUT, text=True, timeout=30)
+                print(_mod, "pip show:", _out.strip()[-500:])
+            except Exception as _pe:
+                print(_mod, "pip show err:", repr(_pe))
+    print("site-packages:", _sp_dirs[0])
+    print("glob xmlir/xtorch:",
+          glob.glob(_sp_dirs[0] + "/*xmlir*") + glob.glob(_sp_dirs[0] + "/*xtorch*"))
     from vllm.platforms import current_platform
     platform_module = type(current_platform).__module__
     platform_class = type(current_platform).__name__
