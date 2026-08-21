@@ -68,61 +68,24 @@ ARG FLAGGEMS_REF
 ARG TRANSFORMER_ENGINE_REF
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
-ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    FLAGSCALE_MEGATRON_REF=${MEGATRON_REF} \
+    FLAGSCALE_FLAGGEMS_REF=${FLAGGEMS_REF} \
+    FLAGSCALE_TRANSFORMER_ENGINE_REF=${TRANSFORMER_ENGINE_REF}
 
-COPY requirements/common.txt /tmp/requirements/common.txt
-COPY requirements/hygon /tmp/requirements/hygon
+COPY tools/install /workspace/tools/install
+COPY requirements /workspace/requirements
 
-RUN set -eux; \
-    python -c "from importlib.metadata import distribution; from pathlib import Path; dist=distribution('torch'); location=str(dist.locate_file('torch')); Path('/tmp/flagscale-vendor-torch').write_text(dist.version + '\\n' + location); Path('/tmp/flagscale-torch-constraint.txt').write_text('torch==' + dist.version + '\\n')"; \
-    python -m pip install \
-        "setuptools>=64.0,<77.0" \
-        "setuptools-scm>=8.0,<10.0" \
-        "wheel==0.46.2" \
-        "cmake>=3.21,<4.0" \
-        "ninja==1.13.0" \
-        "scikit-build-core==0.12.2" \
-        "pybind11[global]==3.0.3"; \
-    python -m pip install \
-        --constraint /tmp/flagscale-torch-constraint.txt \
-        --requirement /tmp/requirements/hygon/train.txt
-
-RUN set -eux; \
-    mkdir -p "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
-    curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
-        --output /tmp/megatron-lm-fl.tar.gz \
-        "https://codeload.github.com/flagos-ai/Megatron-LM-FL/tar.gz/${MEGATRON_REF}"; \
-    tar -xzf /tmp/megatron-lm-fl.tar.gz --strip-components=1 \
-        -C "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
-    rm /tmp/megatron-lm-fl.tar.gz; \
-    python -m pip install --ignore-requires-python --no-build-isolation --no-deps \
-        -e "${FLAGSCALE_DEPS}/Megatron-LM-FL"; \
-    python -m pip show megatron-core >/dev/null
-
-RUN set -eux; \
-    mkdir -p "${FLAGSCALE_DEPS}/FlagGems"; \
-    curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
-        --output /tmp/flag-gems.tar.gz \
-        "https://codeload.github.com/flagos-ai/FlagGems/tar.gz/${FLAGGEMS_REF}"; \
-    tar -xzf /tmp/flag-gems.tar.gz --strip-components=1 \
-        -C "${FLAGSCALE_DEPS}/FlagGems"; \
-    rm /tmp/flag-gems.tar.gz; \
-    python -m pip install --no-build-isolation --no-deps \
-        -e "${FLAGSCALE_DEPS}/FlagGems"
-
-RUN set -eux; \
-    mkdir -p "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
-    curl --http1.1 --fail --location --retry 20 --retry-all-errors --retry-delay 5 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
-        --output /tmp/transformer-engine-fl.tar.gz \
-        "https://codeload.github.com/flagos-ai/TransformerEngine-FL/tar.gz/${TRANSFORMER_ENGINE_REF}"; \
-    tar -xzf /tmp/transformer-engine-fl.tar.gz --strip-components=1 \
-        -C "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
-    rm /tmp/transformer-engine-fl.tar.gz; \
-    TE_FL_SKIP_CUDA=1 python -m pip install --no-build-isolation --no-deps \
-        -e "${FLAGSCALE_DEPS}/TransformerEngine-FL"; \
-    python -m pip show transformer-engine >/dev/null; \
-    python -c "from importlib.metadata import distribution; from pathlib import Path; dist=distribution('torch'); expected=Path('/tmp/flagscale-vendor-torch').read_text().splitlines(); actual=[dist.version, str(dist.locate_file('torch'))]; assert actual == expected, f'vendor torch changed: expected {expected}, found {actual}'"; \
-    rm /tmp/flagscale-vendor-torch /tmp/flagscale-torch-constraint.txt
+RUN python -c "from importlib.metadata import distribution; from pathlib import Path; dist=distribution('torch'); location=str(dist.locate_file('torch')); Path('/tmp/flagscale-vendor-torch').write_text(dist.version + '\\n' + location); Path('/tmp/flagscale-torch-constraint.txt').write_text('torch==' + dist.version + '\\n')" && \
+    chmod +x /workspace/tools/install/*.sh \
+        /workspace/tools/install/utils/*.sh \
+        /workspace/tools/install/hygon/*.sh && \
+    PIP_CONSTRAINT=/tmp/flagscale-torch-constraint.txt \
+    /workspace/tools/install/install.sh --platform hygon --task train \
+        --pkg-mgr pip --no-system --no-dev --force-build && \
+    python -c "from importlib.metadata import distribution; from pathlib import Path; dist=distribution('torch'); expected=Path('/tmp/flagscale-vendor-torch').read_text().splitlines(); actual=[dist.version, str(dist.locate_file('torch'))]; assert actual == expected, f'vendor torch changed: expected {expected}, found {actual}'" && \
+    rm -rf /workspace/tools /workspace/requirements \
+        /tmp/flagscale-vendor-torch /tmp/flagscale-torch-constraint.txt
 
 FROM deps AS dev
 

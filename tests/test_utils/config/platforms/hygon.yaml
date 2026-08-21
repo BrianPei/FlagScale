@@ -28,8 +28,6 @@ bw1000:
       serve:
         qwen3: ["4b_tp2_hygon"]
     unit:
-      # Exercise the real two-rank NCCL path instead of an empty pytest smoke.
       nproc_per_node: 2
-      include:
-        - tests/unit_tests/test_spiky_loss_detector.py
+      include: "*"
       exclude: []
