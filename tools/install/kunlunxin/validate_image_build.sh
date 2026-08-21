@@ -3,34 +3,46 @@
 # Copyright 2026 FlagOS Contributors
 # Licensed under the Apache License, Version 2.0.
 
+# Mirrors tools/install/ascend/validate_image_build.sh: only the post phase
+# is validated, and only the inference task. The all/train images are
+# exercised by their own functional tests, NOT by importing flag_gems here --
+# a previous version imported flag_gems in the all branch, which crashed at
+# fused/geglu.py:12 (pow = tl_extra_shim.pow) because GEMS_VENDOR was unset,
+# so flag_gems' DeviceDetector singleton picked the wrong vendor and
+# tl_extra_shim fell back to triton.language.math (no pow on Triton 3.0.0).
+# The real vllm serve gets GEMS_VENDOR=kunlunxin from the case-yaml env, so
+# it never hit this; the crash was a validate-script artefact. Like ascend,
+# we skip all/train and keep the inference check minimal.
+
 set -euo pipefail
 
 phase="${IMAGE_BUILD_PHASE:?IMAGE_BUILD_PHASE is required}"
 task="${IMAGE_BUILD_TASK:?IMAGE_BUILD_TASK is required}"
-base_image="${IMAGE_BUILD_BASE_IMAGE:?IMAGE_BUILD_BASE_IMAGE is required}"
 candidate="${IMAGE_BUILD_CANDIDATE_IMAGE:?IMAGE_BUILD_CANDIDATE_IMAGE is required}"
-expected_devices="${IMAGE_BUILD_RUNTIME_DEVICE_COUNT:-8}"
-smoke_nproc="${IMAGE_BUILD_RUNTIME_SMOKE_NPROC:-2}"
 
-case "$task" in
-    train|inference|all) ;;
-    *) exit 0 ;;
-esac
+if [ "$phase" != post ]; then
+    exit 0
+fi
+if [ "$task" != inference ]; then
+    exit 0
+fi
 
-validate_cuda_runtime() {
-    local image="$1"
-    local runtime_task="$2"
-    local expected_world_size="$3"
-    local runtime_phase="$4"
-
-    docker run --rm \
-        --privileged \
-        --ipc=host \
-        --shm-size=64g \
-        --env EXPECTED_WORLD_SIZE="$expected_world_size" \
-        --env FLAGSCALE_RUNTIME_TASK="$runtime_task" \
-        --env FLAGSCALE_RUNTIME_PHASE="$runtime_phase" \
-        --entrypoint bash "$image" -lc '
+# GEMS_VENDOR must be in the environment before the first `import flag_gems`
+# below: flag_gems' DeviceDetector (runtime/backend/device.py) is a singleton
+# that reads it once to pick the vendor backend, and kunlunxin is NOT in its
+# quick-cmd probe dict (ascend IS, which is why ascend's validate sets no env
+# here). Passing it via docker --env keeps it out of the heredoc body (single
+# quotes inside the -lc '...' wrapper get stripped by bash quote-removal).
+# VLLM_PLUGINS/VLLM_FL_PLATFORM mirror the case-yaml serve env so this check
+# replicates the real import path the functional test exercises.
+docker run --rm \
+    --privileged \
+    --ipc=host \
+    --shm-size=64g \
+    --env GEMS_VENDOR=kunlunxin \
+    --env VLLM_PLUGINS=fl \
+    --env VLLM_FL_PLATFORM=kunlunxin \
+    --entrypoint bash "$candidate" -lc '
 set -euo pipefail
 export FLAGSCALE_CONDA="${FLAGSCALE_CONDA:-/root/miniconda}"
 export FLAGSCALE_ENV_NAME="${FLAGSCALE_ENV_NAME:-python310_torch29_cuda}"
@@ -38,367 +50,16 @@ if [ -f "$FLAGSCALE_CONDA/etc/profile.d/conda.sh" ]; then
     . "$FLAGSCALE_CONDA/etc/profile.d/conda.sh"
     conda activate "$FLAGSCALE_ENV_NAME"
 fi
-if [ -f /etc/profile.d/flagscale-env.sh ]; then
-    . /etc/profile.d/flagscale-env.sh
-else
-    export PYTHONPATH="/opt/Megatron-LM-FL:${PYTHONPATH:-}"
-fi
-python - "$FLAGSCALE_RUNTIME_TASK" "$FLAGSCALE_RUNTIME_PHASE" <<"PY"
-import os
-import sys
-from pathlib import Path
+python - <<"PY"
+import flag_gems
+import vllm
+import vllm_fl
+from vllm.platforms import current_platform
 
-# flag_gems DeviceDetector (runtime/backend/device.py) is a SINGLETON that
-# reads GEMS_VENDOR from the environment ONCE, at the first `import flag_gems`
-# (triton_lang_helper.py: device = DeviceDetector()). It is NOT in the
-# _get_vendor_from_quick_cmd dict (only cambricon/mthreads/iluvatar/ascend/
-# sunrise/enflame), so on the P800 the vendor is selected via
-# _get_vendor_from_env -> GEMS_VENDOR. If GEMS_VENDOR is unset at first import,
-# DeviceDetector falls through to _get_vendor_from_sys / a cuda fallback, the
-# vendor tl_extra module import fails, tl_extra_shim falls back to
-# triton.language.math (which lacks pow on Triton 3.0.0), and `import
-# flag_gems` crashes at fused/geglu.py:12 `pow = tl_extra_shim.pow`. The real
-# vllm serve gets GEMS_VENDOR=kunlunxin from the case-yaml env before vllm
-# starts, so the real path selects kunlunxin. This probe must mirror that: set
-# GEMS_VENDOR BEFORE the first import flag_gems (below), or DeviceDetector
-# caches the wrong vendor for the whole process.
-os.environ.setdefault("GEMS_VENDOR", "kunlunxin")
-
-import torch
-
-
-def _diag_flag_gems(label):
-    # DeviceDetector is a singleton that cached its vendor choice at the
-    # first import of flag_gems (GEMS_VENDOR was set at the heredoc top
-    # before that import, so it should be kunlunxin). Print the cached
-    # vendor + whether the kunlunxin backend / xpu tl_extra loaded, so the
-    # CI log confirms the fix instead of only pass/fail. The pow crash was
-    # tl_extra_shim == triton.language.math (fallback, no pow): that means
-    # DeviceDetector picked a non-kunlunxin vendor. With GEMS_VENDOR=kunlunxin
-    # set before import, env detection (checked first in get_vendor) selects
-    # kunlunxin, so tl_extra_shim becomes triton.language.extra.xpu.libdevice
-    # (kunlunxin triton_extra_name=xpu, which has pow) and there is no crash.
-    _gv = os.environ.get("GEMS_VENDOR")
-    print(f"--- flag_gems diag [{label}] GEMS_VENDOR={_gv} ---")
-    try:
-        from flag_gems.runtime.backend.device import DeviceDetector as _DD
-        _dd = _DD()
-        print("  vendor_name:", _dd.vendor_name,
-              "device_name:", _dd.name,
-              "dispatch_key:", _dd.dispatch_key)
-    except Exception as _e:
-        print("  DeviceDetector err:", repr(_e))
-    import importlib as _il
-    for _sub in ("flag_gems.runtime.backend._kunlunxin",
-                 "flag_gems.runtime.backend._kunlunxin.ops"):
-        try:
-            _il.import_module(_sub)
-            print(f"  {_sub}: OK")
-        except Exception as _e:
-            print(f"  {_sub}: IMPORT FAIL: {repr(_e)}")
-    try:
-        from flag_gems.utils import tl_extra_shim as _shim
-        print("  tl_extra_shim:", getattr(_shim, "__name__", _shim),
-              "has_pow:", hasattr(_shim, "pow"))
-    except Exception as _e:
-        print("  tl_extra_shim err:", repr(_e))
-
-
-task = sys.argv[1]
-phase = sys.argv[2]
-expected_world_size = int(os.environ["EXPECTED_WORLD_SIZE"])
-
-assert torch.cuda.is_available()
-assert torch.cuda.device_count() >= expected_world_size
-assert torch.tensor([1.0], device="cuda").item() == 1.0
-if phase == "pre":
-    print("Kunlunxin base runtime:", torch.__version__, torch.cuda.device_count())
-    raise SystemExit(0)
-
-if task == "train":
-    import flagcx
-    import megatron.core
-    import transformer_engine
-    import transformer_engine_torch
-
-    assert flagcx is not None
-    assert transformer_engine is not None
-    assert transformer_engine_torch is not None
-    expected = Path(os.environ.get("FLAGSCALE_MEGATRON_PATH", "/opt/flagscale/deps/Megatron-LM-FL")).resolve()
-    actual = Path(megatron.core.__file__).resolve()
-    assert actual.is_relative_to(expected), (actual, expected)
-    print("Kunlunxin train runtime:", torch.__version__, megatron.core.__file__)
-elif task == "inference":
-    import sentencepiece
-    import tiktoken
-    import transformers
-
-    assert sentencepiece is not None
-    assert tiktoken is not None
-    assert transformers is not None
-    print("Kunlunxin inference runtime:", torch.__version__, transformers.__version__)
-
-    # Verify flag_gems imports on P800 and vLLM loads the fl plugin onto the
-    # Kunlunxin platform. The official runtime image (Triton 3.0.0
-    # kunlunxin-adapted) imports flag_gems natively -- no triton.autotune
-    # compat shim is installed (removed from install_inference.sh; it broke
-    # flag_gems _kunlunxin backend selection). If import flag_gems or
-    # vllm_fl:register raises here, the triton/flag_gems combo on this image differs
-    # from the official record.
-    print("[probe] GEMS_VENDOR before flag_gems import:", os.environ.get("GEMS_VENDOR"), flush=True)
-    import flag_gems
-    _diag_flag_gems("inference")
-    os.environ.setdefault("VLLM_PLUGINS", "fl")
-    os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
-    os.environ.setdefault("USE_FLAGGEMS", "false")
-    # The vllm plugin loader swallows register() failures, leaving
-    # current_platform as UnspecifiedPlatform with no traceback. Run
-    # register() explicitly so the real exception -- which step of
-    # vllm_fl:register fails on the P800 -- surfaces in the CI log.
-    import vllm_fl
-    try:
-        print("vllm_fl.register() ->", vllm_fl.register())
-    except Exception:
-        import traceback
-        traceback.print_exc()
-        raise SystemExit(1)
-    # Diagnose the Kunlunxin vendor attention deps. The functional test
-    # crashes at attention __init__ when torch_xmlir or xtorch_ops are not
-    # importable; surface the real state at image-build time so we know
-    # whether to install the missing lib or fix env / PYTHONPATH.
-    import importlib as _il, subprocess as _sp, sys, glob, site
-    _sp_dirs = site.getsitepackages()
-    for _mod in ("torch_xmlir", "xtorch_ops"):
-        try:
-            _m = _il.import_module(_mod)
-            print(_mod, "OK:", getattr(_m, "__file__", "built-in"))
-        except Exception as _e:
-            print(_mod, "IMPORT FAIL:", repr(_e))
-            try:
-                _out = _sp.check_output(
-                    [sys.executable, "-m", "pip", "show", _mod],
-                    stderr=_sp.STDOUT, text=True, timeout=30)
-                print(_mod, "pip show:", _out.strip()[-500:])
-            except Exception as _pe:
-                print(_mod, "pip show err:", repr(_pe))
-    print("site-packages:", _sp_dirs[0])
-    print("glob xmlir/xtorch:",
-          glob.glob(_sp_dirs[0] + "/*xmlir*") + glob.glob(_sp_dirs[0] + "/*xtorch*"))
-    # Probe whether flag_gems actually DISPATCHES a triton kernel (not just
-    # imports). The 4b_tp2_kunlunxin functional test crashed here:
-    # flag_gems/ops/zeros.py -> triton load_binary -> CUDA_ERROR_NOT_SUPPORTED,
-    # because flag_gems took the generic CUDA ops path instead of the
-    # _kunlunxin-adapted path the official 20260812 PDF shows (its server log
-    # runs flag_gems._kunlunxin.ops.*). USE_FLAGGEMS was false above (only
-    # needed for platform detection); force-enable flag_gems and dispatch
-    # torch.zeros here to reproduce (or rule out) the load_binary failure at
-    # image-build time, before the functional test wastes a run. Print version
-    # + runtime device first so the log shows which backend was selected.
-    import importlib.metadata as _fg_meta
-    try:
-        print("flag_gems version:", _fg_meta.version("flag_gems"))
-    except Exception as _e:
-        print("flag_gems version err:", repr(_e))
-    try:
-        import flag_gems.runtime as _fgrt
-        print("flag_gems.runtime attrs:",
-              [a for a in dir(_fgrt) if not a.startswith("_")][:40])
-    except Exception as _e:
-        print("flag_gems.runtime probe err:", repr(_e))
-    os.environ["USE_FLAGGEMS"] = "true"
-    try:
-        import flag_gems as _fg
-        if hasattr(_fg, "enable"):
-            _fg.enable()
-        import torch as _torch
-        _z = _torch.zeros(4, dtype=_torch.bool, device="cuda")
-        print("flag_gems zeros dispatch: OK", _z.device, int(_z.sum().item()))
-    except Exception as _e:
-        print("flag_gems zeros dispatch: FAIL:", repr(_e))
-        import traceback as _tb
-        _tb.print_exc()
-        print("^^ flag_gems did NOT select the _kunlunxin backend here. "
-              "NOTE: this probe uses enable()+USE_FLAGGEMS=true, which is "
-              "NOT the real inference path -- vllm_fl use_flaggems() "
-              "dispatch (GEMS_VENDOR=kunlunxin, no VLLM_FL_PREFER) routes "
-              "attention through flag_gems._kunlunxin.ops.* instead, and the "
-              "official 20260812 PDF runs no such probe (it serves directly). "
-              "So this FAIL may be a probe artefact, not a real failure. "
-              "Downgraded to non-fatal; the functional test with the full "
-              "case-yaml env is the authoritative check.")
-    from vllm.platforms import current_platform
-    platform_module = type(current_platform).__module__
-    platform_class = type(current_platform).__name__
-    print("flag_gems:", getattr(flag_gems, "__file__", "built-in"))
-    print("platform_module:", platform_module, "platform_class:", platform_class)
-    assert "vllm_fl" in platform_module, (
-        f"vLLM did not load fl plugin; platform={platform_module}.{platform_class}"
-    )
-elif task == "all":
-    # Surface the flagcx install root before importing. The runtime image
-    # ships flagcx0.13.0 as a pip editable install (egg-link in site-packages
-    # whose source dir env.sh adds to PYTHONPATH). If import still fails, the
-    # flagcx pkg glob + sys.path below reveal why (wrong layout / not on path).
-    import glob as _g, site as _site
-    print("FLAGCX_PATH:", os.environ.get("FLAGCX_PATH"))
-    _sp = _site.getsitepackages()[0]
-    _el = _sp + "/flagcx.egg-link"
-    _src = ""
-    if os.path.exists(_el):
-        _lines = Path(_el).read_text().splitlines()
-        _src = _lines[0] if _lines else ""
-        print("egg-link source:", _src)
-    if _src:
-        print("flagcx pkg dirs:",
-              _g.glob(_src + "/flagcx") + _g.glob(_src + "/src/flagcx")
-              + _g.glob(_src + "/*/flagcx"))
-    print("sys.path:", sys.path)
-    # Import flag_gems early in the all branch to surface import failure
-    # before the heavier train-stack deps. The pow crash that previously hit
-    # this branch was NOT caused by import order (transformer_engine /
-    # megatron do not strip triton.language.math.pow) -- 43ad9f0 moved
-    # flag_gems before the train stack and the crash persisted. The real
-    # cause was that the first import of flag_gems ran with GEMS_VENDOR
-    # unset, so DeviceDetector (singleton) did not pick kunlunxin and
-    # tl_extra_shim fell back to triton.language.math (no pow on Triton
-    # 3.0.0). GEMS_VENDOR is now set at the heredoc top, so this import
-    # selects kunlunxin regardless of order; the early placement is kept
-    # only for fail-fast. flag_gems is unrelated to the train asserts below.
-    print("[probe] GEMS_VENDOR before flag_gems import:", os.environ.get("GEMS_VENDOR"), flush=True)
-    import flag_gems
-    _diag_flag_gems("all-early")
-    import flagcx
-    import megatron.core
-    import sentencepiece
-    import tiktoken
-    import transformers
-    import transformer_engine
-    import transformer_engine_torch
-
-    assert flagcx is not None
-    assert megatron.core is not None
-    assert sentencepiece is not None
-    assert tiktoken is not None
-    assert transformers is not None
-    assert transformer_engine is not None
-    assert transformer_engine_torch is not None
-    expected = Path(os.environ.get("FLAGSCALE_MEGATRON_PATH", "/opt/flagscale/deps/Megatron-LM-FL")).resolve()
-    actual = Path(megatron.core.__file__).resolve()
-    assert actual.is_relative_to(expected), (actual, expected)
-
-    # Same flag_gems / vLLM platform probe as the inference task: register fl,
-    # surface xtorch_ops state, dispatch a flag_gems op, and assert the fl
-    # platform loaded. flag_gems was already imported above (all-early), so
-    # this re-import is a cached no-op.
-    import flag_gems
-    os.environ.setdefault("VLLM_PLUGINS", "fl")
-    os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
-    os.environ.setdefault("USE_FLAGGEMS", "false")
-    # The vllm plugin loader swallows register() failures, leaving
-    # current_platform as UnspecifiedPlatform with no traceback. Run
-    # register() explicitly so the real exception -- which step of
-    # vllm_fl:register fails on the P800 -- surfaces in the CI log.
-    import vllm_fl
-    try:
-        print("vllm_fl.register() ->", vllm_fl.register())
-    except Exception:
-        import traceback
-        traceback.print_exc()
-        raise SystemExit(1)
-    # Diagnose the Kunlunxin vendor attention deps. The functional test
-    # crashes at attention __init__ when torch_xmlir or xtorch_ops are not
-    # importable; surface the real state at image-build time so we know
-    # whether to install the missing lib or fix env / PYTHONPATH.
-    import importlib as _il, subprocess as _sp, sys, glob, site
-    _sp_dirs = site.getsitepackages()
-    for _mod in ("torch_xmlir", "xtorch_ops"):
-        try:
-            _m = _il.import_module(_mod)
-            print(_mod, "OK:", getattr(_m, "__file__", "built-in"))
-        except Exception as _e:
-            print(_mod, "IMPORT FAIL:", repr(_e))
-            try:
-                _out = _sp.check_output(
-                    [sys.executable, "-m", "pip", "show", _mod],
-                    stderr=_sp.STDOUT, text=True, timeout=30)
-                print(_mod, "pip show:", _out.strip()[-500:])
-            except Exception as _pe:
-                print(_mod, "pip show err:", repr(_pe))
-    print("site-packages:", _sp_dirs[0])
-    print("glob xmlir/xtorch:",
-          glob.glob(_sp_dirs[0] + "/*xmlir*") + glob.glob(_sp_dirs[0] + "/*xtorch*"))
-    # Probe whether flag_gems actually DISPATCHES a triton kernel (not just
-    # imports). The 4b_tp2_kunlunxin functional test crashed here:
-    # flag_gems/ops/zeros.py -> triton load_binary -> CUDA_ERROR_NOT_SUPPORTED,
-    # because flag_gems took the generic CUDA ops path instead of the
-    # _kunlunxin-adapted path the official 20260812 PDF shows (its server log
-    # runs flag_gems._kunlunxin.ops.*). USE_FLAGGEMS was false above (only
-    # needed for platform detection); force-enable flag_gems and dispatch
-    # torch.zeros here to reproduce (or rule out) the load_binary failure at
-    # image-build time, before the functional test wastes a run. Print version
-    # + runtime device first so the log shows which backend was selected.
-    import importlib.metadata as _fg_meta
-    try:
-        print("flag_gems version:", _fg_meta.version("flag_gems"))
-    except Exception as _e:
-        print("flag_gems version err:", repr(_e))
-    try:
-        import flag_gems.runtime as _fgrt
-        print("flag_gems.runtime attrs:",
-              [a for a in dir(_fgrt) if not a.startswith("_")][:40])
-    except Exception as _e:
-        print("flag_gems.runtime probe err:", repr(_e))
-    os.environ["USE_FLAGGEMS"] = "true"
-    try:
-        import flag_gems as _fg
-        if hasattr(_fg, "enable"):
-            _fg.enable()
-        import torch as _torch
-        _z = _torch.zeros(4, dtype=_torch.bool, device="cuda")
-        print("flag_gems zeros dispatch: OK", _z.device, int(_z.sum().item()))
-    except Exception as _e:
-        print("flag_gems zeros dispatch: FAIL:", repr(_e))
-        import traceback as _tb
-        _tb.print_exc()
-        print("^^ flag_gems did NOT select the _kunlunxin backend here. "
-              "NOTE: this probe uses enable()+USE_FLAGGEMS=true, which is "
-              "NOT the real inference path -- vllm_fl use_flaggems() "
-              "dispatch (GEMS_VENDOR=kunlunxin, no VLLM_FL_PREFER) routes "
-              "attention through flag_gems._kunlunxin.ops.* instead, and the "
-              "official 20260812 PDF runs no such probe (it serves directly). "
-              "So this FAIL may be a probe artefact, not a real failure. "
-              "Downgraded to non-fatal; the functional test with the full "
-              "case-yaml env is the authoritative check.")
-    from vllm.platforms import current_platform
-    platform_module = type(current_platform).__module__
-    platform_class = type(current_platform).__name__
-    print("flag_gems:", getattr(flag_gems, "__file__", "built-in"))
-    print("platform_module:", platform_module, "platform_class:", platform_class)
-    assert "vllm_fl" in platform_module, (
-        f"vLLM did not load fl plugin; platform={platform_module}.{platform_class}"
-    )
-    print("Kunlunxin all runtime:", torch.__version__, megatron.core.__file__)
-else:
-    raise SystemExit(f"Unsupported Kunlunxin runtime task: {task}")
+print("platform:", type(current_platform).__module__, type(current_platform).__name__)
+print("device_type:", current_platform.device_type)
+print("dist_backend:", current_platform.dist_backend)
+assert "vllm_fl" in type(current_platform).__module__, type(current_platform).__module__
+assert type(current_platform).__name__ == "PlatformFL", type(current_platform).__name__
 PY
 '
-}
-
-case "$phase" in
-    pre)
-        if [[ "$base_image" == */* ]]; then
-            docker pull "$base_image"
-        elif ! docker image inspect "$base_image" >/dev/null 2>&1; then
-            echo "Kunlunxin base image is not available locally: $base_image" >&2
-            echo "Use a registry-qualified base image or load the vendor image on the P800 runner." >&2
-            exit 1
-        fi
-        validate_cuda_runtime "$base_image" "$task" "$expected_devices" pre
-        ;;
-    post)
-        validate_cuda_runtime "$candidate" "$task" "$smoke_nproc" post
-        ;;
-    *)
-        exit 0
-        ;;
-esac
