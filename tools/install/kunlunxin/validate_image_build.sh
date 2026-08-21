@@ -78,7 +78,8 @@ def _diag_flag_gems(label):
     # set before import, env detection (checked first in get_vendor) selects
     # kunlunxin, so tl_extra_shim becomes triton.language.extra.xpu.libdevice
     # (kunlunxin triton_extra_name=xpu, which has pow) and there is no crash.
-    print(f"--- flag_gems diag [{label}] GEMS_VENDOR={os.environ.get('GEMS_VENDOR')} ---")
+    _gv = os.environ.get("GEMS_VENDOR")
+    print(f"--- flag_gems diag [{label}] GEMS_VENDOR={_gv} ---")
     try:
         from flag_gems.runtime.backend.device import DeviceDetector as _DD
         _dd = _DD()
