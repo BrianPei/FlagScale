@@ -24,6 +24,22 @@ VLLM_PLUGIN_REPO="${FLAGSCALE_VLLM_PLUGIN_REPO:-https://github.com/flagos-ai/vll
 # local fallback when the ARG is unset (running this script outside a build).
 VLLM_PLUGIN_REF="${FLAGSCALE_VLLM_PLUGIN_REF:-v0.1.1+vllm0.13.0}"
 
+# FlagGems ref. The official 20260812 PDF source-installs flagos-ai/FlagGems
+# v5.0.0 (commit 4e08b44) OVER the image built-in flag_gems. The image built-in
+# is the GENERIC flag_gems: its DeviceDetector selects the cuda backend, so
+# torch.zeros dispatches to flag_gems/ops/zeros.py (generic CUDA triton) ->
+# triton load_binary -> CUDA_ERROR_NOT_SUPPORTED on the P800, crashing both TP
+# workers at init_device. It also crashes import on triton.language.math gaps
+# (pow/asin) without a compat shim. The source build ships
+# flag_gems._kunlunxin.ops.* (kunlunxin-adapted triton kernels whose load_binary
+# succeeds) + a DeviceDetector that selects _kunlunxin, AND a triton-3.0.0-
+# compatible tl_extra_shim (no import crash, no shim needed). The official PDF
+# server log confirms flag_gems._kunlunxin.ops.* all run. No source_refs entry
+# in .github/configs/kunlunxin.yml: the flaggems source policy=latest_release
+# would override v5.0.0; the v5.0.0 default here pins the official version.
+FLAGGEMS_REPO="${FLAGSCALE_FLAGGEMS_REPO:-https://github.com/flagos-ai/FlagGems.git}"
+FLAGGEMS_REF="${FLAGSCALE_FLAGGEMS_REF:-v5.0.0}"
+
 while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac
 done
@@ -148,32 +164,50 @@ PY
 }
 
 # The triton.autotune compat shim (triton_autotune_compat.py) is NO LONGER
-# installed. It was added for the old flagos-dev base image whose triton
-# rejected triton.autotune(generate_configs=...), crashing `import flag_gems`
-# inside vllm_fl:register. 645116a switched to the official runtime image
-# (Triton 3.0.0 kunlunxin-adapted), the same image the official 20260812 PDF
-# runs -- and the PDF runs `vllm serve` with NO shim, yet flag_gems imports and
-# dispatches through flag_gems._kunlunxin.ops.* correctly. Keeping the shim
-# here actively BREAKS inference: its _FlagGemsCompatFinder auto-imports (via
-# the .pth) before every `import flag_gems` -- including in vLLM spawn workers
-# -- and re-patches triton.language.math / triton.autotune, which corrupts
-# flag_gems DeviceDetector backend selection. flag_gems then selects the
-# generic CUDA backend (flag_gems/ops/zeros.py) instead of _kunlunxin, and
-# torch.zeros(bool, device=cuda) -> triton load_binary -> CUDA_ERROR_NOT_SUPPORTED
-# at worker init_device (ModelRunnerFL -> build_logitsprocs -> builtin.py:330),
-# crashing both TP workers before any output. The full case-yaml env
-# (GEMS_VENDOR=kunlunxin, no VLLM_FL_PREFER) does not help -- flag_gems never
-# reaches the _kunlunxin backend while the shim interferes with the import
-# chain. Removing the shim aligns with the official record. If a future base
-# image reintroduces the generate_configs import crash, restore this step and
-# the .pth from triton_autotune_compat.py. See git history for the removed
+# installed. It was a workaround for the image built-in GENERIC flag_gems,
+# whose import crashed on triton.language.math gaps (pow/asin) and
+# triton.autotune(generate_configs). The proper fix is install_flaggems above:
+# source-install flagos-ai/FlagGems v5.0.0 (per the official 20260812 PDF),
+# whose tl_extra_shim is triton-3.0.0-compatible (no import crash, no shim
+# needed) AND ships flag_gems._kunlunxin.ops.* + a DeviceDetector that selects
+# the _kunlunxin backend. The shim also actively broke backend selection once
+# flag_gems was dispatched (USE_FLAGGEMS=true after dropping VLLM_FL_PREFER=
+# vendor): its _FlagGemsCompatFinder re-patched triton mid-import, corrupting
+# DeviceDetector. With the source FlagGems install, neither the import crash
+# nor the backend corruption occurs, so the shim is obsolete. If a future base
+# image reintroduces the import crash, restore this step and the .pth from
+# triton_autotune_compat.py. See git history for the removed
 # install_triton_autotune_compat() function.
+
+install_flaggems() {
+    set_step "Installing resolved FlagGems $FLAGGEMS_REF (source, over image built-in)"
+    mkdir -p "$FLAGSCALE_DEPS"
+    checkout_pinned_ref "$FLAGGEMS_REPO" "$FLAGGEMS_REF" \
+        "$FLAGSCALE_DEPS/FlagGems" || return 1
+    local pip_cmd
+    pip_cmd=$(get_pip_cmd)
+    # Uninstall the image built-in generic flag_gems so the source build
+    # (flag_gems._kunlunxin.ops.* + DeviceDetector) takes precedence. Without
+    # this, the generic ops stay on sys.path and torch.zeros dispatches to
+    # flag_gems/ops/zeros.py -> triton load_binary -> CUDA_ERROR_NOT_SUPPORTED.
+    run_cmd -d "$DEBUG" bash -c \
+        "$pip_cmd uninstall -y flag_gems flag-gems" || true
+    # Build deps the official PDF installs (FlagGems v5.0.0 ships C extensions
+    # built via scikit-build-core).
+    run_cmd -d "$DEBUG" $pip_cmd install --root-user-action=ignore \
+        "scikit-build-core==0.11" pybind11 ninja cmake sqlalchemy || return 1
+    run_cmd -d "$DEBUG" bash -c \
+        "cd '$FLAGSCALE_DEPS/FlagGems' && $pip_cmd install \
+        --root-user-action=ignore --no-build-isolation --no-deps ." || return 1
+    log_success "FlagGems $FLAGGEMS_REF (source) installed over image built-in"
+}
 
 main() {
     install_pip || die "Inference pip failed"
     install_vllm || die "vLLM install failed"
     install_vllm_plugin || die "vllm-plugin-FL failed"
     validate_vllm_plugin || die "vllm-plugin-FL validation failed"
+    install_flaggems || die "FlagGems source install failed"
 }
 
 main
