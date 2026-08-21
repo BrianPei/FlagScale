@@ -46,6 +46,18 @@ experiment:
     USE_RESHAPE_AND_CACHE_FLASH: "1"
     # Log vllm_fl dispatch routing (which backend each op resolves to).
     VLLM_FL_DISPATCH_DEBUG: "1"
+    # Skip vllm_fl's unconditional patch_decode_attention (upstream
+    # vllm-plugin-FL kunlunxin/patch.py), which replaces
+    # KunlunxinPagedAttention.forward_decode with
+    # xtorch_ops.prefill_attention(is_prefix_cache=True). That workaround
+    # targets a decode NaN observed on layer 43+ of Qwen3.6-27B; Qwen3-4B
+    # (36 layers) does not hit it, so forcing prefill_attention here
+    # mis-maps the paged KV cache and garbles decode output (CI shows
+    # prompt echo correct but decode tokens scrambled). This keeps the
+    # native forward_decode to verify. Applied via
+    # tools/install/kunlunxin/patch_vllm_fl_kunlunxin.py; remove once
+    # upstream gates the fallback on a runtime NaN check.
+    VLLM_FL_KLX_DISABLE_DECODE_PATCH: "1"
     # flag_gems library vendor selection (used at import by DeviceDetector /
     # backend init). flag_gems needs the kunlunxin vendor to init correctly
     # (its quick-cmd probe has no kunlunxin entry); op dispatch now runs
