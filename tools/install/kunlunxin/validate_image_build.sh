@@ -198,6 +198,16 @@ elif task == "all":
               _g.glob(_src + "/flagcx") + _g.glob(_src + "/src/flagcx")
               + _g.glob(_src + "/*/flagcx"))
     print("sys.path:", sys.path)
+    # Import flag_gems BEFORE the train-stack deps (flagcx / megatron.core /
+    # transformer_engine / transformer_engine_torch). Importing
+    # transformer_engine or megatron.core first leaves triton.language.math
+    # without a pow attribute, so a later `import flag_gems` crashes at
+    # fused/geglu.py:12 `pow = tl_extra_shim.pow`. The inference branch
+    # imports flag_gems before any train dep and succeeds; mirror that order
+    # here. flag_gems is unrelated to the train asserts below. This is a probe
+    # ordering fix only: the real inference test (vllm serve) never imports
+    # the train stack, so it hits flag_gems in inference order and is fine.
+    import flag_gems
     import flagcx
     import megatron.core
     import sentencepiece
