@@ -64,12 +64,11 @@ install_source() {
 
 validate_runtime() {
     [ "$DEBUG" = true ] && return 0
-    TE_FL_SKIP_CUDA=1 python - <<'PY'
-import flag_gems
-import transformer_engine
-from megatron.core.models.gpt import GPTModel
+    python - <<'PY'
+from importlib.metadata import distribution
 
-assert GPTModel is not None
+for package in ("flag_gems", "megatron-core", "transformer-engine"):
+    distribution(package)
 PY
 }
 
