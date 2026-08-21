@@ -28,6 +28,10 @@ bw1000:
       serve:
         qwen3: ["4b_tp2_hygon"]
     unit:
-      nproc_per_node: 2
+      nproc_per_node: 1
       include: "*"
-      exclude: []
+      exclude:
+        # Python 3.10 does not provide the stdlib tomllib module used by this test.
+        - tests/unit_tests/test_init.py::test_get_version_fallback_to_default
+        # This test defines an eight-rank heterogeneous mesh; it is not a single-rank unit test.
+        - tests/unit_tests/test_parallel_context.py::test_parallel_config
