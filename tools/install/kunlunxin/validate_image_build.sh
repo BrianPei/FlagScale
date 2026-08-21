@@ -48,7 +48,60 @@ import os
 import sys
 from pathlib import Path
 
+# flag_gems DeviceDetector (runtime/backend/device.py) is a SINGLETON that
+# reads GEMS_VENDOR from the environment ONCE, at the first `import flag_gems`
+# (triton_lang_helper.py: device = DeviceDetector()). It is NOT in the
+# _get_vendor_from_quick_cmd dict (only cambricon/mthreads/iluvatar/ascend/
+# sunrise/enflame), so on the P800 the vendor is selected via
+# _get_vendor_from_env -> GEMS_VENDOR. If GEMS_VENDOR is unset at first import,
+# DeviceDetector falls through to _get_vendor_from_sys / a cuda fallback, the
+# vendor tl_extra module import fails, tl_extra_shim falls back to
+# triton.language.math (which lacks pow on Triton 3.0.0), and `import
+# flag_gems` crashes at fused/geglu.py:12 `pow = tl_extra_shim.pow`. The real
+# vllm serve gets GEMS_VENDOR=kunlunxin from the case-yaml env before vllm
+# starts, so the real path selects kunlunxin. This probe must mirror that: set
+# GEMS_VENDOR BEFORE the first import flag_gems (below), or DeviceDetector
+# caches the wrong vendor for the whole process.
+os.environ.setdefault("GEMS_VENDOR", "kunlunxin")
+
 import torch
+
+
+def _diag_flag_gems(label):
+    # DeviceDetector is a singleton that cached its vendor choice at the
+    # first import of flag_gems (GEMS_VENDOR was set at the heredoc top
+    # before that import, so it should be kunlunxin). Print the cached
+    # vendor + whether the kunlunxin backend / xpu tl_extra loaded, so the
+    # CI log confirms the fix instead of only pass/fail. The pow crash was
+    # tl_extra_shim == triton.language.math (fallback, no pow): that means
+    # DeviceDetector picked a non-kunlunxin vendor. With GEMS_VENDOR=kunlunxin
+    # set before import, env detection (checked first in get_vendor) selects
+    # kunlunxin, so tl_extra_shim becomes triton.language.extra.xpu.libdevice
+    # (kunlunxin triton_extra_name=xpu, which has pow) and there is no crash.
+    print(f"--- flag_gems diag [{label}] GEMS_VENDOR={os.environ.get('GEMS_VENDOR')} ---")
+    try:
+        from flag_gems.runtime.backend.device import DeviceDetector as _DD
+        _dd = _DD()
+        print("  vendor_name:", _dd.vendor_name,
+              "device_name:", _dd.name,
+              "dispatch_key:", _dd.dispatch_key)
+    except Exception as _e:
+        print("  DeviceDetector err:", repr(_e))
+    import importlib as _il
+    for _sub in ("flag_gems.runtime.backend._kunlunxin",
+                 "flag_gems.runtime.backend._kunlunxin.ops"):
+        try:
+            _il.import_module(_sub)
+            print(f"  {_sub}: OK")
+        except Exception as _e:
+            print(f"  {_sub}: IMPORT FAIL: {repr(_e)}")
+    try:
+        from flag_gems.utils import tl_extra_shim as _shim
+        print("  tl_extra_shim:", getattr(_shim, "__name__", _shim),
+              "has_pow:", hasattr(_shim, "pow"))
+    except Exception as _e:
+        print("  tl_extra_shim err:", repr(_e))
+
 
 task = sys.argv[1]
 phase = sys.argv[2]
@@ -91,7 +144,9 @@ elif task == "inference":
     # flag_gems _kunlunxin backend selection). If import flag_gems or
     # vllm_fl:register raises here, the triton/flag_gems combo on this image differs
     # from the official record.
+    print("[probe] GEMS_VENDOR before flag_gems import:", os.environ.get("GEMS_VENDOR"), flush=True)
     import flag_gems
+    _diag_flag_gems("inference")
     os.environ.setdefault("VLLM_PLUGINS", "fl")
     os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
     os.environ.setdefault("USE_FLAGGEMS", "false")
@@ -149,7 +204,6 @@ elif task == "inference":
               [a for a in dir(_fgrt) if not a.startswith("_")][:40])
     except Exception as _e:
         print("flag_gems.runtime probe err:", repr(_e))
-    os.environ.setdefault("GEMS_VENDOR", "kunlunxin")
     os.environ["USE_FLAGGEMS"] = "true"
     try:
         import flag_gems as _fg
@@ -198,16 +252,20 @@ elif task == "all":
               _g.glob(_src + "/flagcx") + _g.glob(_src + "/src/flagcx")
               + _g.glob(_src + "/*/flagcx"))
     print("sys.path:", sys.path)
-    # Import flag_gems BEFORE the train-stack deps (flagcx / megatron.core /
-    # transformer_engine / transformer_engine_torch). Importing
-    # transformer_engine or megatron.core first leaves triton.language.math
-    # without a pow attribute, so a later `import flag_gems` crashes at
-    # fused/geglu.py:12 `pow = tl_extra_shim.pow`. The inference branch
-    # imports flag_gems before any train dep and succeeds; mirror that order
-    # here. flag_gems is unrelated to the train asserts below. This is a probe
-    # ordering fix only: the real inference test (vllm serve) never imports
-    # the train stack, so it hits flag_gems in inference order and is fine.
+    # Import flag_gems early in the all branch to surface import failure
+    # before the heavier train-stack deps. The pow crash that previously hit
+    # this branch was NOT caused by import order (transformer_engine /
+    # megatron do not strip triton.language.math.pow) -- 43ad9f0 moved
+    # flag_gems before the train stack and the crash persisted. The real
+    # cause was that the first import of flag_gems ran with GEMS_VENDOR
+    # unset, so DeviceDetector (singleton) did not pick kunlunxin and
+    # tl_extra_shim fell back to triton.language.math (no pow on Triton
+    # 3.0.0). GEMS_VENDOR is now set at the heredoc top, so this import
+    # selects kunlunxin regardless of order; the early placement is kept
+    # only for fail-fast. flag_gems is unrelated to the train asserts below.
+    print("[probe] GEMS_VENDOR before flag_gems import:", os.environ.get("GEMS_VENDOR"), flush=True)
     import flag_gems
+    _diag_flag_gems("all-early")
     import flagcx
     import megatron.core
     import sentencepiece
@@ -227,9 +285,10 @@ elif task == "all":
     actual = Path(megatron.core.__file__).resolve()
     assert actual.is_relative_to(expected), (actual, expected)
 
-    # Same flag_gems / vLLM platform probe as the inference task. Catches the
-    # triton.autotune(generate_configs) import failure at build time instead of
-    # at the inference functional test.
+    # Same flag_gems / vLLM platform probe as the inference task: register fl,
+    # surface xtorch_ops state, dispatch a flag_gems op, and assert the fl
+    # platform loaded. flag_gems was already imported above (all-early), so
+    # this re-import is a cached no-op.
     import flag_gems
     os.environ.setdefault("VLLM_PLUGINS", "fl")
     os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
@@ -288,7 +347,6 @@ elif task == "all":
               [a for a in dir(_fgrt) if not a.startswith("_")][:40])
     except Exception as _e:
         print("flag_gems.runtime probe err:", repr(_e))
-    os.environ.setdefault("GEMS_VENDOR", "kunlunxin")
     os.environ["USE_FLAGGEMS"] = "true"
     try:
         import flag_gems as _fg
