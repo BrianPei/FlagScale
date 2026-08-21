@@ -33,22 +33,23 @@ experiment:
     VLLM_PLUGINS: "fl"
     VLLM_FL_PLATFORM: "kunlunxin"
     VLLM_WORKER_MULTIPROC_METHOD: "spawn"
-    # Kunlunxin P800 attention runs on the vllm-plugin-FL main native kunlunxin
-    # vendor backend (PR #268). VLLM_FL_PREFER=vendor makes vllm_fl's
-    # use_flaggems() return False (utils.py: prefer_backend != "flagos" short-
-    # circuits before USE_FLAGGEMS is read), so attention dispatches to the
-    # vendor backend (torch_xmlir XFlashAttention, not triton) -- avoiding the
-    # libcuda.so.1 assert that killed the FlagGems triton path (server.md).
-    # Aligns with the FlagRelease Qwen3.6-35B-A3B-nomtp-kunlunxin-FlagOS env.
-    VLLM_FL_PREFER: "vendor"
-    # vendor backend uses reshape_and_cache_flash; official FlagRelease sets 1.
+    # Aligns with the official Kunlunxin P800 inference env (20260812 PDF): no
+    # VLLM_FL_PREFER is set, so vllm_fl's use_flaggems() stays True and
+    # attention dispatches through the flag_gems triton path
+    # (flag_gems._kunlunxin.ops.*), which the PDF shows producing correct
+    # output on the official runtime image (Triton 3.0.0 kunlunxin-adapted).
+    # 1512ea6 previously set VLLM_FL_PREFER=vendor to dodge a libcuda.so.1
+    # assert on the old flagos-dev base image, but 645116a swapped in the
+    # official runtime image where triton no longer asserts -- the vendor
+    # XFlashAttention decode then became the garbled-output source.
+    # USE_RESHAPE_AND_CACHE_FLASH=1 is the official env value.
     USE_RESHAPE_AND_CACHE_FLASH: "1"
     # Log vllm_fl dispatch routing (which backend each op resolves to).
     VLLM_FL_DISPATCH_DEBUG: "1"
     # flag_gems library vendor selection (used at import by DeviceDetector /
-    # backend init). vllm_fl op dispatch is disabled by VLLM_FL_PREFER=vendor,
-    # but flag_gems itself still needs the kunlunxin vendor to init correctly
-    # (its quick-cmd probe has no kunlunxin entry).
+    # backend init). flag_gems needs the kunlunxin vendor to init correctly
+    # (its quick-cmd probe has no kunlunxin entry); op dispatch now runs
+    # through flag_gems (no VLLM_FL_PREFER override).
     GEMS_VENDOR: "kunlunxin"
     CUDA_VISIBLE_DEVICES: "0,1"
     CUDA_DEVICE_MAX_CONNECTIONS: 1
