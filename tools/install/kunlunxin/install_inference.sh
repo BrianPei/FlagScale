@@ -111,11 +111,15 @@ install_vllm_plugin() {
     # Force the FlagGems AttentionFLBackend for kunlunxin (v0.1.1-only patch).
     # On main the anchor is gone -- get_attn_backend_cls now calls the
     # module-level _attention_backend CachedOp, not call_op("attention_backend",
-    # ...) -- so it idempotently skips. main uses VLLM_FL_PREFER=vendor (set in
-    # the case yaml) -> the native kunlunxin vendor attention backend
-    # (torch_xmlir XFlashAttention, not triton), which is the supported path and
-    # avoids the libcuda.so.1 assert of the FlagGems triton path. Kept for the
-    # v0.1.1 local fallback. See patch_attention_backend_kunlunxin.py.
+    # ...) -- so it idempotently skips. main leaves VLLM_FL_PREFER unset (see
+    # the case yaml) so vllm_fl's use_flaggems() stays True and attention
+    # dispatches through the flag_gems triton path -- the official 20260812 PDF
+    # shows this producing correct decode output on the official runtime image.
+    # The VLLM_FL_PREFER=vendor path (vendor XFlashAttention) decoded garbled
+    # output and is dropped; 645116a's official runtime image (Triton 3.0.0
+    # kunlunxin-adapted) makes the flag_gems triton path no longer assert on
+    # libcuda.so.1. Kept for the v0.1.1 local fallback. See
+    # patch_attention_backend_kunlunxin.py.
     python "$SCRIPT_DIR/patch_attention_backend_kunlunxin.py" \
         "$FLAGSCALE_DEPS/vllm-plugin-FL" || return 1
 
