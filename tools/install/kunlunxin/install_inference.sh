@@ -147,36 +147,33 @@ assert entrypoints.get("fl") == "vllm_fl:register", entrypoints
 PY
 }
 
-# Install the triton.autotune compat shim into the target conda env so it is
-# auto-imported (via the .pth file) before any `import flag_gems`, for every
-# Python process in that env -- including vLLM spawn workers. Without it,
-# vllm_fl:register -> vllm_fl/utils.py -> import flag_gems crashes at import
-# time because the Kunlunxin flag_gems ops use triton.autotune(generate_configs=...),
-# a keyword the P800 runtime triton does not accept. See triton_autotune_compat.py.
-install_triton_autotune_compat() {
-    set_step "Installing triton.autotune compat shim (generate_configs)"
-    local conda_path="${FLAGSCALE_CONDA:-/root/miniconda}"
-    local env_name="${FLAGSCALE_ENV_NAME:-python310_torch29_cuda}"
-    local env_python="$conda_path/envs/$env_name/bin/python"
-    [ -x "$env_python" ] || env_python="python"
-
-    local site_dir
-    site_dir="$("$env_python" -c 'import site; print(site.getsitepackages()[0])')" \
-        || { log_error "Could not resolve site-packages for triton shim"; return 1; }
-
-    install -m 0644 "$SCRIPT_DIR/triton_autotune_compat.py" \
-        "$site_dir/flagscale_triton_autotune_compat.py"
-    echo "import flagscale_triton_autotune_compat" \
-        > "$site_dir/_flagscale_triton_autotune_compat.pth"
-    log_success "triton.autotune compat shim installed at $site_dir"
-}
+# The triton.autotune compat shim (triton_autotune_compat.py) is NO LONGER
+# installed. It was added for the old flagos-dev base image whose triton
+# rejected triton.autotune(generate_configs=...), crashing `import flag_gems`
+# inside vllm_fl:register. 645116a switched to the official runtime image
+# (Triton 3.0.0 kunlunxin-adapted), the same image the official 20260812 PDF
+# runs -- and the PDF runs `vllm serve` with NO shim, yet flag_gems imports and
+# dispatches through flag_gems._kunlunxin.ops.* correctly. Keeping the shim
+# here actively BREAKS inference: its _FlagGemsCompatFinder auto-imports (via
+# the .pth) before every `import flag_gems` -- including in vLLM spawn workers
+# -- and re-patches triton.language.math / triton.autotune, which corrupts
+# flag_gems DeviceDetector backend selection. flag_gems then selects the
+# generic CUDA backend (flag_gems/ops/zeros.py) instead of _kunlunxin, and
+# torch.zeros(bool, device=cuda) -> triton load_binary -> CUDA_ERROR_NOT_SUPPORTED
+# at worker init_device (ModelRunnerFL -> build_logitsprocs -> builtin.py:330),
+# crashing both TP workers before any output. The full case-yaml env
+# (GEMS_VENDOR=kunlunxin, no VLLM_FL_PREFER) does not help -- flag_gems never
+# reaches the _kunlunxin backend while the shim interferes with the import
+# chain. Removing the shim aligns with the official record. If a future base
+# image reintroduces the generate_configs import crash, restore this step and
+# the .pth from triton_autotune_compat.py. See git history for the removed
+# install_triton_autotune_compat() function.
 
 main() {
     install_pip || die "Inference pip failed"
     install_vllm || die "vLLM install failed"
     install_vllm_plugin || die "vllm-plugin-FL failed"
     validate_vllm_plugin || die "vllm-plugin-FL validation failed"
-    install_triton_autotune_compat || die "triton.autotune compat shim failed"
 }
 
 main

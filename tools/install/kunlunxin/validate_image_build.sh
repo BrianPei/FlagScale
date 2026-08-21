@@ -84,10 +84,13 @@ elif task == "inference":
     assert transformers is not None
     print("Kunlunxin inference runtime:", torch.__version__, transformers.__version__)
 
-    # Verify the triton.autotune compat shim lets flag_gems import on P800 and
-    # that vLLM loads the fl plugin onto the Kunlunxin platform. Without the
-    # shim, `import flag_gems` raises TypeError (generate_configs) and vLLM
-    # falls back to UnspecifiedPlatform ("Device string must not be empty").
+    # Verify flag_gems imports on P800 and vLLM loads the fl plugin onto the
+    # Kunlunxin platform. The official runtime image (Triton 3.0.0
+    # kunlunxin-adapted) imports flag_gems natively -- no triton.autotune
+    # compat shim is installed (removed from install_inference.sh; it broke
+    # flag_gems _kunlunxin backend selection). If import flag_gems or
+    # vllm_fl:register raises here, the triton/flag_gems combo on this image differs
+    # from the official record.
     import flag_gems
     os.environ.setdefault("VLLM_PLUGINS", "fl")
     os.environ.setdefault("VLLM_FL_PLATFORM", "kunlunxin")
