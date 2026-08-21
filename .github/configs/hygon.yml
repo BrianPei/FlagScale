@@ -74,7 +74,7 @@ image_build:
 container_volumes:
   - /opt/hyhal:/opt/hyhal:ro
   - /public-flash/lihongyang/data:/home/gitlab-runner/data:ro
-  - /public-flash/flagcicd/Qwen/Qwen3-4B:/home/gitlab-runner/data/Qwen3-4B:ro
+  - /public-flash/flagcicd/Qwen/Qwen3-4B:/home/gitlab-runner/models/Qwen3-4B:ro
   - /public-flash/lihongyang/qwentokenizer:/home/gitlab-runner/tokenizers/qwentokenizer:ro
 
 # DTK exposes BW1000 devices through the KFD/DRI compatibility interfaces.

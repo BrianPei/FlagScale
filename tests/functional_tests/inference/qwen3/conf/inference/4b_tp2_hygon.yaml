@@ -2,8 +2,8 @@
 # Licensed under the Apache License, Version 2.0.
 
 llm:
-  model: /home/gitlab-runner/data/Qwen3-4B
-  tokenizer: /home/gitlab-runner/data/Qwen3-4B
+  model: /home/gitlab-runner/models/Qwen3-4B
+  tokenizer: /home/gitlab-runner/models/Qwen3-4B
   trust_remote_code: true
   tensor_parallel_size: 2
   pipeline_parallel_size: 1

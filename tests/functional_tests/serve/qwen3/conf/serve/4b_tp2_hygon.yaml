@@ -4,7 +4,7 @@
 - serve_id: vllm_model
   engine: vllm
   engine_args:
-    model: /home/gitlab-runner/data/Qwen3-4B
+    model: /home/gitlab-runner/models/Qwen3-4B
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     gpu_memory_utilization: 0.9
