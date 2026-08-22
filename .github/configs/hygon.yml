@@ -73,7 +73,7 @@ image_build:
 
 container_volumes:
   - /opt/hyhal:/opt/hyhal:ro
-  - /public-flash/lihongyang/data:/home/gitlab-runner/data:ro
+  - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data:ro
   - /mnt/airs-business/cicd/baai_datasets/Qwen3-4B:/home/gitlab-runner/models/Qwen3-4B:ro
   - /mnt/airs-business/cicd/baai_tokenizers/qwentokenizer:/home/gitlab-runner/tokenizers/qwentokenizer:ro
 

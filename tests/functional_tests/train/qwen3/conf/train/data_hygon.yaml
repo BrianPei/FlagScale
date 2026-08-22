@@ -13,7 +13,7 @@
 # limitations under the License.
 
 data:
-  data_path: /home/gitlab-runner/data/Nemotron-CC-v2__High-Quality__part1_text_document
+  data_path: /home/gitlab-runner/data/pile_wikipedia_demo/pile_wikipedia_demo
   # Store generated indices outside the read-only dataset mount.
   data_cache_path: /tmp/flagscale-data-cache/qwen3-0_6b_hygon
   split: 1
