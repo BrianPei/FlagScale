@@ -8,6 +8,7 @@ llm:
   tensor_parallel_size: 2
   pipeline_parallel_size: 1
   gpu_memory_utilization: 0.9
+  safetensors_load_strategy: eager
   seed: 1234
   enforce_eager: true
   disable_custom_all_reduce: true
