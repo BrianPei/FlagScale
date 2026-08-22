@@ -145,7 +145,12 @@ _gpu_poll_loop() {
     local gpu_count=$1 fetch_fn=$2
 
     while true; do
-        "$fetch_fn"
+        mem_used=()
+        mem_total=()
+        if ! "$fetch_fn"; then
+            log_error "Unable to query accelerator memory"
+            return 1
+        fi
         local need_wait=false max_pct=0
         for ((i=0; i<gpu_count; i++)); do
             if ! [[ "${mem_used[i]:-}" =~ ^[0-9]+$ ]] || \
