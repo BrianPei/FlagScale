@@ -95,11 +95,11 @@ container_options: >-
   --cap-add SYS_PTRACE
   --security-opt seccomp=unconfined
 
-# Qwen3-4B can take more than the common 180-second readiness window to load
-# from the shared model volume on BW1000.
+# Qwen3-4B can take more than 600 seconds to initialize from the shared model
+# volume on BW1000 before the API server becomes ready.
 timeouts:
   inference_minutes: 15
-  serve_ready_seconds: 600
+  serve_ready_seconds: 900
 
 pkg_mgr: "pip"
 env_path: "/usr/local"
