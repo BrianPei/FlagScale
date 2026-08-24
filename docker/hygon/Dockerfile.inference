@@ -45,6 +45,10 @@ RUN bash /workspace/tools/install/utils/check_pip_conflicts.sh \
     rm -rf /opt/flagscale/deps /workspace/tools /workspace/requirements \
         /tmp/pip-check.before /tmp/pip-check.after
 
+# Runtime-compiled artifacts are host/device specific and must not be shipped
+# in the reusable inference image.
+RUN rm -rf /root/.triton/cache /root/.cache/torch/kernels
+
 WORKDIR /workspace
 
 FROM base AS dev

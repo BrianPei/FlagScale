@@ -15,6 +15,18 @@ if [ "$phase" != post ]; then
     exit 0
 fi
 
+if [ "$task" = inference ]; then
+    docker run --rm --entrypoint sh "$candidate" -eu -c '
+for cache_dir in /root/.triton/cache /root/.cache/torch/kernels; do
+    cached_file=$(find "$cache_dir" -type f -print -quit 2>/dev/null || true)
+    if [ -n "$cached_file" ]; then
+        echo "Hygon inference image contains runtime JIT cache: $cached_file" >&2
+        exit 1
+    fi
+done
+'
+fi
+
 runtime_options=(
     --rm
     --device=/dev/kfd
