@@ -1,0 +1,58 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+
+# Enflame ZIXIAOC200 image-build configuration. Functional test cases remain
+# disabled until FlagScale-native Enflame fixtures are validated.
+hardware_name: enflame
+display_name: "Enflame ZIXIAOC200 Tests"
+
+ci_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-enflame-ci
+ci_train_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-enflame-ci
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-enflame-ci
+
+runner_labels: ["flagscale-enflame-s60-gpu8"]
+
+container_volumes:
+  - /data:/data
+  - /dev:/dev
+  - /sys:/sys
+
+image_build:
+  enabled: true
+  registry: harbor.baai.ac.cn
+  target: dev
+  network: host
+  max_parallel: 1
+  runtime_device_count: '8'
+  runtime_smoke_nproc: '2'
+  registry_login: true
+  validation_script: tools/install/enflame/validate_image_build.sh
+  tasks:
+    inference:
+      dockerfile: docker/enflame/Dockerfile.inference
+      image: flagos-dev/flagscale-inference
+      base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-enflame-ci
+      test_roles: [inference]
+      source_refs:
+        VLLM_PLUGIN_FL_REF: vllm_plugin_fl
+
+container_options: >-
+  --privileged
+  --ipc=host
+  --shm-size=100g
+  --hostname flagscale_cicd
+  --user root
+  --ulimit nofile=65535:65535
+
+timeouts:
+  inference_minutes: 30
+  serve_ready_seconds: 900
+
+pkg_mgr: "pip"
+env_path: ""
+env_names:
+  train: ""
+  hetero_train: ""
+  inference: ""
+  serve: ""
+  rl: ""

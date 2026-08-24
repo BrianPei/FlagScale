@@ -1,0 +1,46 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+
+# The vendor base owns the matching torch_gcu, vLLM and GCU runtime. This
+# image only overlays the workflow-resolved vllm-plugin-FL revision.
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-enflame-ci
+
+FROM ${BASE_IMAGE} AS dev
+
+ARG FLAGSCALE_HOME=/opt/flagscale
+ARG VLLM_PLUGIN_FL_REPO=https://github.com/flagos-ai/vllm-plugin-FL.git
+ARG VLLM_PLUGIN_FL_REF=main
+
+LABEL io.flagscale.vllm-plugin-fl.revision=${VLLM_PLUGIN_FL_REF}
+
+ENV FLAGSCALE_HOME=${FLAGSCALE_HOME} \
+    FLAGSCALE_DEPS=${FLAGSCALE_HOME}/deps \
+    FLAGSCALE_VLLM_PLUGIN_REF=${VLLM_PLUGIN_FL_REF} \
+    VLLM_PLUGINS=fl \
+    VLLM_FL_PLATFORM=enflame
+
+COPY tools/install/utils/check_pip_conflicts.sh /tmp/check_pip_conflicts.sh
+
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.before || true
+
+RUN set -eux; \
+    mkdir -p "${FLAGSCALE_DEPS}/vllm-plugin-FL"; \
+    git init -q "${FLAGSCALE_DEPS}/vllm-plugin-FL"; \
+    git -C "${FLAGSCALE_DEPS}/vllm-plugin-FL" remote add origin "${VLLM_PLUGIN_FL_REPO}"; \
+    git -c http.version=HTTP/1.1 -C "${FLAGSCALE_DEPS}/vllm-plugin-FL" \
+        fetch --depth 1 origin "${VLLM_PLUGIN_FL_REF}"; \
+    git -C "${FLAGSCALE_DEPS}/vllm-plugin-FL" checkout -q --detach FETCH_HEAD; \
+    cd "${FLAGSCALE_DEPS}/vllm-plugin-FL"; \
+    python -m pip install --root-user-action=ignore \
+        --no-deps --no-build-isolation .; \
+    rm -rf "${FLAGSCALE_DEPS}"
+
+RUN python -m pip check 2>&1 | sort > /tmp/pip-check.after || true; \
+    bash /tmp/check_pip_conflicts.sh \
+        /tmp/pip-check.before /tmp/pip-check.after; \
+    rm -f /tmp/pip-check.before /tmp/pip-check.after \
+        /tmp/check_pip_conflicts.sh
+
+WORKDIR /workspace
+
+FROM dev AS release
