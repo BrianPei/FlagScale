@@ -16,9 +16,9 @@ hardware_name: hygon
 display_name: "Hygon BW1000 Tests"
 
 # Stable BW1000 images validated by the Hygon functional tests.
-ci_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260820-hygon-dev-inference
+ci_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:cecddee-hygon-dev
 ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260820-hygon-dev-train
-ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260820-hygon-dev-inference
+ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:cecddee-hygon-dev
 
 runner_labels: ["flagscale-hygon-bw1000-gpu8"]
 
