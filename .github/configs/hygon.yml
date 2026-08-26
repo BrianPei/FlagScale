@@ -57,10 +57,12 @@ image_build:
       image: flagos-dev/flagscale-inference
       test_roles: [inference]
       base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:vllm-plugin-fl-hygon-vllm0.20.2-dtk26.04-py3.10-ci
-      build_args: {}
+      # vLLM-plugin-FL main expects fused-MoE modules absent from the
+      # vendor vLLM 0.20.2 base, so retain its validated compatible revision.
+      build_args:
+        VLLM_PLUGIN_FL_REF: 38e7dbc20197e2db742c4e4c9687d36ea4df9900
       source_refs:
         FLAGGEMS_REF: flaggems
-        VLLM_PLUGIN_FL_REF: vllm_plugin_fl
       test_environments:
         inference:
           pkg_mgr: pip
