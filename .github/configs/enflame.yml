@@ -42,6 +42,7 @@ container_options: >-
   --shm-size=100g
   --hostname flagscale_cicd
   --user root
+  --env PIP_INDEX_URL=https://pypi.org/simple
   --ulimit nofile=65535:65535
 
 timeouts:
