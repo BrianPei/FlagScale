@@ -110,7 +110,7 @@ def test_musa_declares_validated_vendor_only_transformer_engine_exception():
         assert f"ARG BASE_IMAGE={task['base_image']}" in dockerfile
 
 
-@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "metax"])
+@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "hygon", "metax"])
 def test_train_install_records_resolved_training_source_revisions(platform):
     root = Path(__file__).parents[2]
     config = yaml.safe_load((root / f".github/configs/{platform}.yml").read_text())
@@ -137,6 +137,16 @@ def test_ascend_train_image_has_hardware_post_build_validation():
     assert 'if [ "$task" = train ]' in validation
     assert "torch.npu.is_available()" in validation
     assert 'metadata.distribution("transformer-engine")' in validation
+
+
+def test_hygon_train_validation_reports_native_libraries():
+    root = Path(__file__).parents[2]
+    config = yaml.safe_load((root / ".github/configs/hygon.yml").read_text())
+    validation = (root / config["image_build"]["validation_script"]).read_text()
+
+    assert 'if [ "$task" = train ]' in validation
+    assert "HYGON_NATIVE_SO_COUNT=" in validation
+    assert "HYGON_NATIVE_SO=" in validation
 
 
 def test_declared_all_images_use_one_python_environment():

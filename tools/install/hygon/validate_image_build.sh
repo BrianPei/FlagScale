@@ -47,6 +47,7 @@ if [ "$task" = train ]; then
         --env EXPECTED_DEVICE_COUNT="$device_count" \
         --entrypoint python "$candidate" -c '
 import os
+from pathlib import Path
 import torch
 import flag_gems
 import megatron.core
@@ -62,6 +63,16 @@ assert get_platform().device_name() == "cuda"
 assert get_manager().get_selected_impl_id("generic_gemm") == "default.flagos"
 value = torch.tensor(list(range(8)), dtype=torch.float32, device="cuda")
 assert (value * 2).cpu().tolist() == [0., 2., 4., 6., 8., 10., 12., 14.]
+native_roots = (
+    Path(megatron.core.__file__).resolve().parent,
+    Path(transformer_engine.__file__).resolve().parent,
+)
+native_libraries = sorted(
+    str(path) for root in native_roots for path in root.rglob("*.so")
+)
+print("HYGON_NATIVE_SO_COUNT=", len(native_libraries))
+for path in native_libraries:
+    print("HYGON_NATIVE_SO=", path)
 '
 elif [ "$task" = inference ]; then
     docker run "${runtime_options[@]}" \

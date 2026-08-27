@@ -62,6 +62,16 @@ install_source() {
         --no-build-isolation --no-deps $pip_options -e ."
 }
 
+record_source_revision() {
+    local source_name=$1
+    local ref=$2
+
+    [ -n "$ref" ] || return 1
+    [ "$DEBUG" = true ] && return 0
+    mkdir -p "$FLAGSCALE_HOME/source-revisions"
+    printf '%s\n' "$ref" >"$FLAGSCALE_HOME/source-revisions/$source_name"
+}
+
 validate_runtime() {
     [ "$DEBUG" = true ] && return 0
     python - <<'PY'
@@ -79,6 +89,8 @@ main() {
         "$FLAGSCALE_DEPS/Megatron-LM-FL" /tmp/hygon-megatron-lm-fl.tar.gz \
         "" "--ignore-requires-python" || \
         die "Hygon Megatron-LM-FL installation failed"
+    record_source_revision megatron_lm_fl "$MEGATRON_REF" || \
+        die "Failed to record Hygon Megatron-LM-FL revision"
     install_source FlagGems "$FLAGGEMS_REF" \
         "$FLAGSCALE_DEPS/FlagGems" /tmp/hygon-flaggems.tar.gz || \
         die "Hygon FlagGems installation failed"
@@ -86,6 +98,8 @@ main() {
         "$FLAGSCALE_DEPS/TransformerEngine-FL" \
         /tmp/hygon-transformer-engine-fl.tar.gz "TE_FL_SKIP_CUDA=1" || \
         die "Hygon TransformerEngine-FL installation failed"
+    record_source_revision transformer_engine_fl "$TRANSFORMER_ENGINE_REF" || \
+        die "Failed to record Hygon TransformerEngine-FL revision"
     validate_runtime || die "Hygon training runtime validation failed"
     log_success "Hygon training runtime ready"
 }
