@@ -13,6 +13,45 @@ device_count="${IMAGE_BUILD_RUNTIME_DEVICE_COUNT:-}"
 
 [ "$phase" = post ] || exit 0
 
+validate_vendor_te_contract() {
+    local mode version native_revision
+    mode=$(docker image inspect "$candidate" --format \
+        '{{index .Config.Labels "io.flagscale.transformer-engine.mode"}}')
+    version=$(docker image inspect "$candidate" --format \
+        '{{index .Config.Labels "io.flagscale.transformer-engine.version"}}')
+    native_revision=$(docker image inspect "$candidate" --format \
+        '{{index .Config.Labels "io.flagscale.transformer-engine.native-revision"}}')
+
+    [ "$mode" = vendor-only ] || {
+        echo "Unexpected MUSA TransformerEngine mode: $mode" >&2
+        return 1
+    }
+    [ -n "$version" ] && [ -n "$native_revision" ] || {
+        echo "MUSA vendor TransformerEngine provenance is incomplete" >&2
+        return 1
+    }
+
+    docker run --rm --entrypoint bash \
+        --env EXPECTED_TE_VERSION="$version" \
+        "$candidate" -lc '
+set -euo pipefail
+TORCH_DEVICE_BACKEND_AUTOLOAD=0 python - <<"PY"
+import importlib.metadata as metadata
+import os
+
+expected = os.environ["EXPECTED_TE_VERSION"]
+actual = metadata.version("transformer-engine")
+assert actual == expected, (actual, expected)
+files = [str(path) for path in metadata.files("transformer-engine") or ()]
+assert any(
+    "transformer_engine_torch" in path and path.endswith(".so")
+    for path in files
+), files
+print("MUSA vendor TransformerEngine:", actual)
+PY
+'
+}
+
 docker_args=(
     --privileged
     --env MTHREADS_VISIBLE_DEVICES=all
@@ -115,6 +154,7 @@ torchrun --standalone --nproc_per_node="${EXPECTED_WORLD_SIZE}" \
 
 case "$task" in
     train)
+        validate_vendor_te_contract
         validate_runtime train
         validate_collective
         ;;

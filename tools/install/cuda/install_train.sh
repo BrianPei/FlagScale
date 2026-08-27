@@ -53,11 +53,14 @@ resolved_source_ready() {
 record_resolved_source() {
     local ref=$1
     local marker=$2
+    local source_name=$3
     if [ "$DEBUG" = true ]; then
         log_info "Would record resolved source $ref in $marker"
         return 0
     fi
     printf '%s\n' "$ref" > "$marker"
+    mkdir -p "$FLAGSCALE_HOME/source-revisions"
+    printf '%s\n' "$ref" >"$FLAGSCALE_HOME/source-revisions/$source_name"
 }
 
 # =============================================================================
@@ -122,7 +125,7 @@ install_transformer_engine() {
         "$RETRY_COUNT" || return 1
     run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/TransformerEngine' && \
         NVTE_FRAMEWORK=pytorch $pip_cmd install --root-user-action=ignore --no-build-isolation . -vvv" || return 1
-    record_resolved_source "$TE_REF" "$marker" || return 1
+    record_resolved_source "$TE_REF" "$marker" transformer_engine_fl || return 1
     log_success "TransformerEngine-FL ready at $TE_REF"
 }
 
@@ -140,7 +143,7 @@ install_megatron_lm() {
     local pip_cmd=$(get_pip_cmd)
     run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && \
         $pip_cmd install --root-user-action=ignore --no-build-isolation . -vvv" || return 1
-    record_resolved_source "$MEGATRON_REF" "$marker" || return 1
+    record_resolved_source "$MEGATRON_REF" "$marker" megatron_lm_fl || return 1
     log_success "Megatron-LM-FL ready at $MEGATRON_REF"
 }
 

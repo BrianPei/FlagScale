@@ -578,6 +578,37 @@ jobs:
           IMAGE_BUILD_VALIDATION_SCRIPT: ${{ matrix.validation_script }}
         run: bash "$IMAGE_BUILD_VALIDATION_SCRIPT"
 
+      - name: Validate image source provenance
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          RESOLVED_SOURCES: ${{ toJSON(matrix.resolved_sources) }}
+        run: |
+          set -euo pipefail
+          labels=$(docker image inspect "$IMAGE" --format '{{json .Config.Labels}}')
+          python3 tools/install/utils/validate_image_provenance.py \
+            --labels-json "$labels" \
+            --sources-json "$RESOLVED_SOURCES"
+          while IFS=$'\t' read -r source_name revision; do
+            case "$source_name" in
+              megatron_lm_fl|transformer_engine_fl) ;;
+              *) continue ;;
+            esac
+            docker run --rm \
+              --env EXPECTED_SOURCE_NAME="$source_name" \
+              --env EXPECTED_SOURCE_REVISION="$revision" \
+              --entrypoint bash "$IMAGE" -lc '
+                set -euo pipefail
+                marker="/opt/flagscale/source-revisions/$EXPECTED_SOURCE_NAME"
+                test -f "$marker"
+                actual=$(cat "$marker")
+                test "$actual" = "$EXPECTED_SOURCE_REVISION"
+                echo "$EXPECTED_SOURCE_NAME installed at $actual"
+              '
+          done < <(jq -r \
+            'to_entries[] | [.key, .value.revision] | @tsv' \
+            <<< "$RESOLVED_SOURCES")
+
       - name: Push image with retry
         id: push_image
         if: inputs.push

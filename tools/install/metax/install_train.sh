@@ -40,6 +40,16 @@ checkout_pinned_ref() {
         git -C '$target' checkout -q --detach FETCH_HEAD"
 }
 
+record_source_revision() {
+    local source_name=$1
+    local ref=$2
+
+    [ -n "$ref" ] || return 1
+    [ "$DEBUG" = true ] && return 0
+    mkdir -p "$FLAGSCALE_HOME/source-revisions"
+    printf '%s\n' "$ref" >"$FLAGSCALE_HOME/source-revisions/$source_name"
+}
+
 install_training_runtime() {
     local pip_cmd
     pip_cmd=$(get_pip_cmd)
@@ -51,6 +61,7 @@ install_training_runtime() {
     run_cmd -d "$DEBUG" bash -c \
         "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && $pip_cmd install \
         --root-user-action=ignore --no-build-isolation --no-deps ." || return 1
+    record_source_revision megatron_lm_fl "$MEGATRON_REF" || return 1
 
     set_step "Installing pinned TransformerEngine-FL"
     checkout_pinned_ref "$TE_REPO" "$TE_REF" \
@@ -67,6 +78,7 @@ install_training_runtime() {
         NVTE_WITH_MACA='${NVTE_WITH_MACA:-1}' \
         $pip_cmd install --root-user-action=ignore \
         --no-build-isolation --no-deps ." || return 1
+    record_source_revision transformer_engine_fl "$TE_REF" || return 1
 }
 
 validate_runtime() {

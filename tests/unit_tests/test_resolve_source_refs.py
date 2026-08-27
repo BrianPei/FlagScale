@@ -92,6 +92,53 @@ def test_platform_source_refs_use_catalog(platform):
             assert re.search(rf"^ARG {build_arg}(?:=|$)", dockerfile, re.MULTILINE)
 
 
+def test_musa_declares_validated_vendor_only_transformer_engine_exception():
+    root = Path(__file__).parents[2]
+    config = yaml.safe_load((root / ".github/configs/musa.yml").read_text())
+    train = config["image_build"]["tasks"]["train"]
+
+    assert train["build_args"]["FLAGSCALE_TE_MODE"] == "vendor-only"
+    assert train["build_args"]["FLAGSCALE_TE_VERSION"] == "2.0.0+e73781e"
+    assert train["build_args"]["FLAGSCALE_TE_NATIVE_REVISION"] == "e73781e"
+    assert "FLAGSCALE_TE_REF" not in train.get("source_refs", {})
+    expected_digest = "sha256:fb56b8b2882d20de45954ed0d53fd695ae08a23c808d853dae9e57f4fcae618e"
+    assert train["base_image"].endswith(f"@{expected_digest}")
+    inference = config["image_build"]["tasks"]["inference"]
+    assert inference["base_image"].endswith(f"@{expected_digest}")
+    for task in (train, inference):
+        dockerfile = (root / task["dockerfile"]).read_text()
+        assert f"ARG BASE_IMAGE={task['base_image']}" in dockerfile
+
+
+@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "metax"])
+def test_train_install_records_resolved_training_source_revisions(platform):
+    root = Path(__file__).parents[2]
+    config = yaml.safe_load((root / f".github/configs/{platform}.yml").read_text())
+    source_refs = config["image_build"]["tasks"]["train"].get("source_refs", {})
+    install_script = (root / f"tools/install/{platform}/install_train.sh").read_text()
+
+    expected_markers = {
+        "megatron_lm_fl": "megatron_lm_fl",
+        "transformer_engine_fl": "transformer_engine_fl",
+    }
+    for source_name in source_refs.values():
+        marker = expected_markers.get(source_name)
+        if marker:
+            assert "source-revisions" in install_script
+            assert marker in install_script
+
+
+def test_ascend_train_image_has_hardware_post_build_validation():
+    root = Path(__file__).parents[2]
+    config = yaml.safe_load((root / ".github/configs/ascend.yml").read_text())
+    validation = (root / config["image_build"]["validation_script"]).read_text()
+
+    assert config["image_build"]["runtime_device_count"] == "2"
+    assert 'if [ "$task" = train ]' in validation
+    assert "torch.npu.is_available()" in validation
+    assert 'metadata.distribution("transformer-engine")' in validation
+
+
 def test_declared_all_images_use_one_python_environment():
     root = Path(__file__).parents[2]
     declared_all_images = 0

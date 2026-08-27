@@ -101,6 +101,11 @@ install_megatron_lm() {
     run_cmd -d "$DEBUG" bash -c "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && \
         $pip_cmd install --ignore-requires-python --root-user-action=ignore \
         --no-build-isolation . -v" || return 1
+    if [ "$DEBUG" != true ]; then
+        mkdir -p "$FLAGSCALE_HOME/source-revisions"
+        printf '%s\n' "$MEGATRON_REF" > \
+            "$FLAGSCALE_HOME/source-revisions/megatron_lm_fl"
+    fi
     validate_megatron_lm || return 1
     log_success "Megatron-LM-FL ready"
 }

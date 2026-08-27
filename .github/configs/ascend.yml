@@ -42,6 +42,7 @@ image_build:
   target: dev
   network: host
   max_parallel: 1
+  runtime_device_count: '2'
   registry_login: true
   validation_script: tools/install/ascend/validate_image_build.sh
   tasks:

@@ -39,6 +39,33 @@ while [[ $# -gt 0 ]]; do
     case $1 in --debug) DEBUG=true; shift ;; *) shift ;; esac
 done
 
+resolved_source_ready() {
+    local package=$1
+    local ref=$2
+    local marker=$3
+
+    [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] || return 1
+    [ -n "$ref" ] || return 1
+    [ -f "$marker" ] || return 1
+    [ "$(cat "$marker")" = "$ref" ] || return 1
+    is_package_installed "$package"
+}
+
+record_resolved_source() {
+    local ref=$1
+    local marker=$2
+    local source_name=$3
+
+    [ -n "$ref" ] || return 1
+    if [ "$DEBUG" = true ]; then
+        log_info "Would record resolved source $ref in $marker"
+        return 0
+    fi
+    printf '%s\n' "$ref" >"$marker"
+    mkdir -p "$FLAGSCALE_HOME/source-revisions"
+    printf '%s\n' "$ref" >"$FLAGSCALE_HOME/source-revisions/$source_name"
+}
+
 checkout_pinned_ref() {
     local repo=$1
     local ref=$2
@@ -119,7 +146,9 @@ assert TESpecProvider is not None
 }
 
 install_transformer_engine() {
-    if [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] && transformer_engine_ready; then
+    local marker="$FLAGSCALE_DEPS/.transformer-engine-fl.ref"
+    if resolved_source_ready "transformer-engine" "$TE_REF" "$marker" && \
+        transformer_engine_ready; then
         local version
         version=$(get_package_version "transformer-engine")
         log_info "TransformerEngine-FL is ready (version: ${version:-unknown}), skipping"
@@ -150,11 +179,13 @@ install_transformer_engine() {
         TORCH_DEVICE_BACKEND_AUTOLOAD=0 TE_FL_SKIP_CUDA=1 \
         $pip_cmd install --root-user-action=ignore \
         --no-build-isolation ." || return 1
+    record_resolved_source "$TE_REF" "$marker" transformer_engine_fl || return 1
     log_success "TransformerEngine-FL ready"
 }
 
 install_megatron_lm() {
-    if [ "${FLAGSCALE_FORCE_BUILD:-false}" != true ] && \
+    local marker="$FLAGSCALE_DEPS/.megatron-lm-fl.ref"
+    if resolved_source_ready "megatron-core" "$MEGATRON_REF" "$marker" && \
         megatron_lm_ready; then
         local version
         version=$(get_package_version "megatron-core")
@@ -176,6 +207,7 @@ install_megatron_lm() {
     run_cmd -d "$DEBUG" bash -c "cd '$FLAGSCALE_DEPS/Megatron-LM-FL' && \
         TORCH_DEVICE_BACKEND_AUTOLOAD=0 \
         $pip_cmd install --root-user-action=ignore --no-build-isolation . -v" || return 1
+    record_resolved_source "$MEGATRON_REF" "$marker" megatron_lm_fl || return 1
     log_success "Megatron-LM-FL ready"
 }
 
