@@ -100,11 +100,31 @@ install_flash_attn() {
     should_build_package "flash_attn" || return 0
     set_step "Installing Flash-Attention 2"
     local version="${FLASH_ATTN_VERSION:-2.8.1}"
+    local target="$FLAGSCALE_DEPS/flash-attention"
+    local archive="/tmp/flash-attention-v${version}.tar.gz"
+    local source_url="${FLASH_ATTN_SOURCE_URL:-}"
+    local source_sha256="${FLASH_ATTN_SOURCE_SHA256:-}"
+
+    if [ "$version" = 2.8.1 ]; then
+        source_url="${source_url:-https://files.pythonhosted.org/packages/e8/6d/7066d160bdffa2f9da29a8c3957f266b17a03ca0b3bdc8fdae86d9881fe7/flash_attn-2.8.1.tar.gz}"
+        source_sha256="${source_sha256:-0ff003899fcb244f357905b04f622d5c9736887126dd6675f8f4bc52954e3923}"
+    elif [ -z "$source_url" ] || [ -z "$source_sha256" ]; then
+        log_error "FLASH_ATTN_SOURCE_URL and FLASH_ATTN_SOURCE_SHA256 are required for version $version"
+        return 1
+    fi
     mkdir -p "$FLAGSCALE_DEPS"
-    retry_git_clone -d $DEBUG --branch "v${version}" --depth 1 \
-        "https://github.com/Dao-AILab/flash-attention.git" "$FLAGSCALE_DEPS/flash-attention" "$RETRY_COUNT" || return 1
+
+    # The official sdist includes CUTLASS, unlike GitHub's auto-generated source
+    # archive, and is more reliable than cloning the large repository in CI.
+    retry -d "$DEBUG" "$RETRY_COUNT" "rm -rf '$target' '$archive' && \
+        mkdir -p '$target' && \
+        curl --http1.1 --fail --location --retry 5 --retry-all-errors \
+          --connect-timeout 30 --output '$archive' '$source_url' && \
+        printf '%s  %s\\n' '$source_sha256' '$archive' | sha256sum --check --status && \
+        tar -xzf '$archive' --strip-components=1 -C '$target' && \
+        rm -f '$archive'" || return 1
     local pip_cmd=$(get_pip_cmd)
-    run_cmd -d $DEBUG bash -c "cd '$FLAGSCALE_DEPS/flash-attention' && \
+    run_cmd -d $DEBUG bash -c "cd '$target' && \
         FLASH_ATTENTION_FORCE_BUILD=TRUE MAX_JOBS=4 \
         $pip_cmd install --root-user-action=ignore --no-build-isolation . -vvv" || return 1
     log_success "Flash-Attention 2 ready"
