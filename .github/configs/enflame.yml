@@ -42,6 +42,20 @@ image_build:
       test_roles: [inference]
       source_refs:
         VLLM_PLUGIN_FL_REF: vllm_plugin_fl
+    all:
+      dockerfile: docker/enflame/Dockerfile.all
+      image: flagos-dev/flagscale-all
+      base_image: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260810-enflame-dev
+      test_roles: [train, inference]
+      test_environments:
+        train: &enflame_all_environment
+          pkg_mgr: pip
+          env_name: ""
+          env_path: /usr/local
+        inference: *enflame_all_environment
+        serve: *enflame_all_environment
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
 
 container_options: >-
   --privileged

@@ -1,0 +1,47 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+
+# The validated vendor base provides the mutually compatible GCU training,
+# vLLM-GCU and VERL runtimes. FlagScale overlays only Megatron-LM-FL source.
+ARG BASE_IMAGE=harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260810-enflame-dev
+
+FROM ${BASE_IMAGE} AS dev
+
+ARG FLAGSCALE_HOME=/opt/flagscale
+ARG FLAGSCALE_MEGATRON_REPO=https://github.com/flagos-ai/Megatron-LM-FL.git
+ARG FLAGSCALE_MEGATRON_REF=main
+
+LABEL io.flagscale.megatron-lm-fl.revision=${FLAGSCALE_MEGATRON_REF}
+
+ENV FLAGSCALE_HOME=${FLAGSCALE_HOME} \
+    FLAGSCALE_DEPS=${FLAGSCALE_HOME}/deps \
+    FLAGSCALE_MEGATRON_PATH=${FLAGSCALE_HOME}/deps/Megatron-LM-FL \
+    FLAGSCALE_MEGATRON_REF=${FLAGSCALE_MEGATRON_REF} \
+    PYTHONPATH=${FLAGSCALE_HOME}/deps/Megatron-LM-FL:${PYTHONPATH}
+
+# The vendor base already owns the compatible binary stack. Run the common
+# installer contract without replacing those packages.
+COPY tools/install /tmp/tools/install
+
+RUN chmod +x /tmp/tools/install/install.sh /tmp/tools/install/utils/*.sh; \
+    /tmp/tools/install/install.sh --platform enflame --task all \
+        --pkg-mgr pip --no-system --no-dev --no-base; \
+    rm -rf /tmp/tools/install
+
+RUN set -eux; \
+    mkdir -p "${FLAGSCALE_MEGATRON_PATH}"; \
+    git init -q "${FLAGSCALE_MEGATRON_PATH}"; \
+    git -C "${FLAGSCALE_MEGATRON_PATH}" remote add origin "${FLAGSCALE_MEGATRON_REPO}"; \
+    for attempt in 1 2 3; do \
+        git -c http.version=HTTP/1.1 -C "${FLAGSCALE_MEGATRON_PATH}" \
+            fetch --depth 1 origin "${FLAGSCALE_MEGATRON_REF}" && break; \
+        [ "${attempt}" -eq 3 ] && exit 1; \
+        sleep $((attempt * 10)); \
+    done; \
+    git -C "${FLAGSCALE_MEGATRON_PATH}" checkout -q --detach FETCH_HEAD; \
+    test "$(git -C "${FLAGSCALE_MEGATRON_PATH}" rev-parse HEAD)" = \
+        "${FLAGSCALE_MEGATRON_REF}"
+
+WORKDIR /workspace
+
+FROM dev AS release
