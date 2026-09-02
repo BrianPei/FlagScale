@@ -11,7 +11,10 @@ base_image="${IMAGE_BUILD_BASE_IMAGE:?IMAGE_BUILD_BASE_IMAGE is required}"
 candidate="${IMAGE_BUILD_CANDIDATE_IMAGE:?IMAGE_BUILD_CANDIDATE_IMAGE is required}"
 expected_devices="${IMAGE_BUILD_RUNTIME_DEVICE_COUNT:-8}"
 
-[ "$task" = inference ] || exit 0
+case "$task" in
+    train|inference) ;;
+    *) exit 0 ;;
+esac
 
 case "$phase" in
     pre) image="$base_image" ;;
@@ -28,6 +31,8 @@ docker run --rm \
     --volume /dev:/dev \
     --volume /sys:/sys \
     --env EXPECTED_DEVICE_COUNT="$expected_devices" \
+    --env IMAGE_BUILD_PHASE="$phase" \
+    --env IMAGE_BUILD_TASK="$task" \
     --env VLLM_PLUGINS=fl \
     --env VLLM_FL_PLATFORM=enflame \
     --entrypoint python \
@@ -37,6 +42,28 @@ import os
 import torch
 
 device_count = torch.gcu.device_count()
+task = os.environ["IMAGE_BUILD_TASK"]
+phase = os.environ["IMAGE_BUILD_PHASE"]
+
+print("torch:", torch.__version__)
+print("devices:", device_count)
+
+assert device_count >= int(os.environ["EXPECTED_DEVICE_COUNT"])
+
+value = torch.ones(16, device="gcu:0")
+assert value.sum().item() == 16
+
+if task == "train":
+    import transformer_engine
+
+    print("transformer-engine:", metadata.version("transformer-engine"))
+    if phase == "post":
+        import megatron
+        import megatron.core
+
+        print("megatron-core:", metadata.version("megatron-core"))
+    raise SystemExit(0)
+
 platform_plugins = {
     entry.name: entry.value
     for entry in metadata.entry_points(group="vllm.platform_plugins")
@@ -46,18 +73,13 @@ general_plugins = {
     for entry in metadata.entry_points(group="vllm.general_plugins")
 }
 
-print("torch:", torch.__version__)
-print("devices:", device_count)
 print("vllm:", metadata.version("vllm"))
 print("vllm-plugin-fl:", metadata.version("vllm-plugin-fl"))
 print("platform plugins:", platform_plugins)
 print("general plugins:", general_plugins)
 
-assert device_count >= int(os.environ["EXPECTED_DEVICE_COUNT"])
 assert metadata.version("vllm").startswith("0.20.2")
 assert platform_plugins.get("fl") == "vllm_fl:register"
 assert general_plugins.get("fl") == "vllm_fl:register_model"
 
-value = torch.ones(16, device="gcu:0")
-assert value.sum().item() == 16
 '

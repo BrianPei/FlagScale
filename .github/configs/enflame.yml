@@ -28,6 +28,13 @@ image_build:
   registry_login: true
   validation_script: tools/install/enflame/validate_image_build.sh
   tasks:
+    train:
+      dockerfile: docker/enflame/Dockerfile.train
+      image: flagos-dev/flagscale-train
+      base_image: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260810-enflame-dev
+      test_roles: [train]
+      source_refs:
+        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
     inference:
       dockerfile: docker/enflame/Dockerfile.inference
       image: flagos-dev/flagscale-inference
