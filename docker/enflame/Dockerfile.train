@@ -27,8 +27,12 @@ RUN set -eux; \
     mkdir -p "${FLAGSCALE_MEGATRON_PATH}"; \
     git init -q "${FLAGSCALE_MEGATRON_PATH}"; \
     git -C "${FLAGSCALE_MEGATRON_PATH}" remote add origin "${FLAGSCALE_MEGATRON_REPO}"; \
-    git -c http.version=HTTP/1.1 -C "${FLAGSCALE_MEGATRON_PATH}" \
-        fetch --depth 1 origin "${FLAGSCALE_MEGATRON_REF}"; \
+    for attempt in 1 2 3; do \
+        git -c http.version=HTTP/1.1 -C "${FLAGSCALE_MEGATRON_PATH}" \
+            fetch --depth 1 origin "${FLAGSCALE_MEGATRON_REF}" && break; \
+        [ "${attempt}" -eq 3 ] && exit 1; \
+        sleep $((attempt * 10)); \
+    done; \
     git -C "${FLAGSCALE_MEGATRON_PATH}" checkout -q --detach FETCH_HEAD; \
     cd "${FLAGSCALE_MEGATRON_PATH}"; \
     python -m pip install --root-user-action=ignore \
