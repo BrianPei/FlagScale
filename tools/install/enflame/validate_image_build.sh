@@ -39,6 +39,7 @@ docker run --rm \
     "$image" -c '
 import importlib.metadata as metadata
 import os
+import subprocess
 import torch
 
 device_count = torch.gcu.device_count()
@@ -61,7 +62,12 @@ if task == "train":
         import megatron
         import megatron.core
 
-        print("megatron-core:", metadata.version("megatron-core"))
+        source_path = os.environ["FLAGSCALE_MEGATRON_PATH"]
+        source_revision = subprocess.check_output(
+            ["git", "-C", source_path, "rev-parse", "HEAD"], text=True
+        ).strip()
+        print("megatron-source:", source_revision)
+        assert source_revision == os.environ["FLAGSCALE_MEGATRON_REF"]
     raise SystemExit(0)
 
 platform_plugins = {
