@@ -25,7 +25,7 @@ image_build:
   max_parallel: 1
   runtime_device_count: '8'
   runtime_smoke_nproc: '2'
-  registry_login: true
+  registry_login: false
   validation_script: tools/install/enflame/validate_image_build.sh
   tasks:
     train:
