@@ -64,9 +64,7 @@ def test_common_image_build_workflow_is_platform_agnostic():
         assert platform not in workflow
 
 
-@pytest.mark.parametrize(
-    "platform", ["cuda", "musa", "ascend", "hygon", "metax", "kunlunxin"]
-)
+@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "hygon", "metax", "kunlunxin"])
 def test_platform_source_refs_use_catalog(platform):
     root = Path(__file__).parents[2]
     catalog = yaml.safe_load((root / ".github/configs/image_sources.yml").read_text())["sources"]
@@ -130,9 +128,7 @@ def test_declared_all_images_use_one_python_environment():
     assert declared_all_images > 0
 
 
-@pytest.mark.parametrize(
-    "platform", ["cuda", "musa", "ascend", "hygon", "metax"]
-)
+@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "hygon", "metax"])
 def test_inference_images_include_serve_dependencies(platform):
     root = Path(__file__).parents[2]
     config = yaml.safe_load((root / f".github/configs/{platform}.yml").read_text())
