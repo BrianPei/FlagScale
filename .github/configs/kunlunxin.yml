@@ -18,9 +18,7 @@ hardware_name: kunlunxin
 display_name: "Kunlunxin P800 Tests"
 
 # Validated task-specific P800 images.
-ci_image: harbor.baai.ac.cn/flagos-dev/flagscale-all:manual-20260817-kunlunxin-p800-dev
 ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale-train:manual-20260817-kunlunxin-p800-dev
-ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:manual-20260817-kunlunxin-p800-dev
 
 runner_labels: ["flagscale-kunlun-p800-gpu8"]
 
@@ -48,56 +46,6 @@ image_build:
         PKG_MGR: conda
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-    inference:
-      dockerfile: docker/kunlunxin/Dockerfile.inference
-      image: flagos-dev/flagscale-inference
-      # Official Kunlunxin runtime image (PDF 20260812 record). Ships the full
-      # stack the manual-20260812 flagos-dev base lacks: xtorch_ops (required
-      # by the vendor kunlunxin attention backend) + flag_gems5.0.0 + flagcx0.13.0
-      # + triton3.0.0 + vllm0.20.2 + plugin0.2.0 + conda env python310_torch29_cuda.
-      # install_inference.sh rebuilds vllm 0.20.2+empty + plugin main + shim on
-      # top, aligning with the official record.
-      base_image: harbor.baai.ac.cn/plugin/kunlunxin001-gems5.0.0-treenone-triton3.0.0-cx0.13.0-plugin0.2.0-vllm0.20.2-cp310-pt29-x64-v5.0.21.43:20260811
-      test_roles: [inference]
-      build_args:
-        PKG_MGR: conda
-      # Pull vllm-plugin-FL from main (PR #268 native kunlunxin backend:
-      # VENDOR_DEVICE_MAP + vendor attention backend + is_cuda fast path) so
-      # the image ships native kunlunxin support, instead of the v0.1.1 pin
-      # (no kunlunxin support) that needs the 4 source patches. The build
-      # workflow resolves vllm_plugin_fl (image_sources.yml: branch main) to
-      # the main HEAD sha and passes it as the FLAGSCALE_VLLM_PLUGIN_REF
-      # Dockerfile ARG, overriding the v0.1.1 default.
-      source_refs:
-        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-        FLAGSCALE_VLLM_PLUGIN_REF: vllm_plugin_fl
-    all:
-      dockerfile: docker/kunlunxin/Dockerfile.all
-      image: flagos-dev/flagscale-all
-      # Same official Kunlunxin runtime image as the inference task (ships
-      # xtorch_ops + flag_gems + flagcx + triton + vllm0.20.2 + plugin0.2.0).
-      base_image: harbor.baai.ac.cn/plugin/kunlunxin001-gems5.0.0-treenone-triton3.0.0-cx0.13.0-plugin0.2.0-vllm0.20.2-cp310-pt29-x64-v5.0.21.43:20260811
-      test_roles: [train, inference]
-      test_environments:
-        train:
-          pkg_mgr: conda
-          env_name: python310_torch29_cuda
-          env_path: /root/miniconda
-        inference:
-          pkg_mgr: conda
-          env_name: python310_torch29_cuda
-          env_path: /root/miniconda
-        serve:
-          pkg_mgr: conda
-          env_name: python310_torch29_cuda
-          env_path: /root/miniconda
-      build_args:
-        PKG_MGR: conda
-      # Same as the inference task: pull vllm-plugin-FL main (PR #268 native
-      # kunlunxin) over the v0.1.1 default. See inference source_refs above.
-      source_refs:
-        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-        FLAGSCALE_VLLM_PLUGIN_REF: vllm_plugin_fl
 
 container_volumes:
   - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
@@ -120,6 +68,6 @@ env_path: "/root/miniconda"
 env_names:
   train: "python310_torch29_cuda"
   hetero_train: ""
-  inference: "python310_torch29_cuda"
-  serve: "python310_torch29_cuda"
+  inference: ""
+  serve: ""
   rl: ""

@@ -33,7 +33,7 @@ load_platform_config() {
 
     # Extract CI/CD configuration from .github/configs using yq
     echo "Extracting configuration from $CONFIG_FILE"
-    CI_IMAGE=$(/usr/local/bin/yq -r '.ci_image' "$CONFIG_FILE")
+    CI_IMAGE=$(/usr/local/bin/yq -r '.ci_image // ""' "$CONFIG_FILE")
     CI_TRAIN_IMAGE=$(/usr/local/bin/yq -r '.ci_train_image // ""' "$CONFIG_FILE")
     CI_INFERENCE_IMAGE=$(/usr/local/bin/yq -r '.ci_inference_image // ""' "$CONFIG_FILE")
     RUNNER_LABELS=$(/usr/local/bin/yq -o=json -I=0 '.runner_labels' "$CONFIG_FILE")
@@ -55,12 +55,12 @@ load_platform_config() {
     echo "Environment names: train=$ENV_NAME_TRAIN, inference=$ENV_NAME_INFERENCE, serve=$ENV_NAME_SERVE, rl=$ENV_NAME_RL"
 
     # Validate required fields
-    if [ -z "$CI_IMAGE" ] || [ "$CI_IMAGE" = "null" ]; then
-        echo "❌ Error: ci_image not found in $CONFIG_FILE"
-        return 1
-    fi
     if [ -z "$CI_TRAIN_IMAGE" ] || [ "$CI_TRAIN_IMAGE" = "null" ]; then
         CI_TRAIN_IMAGE="$CI_IMAGE"
+    fi
+    if [ -z "$CI_TRAIN_IMAGE" ] || [ "$CI_TRAIN_IMAGE" = "null" ]; then
+        echo "❌ Error: ci_train_image not found in $CONFIG_FILE"
+        return 1
     fi
     if [ -z "$CI_INFERENCE_IMAGE" ] || [ "$CI_INFERENCE_IMAGE" = "null" ]; then
         CI_INFERENCE_IMAGE="$CI_IMAGE"
