@@ -236,40 +236,6 @@ jobs:
           echo "Python location: $(which python)"
           echo "Python version: $(python --version)"
 
-          if [ "$PLATFORM" = "kunlunxin" ]; then
-            echo "Kunlunxin vLLM platform probe:"
-            python -c 'import importlib.metadata as metadata; print("vllm:", metadata.version("vllm")); print("vllm-plugin-fl:", metadata.version("vllm-plugin-fl") if "vllm-plugin-fl" in {dist.metadata["Name"].lower() for dist in metadata.distributions()} else "not-installed"); print("platform_plugins:", {entry.name: entry.value for entry in metadata.entry_points(group="vllm.platform_plugins")})' || true
-            # Decisive probe: the real serve crashes at
-            # flag_gems/fused/geglu.py:12 (pow = tl_extra_shim.pow) because
-            # tl_extra_shim falls back to triton.language.math (no pow on
-            # Triton 3.0.0) when the kunlunxin tl_extra module
-            # (triton.language.extra.xpu.libdevice) fails to import. The
-            # case-yaml sets GEMS_VENDOR=kunlunxin for the real serve, so
-            # mirror that here and print triton version + xpu.libdevice
-            # importability + flag_gems import result, so the root cause is
-            # in the log instead of guessed. Non-fatal (|| true).
-            # Probe runs in the functional-test container, which under
-            # all_tasks is the ALL image (Dockerfile.all = install_inference +
-            # install_serve + install_train). install_train.sh is the only step
-            # the inference-only image (Dockerfile.inference = install_inference
-            # + install_serve) does NOT run, and its retry_pip_install
-            # train.txt (no --no-deps) pulls peft -> accelerate -> torch; the
-            # vendor torch (torch_xmlir, 2.9.0+cu129) is a non-standard wheel,
-            # so pip may reinstall stock PyPI torch, whose own dep is stock
-            # triton -- overwriting the image's kunlunxin triton 3.0.0 and its
-            # triton.language.extra.xpu.libdevice. Print torch/triton/flag_gems
-            # versions + locations so one run tells us exactly what train
-            # clobbered. Non-fatal (|| true).
-            # Each probe is a single-line `python -c` so the run block's
-            # literal scalar stays intact (a multi-line python -c with
-            # top-indented code breaks the YAML literal block).
-            GEMS_VENDOR=kunlunxin VLLM_PLUGINS=fl VLLM_FL_PLATFORM=kunlunxin python -c 'import os; print("GEMS_VENDOR in proc:", os.environ.get("GEMS_VENDOR"))' || true
-            GEMS_VENDOR=kunlunxin VLLM_PLUGINS=fl VLLM_FL_PLATFORM=kunlunxin python -c 'import torch; print("torch version:", torch.__version__, "file:", torch.__file__)' || true
-            GEMS_VENDOR=kunlunxin VLLM_PLUGINS=fl VLLM_FL_PLATFORM=kunlunxin python -c 'import triton; print("triton version:", getattr(triton, "__version__", "?"), "file:", getattr(triton, "__file__", "?"))' || true
-            GEMS_VENDOR=kunlunxin VLLM_PLUGINS=fl VLLM_FL_PLATFORM=kunlunxin python -c 'import triton.language.extra.xpu.libdevice as _x; print("triton.language.extra.xpu.libdevice: OK")' || true
-            GEMS_VENDOR=kunlunxin VLLM_PLUGINS=fl VLLM_FL_PLATFORM=kunlunxin python -c 'import flag_gems; from flag_gems.utils import tl_extra_shim as _s; print("flag_gems version:", getattr(flag_gems, "__version__", "?"), "file:", flag_gems.__file__); print("tl_extra_shim:", getattr(_s, "__name__", _s), "has_pow:", hasattr(_s, "pow"))' || true
-          fi
-
           # Run functional tests using run_tests.sh
           bash "$PROJECT_ROOT/tests/test_utils/runners/run_tests.sh" \
             --platform "$PLATFORM" \

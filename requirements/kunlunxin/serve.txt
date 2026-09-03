@@ -1,4 +1,0 @@
-# Kunlunxin serve-specific dependencies
-
-# --no-base skips common.txt; install flagos-specific deps via shared pin.
--r _flagos_common.txt

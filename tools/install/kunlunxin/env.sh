@@ -13,34 +13,17 @@
 : "${KLX_HOME:=/opt/xccl_Linux_x86_64}"
 : "${FLAGSCALE_MEGATRON_PATH:=$FLAGSCALE_DEPS/Megatron-LM-FL}"
 
-# Kunlunxin XRE runtime (libxpurt/libxpuml/libxpucuda) -- required by
-# libflagcx.so for the vllm_fl CommunicatorFL (TP/EP collectives over XCCL).
-# Without these on the loader path, libflagcx.so fails to dlopen and vLLM
-# silently falls back off the flagcx path to the NCCL path, which cannot run
-# on the P800 (NCCL calls CUDA APIs that torch_xmlir does not implement ->
-# "NCCL error: unhandled cuda error" at ncclCommInitRank). The xre dir is
-# versioned (e.g. /opt/xre-Linux-x86_64-5.24.0.0) with no symlink/env var, so
-# glob the installed one to stay robust across xre upgrades.
+# Kunlunxin XRE runtime libraries are required by the FlagCX/XCCL training
+# communication stack. The directory is versioned and has no stable symlink,
+# so discover the installed path at runtime.
 if [ -z "${XRE_HOME:-}" ]; then
     for _d in /opt/xre-Linux-x86_64-*; do
         [ -d "$_d/so" ] && XRE_HOME="$_d" && break
     done
 fi
-# flagcx (FlagOS collective lib over XCCL) + its python wrapper. Setting
-# FLAGCX_PATH switches vllm_fl PlatformFL.dist_backend to "flagcx" so
-# CommunicatorFL (real flagcx, full op coverage incl. reduce_scatter/all_gather)
-# is used instead of CudaCommunicator (NCCL, unusable on P800). The wrapper
-# ships differently per base image, so auto-detect (like XRE_HOME):
-#  - Official Kunlunxin runtime image: pip editable install. An egg-link sits
-#    in site-packages but its source dir is NOT on sys.path (no
-#    easy-install.pth / conda site skips .pth), so `import flagcx` (re-issued
-#    by the torch_xmlir import hook via __origin__import__) misses. Point
-#    FLAGCX_PATH at the egg-link source dir so PYTHONPATH picks it up.
-#  - flagos-dev manual base: flagcx under /opt/FlagCX (no egg-link) -> the
-#    /opt/FlagCX default below covers it. (A /plugin subdir check was tried
-#    first but it matched /opt/FlagCX on the runtime image too -- which has a
-#    /plugin dir but not the flagcx package -- shadowing the egg-link fallback.)
-# A caller-set value wins.
+# FlagCX may be installed editable or under /opt/FlagCX, depending on the
+# training base image. Add its source directory to PYTHONPATH so the training
+# stack and image verification import the same wrapper. A caller-set value wins.
 if [ -z "${FLAGCX_PATH:-}" ]; then
     for _el in \
         "$FLAGSCALE_CONDA"/envs/"$FLAGSCALE_ENV_NAME"/lib/python*/site-packages/flagcx.egg-link \

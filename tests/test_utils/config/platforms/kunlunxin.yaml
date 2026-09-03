@@ -23,10 +23,6 @@ p800:
     functional:
       train:
         qwen3: ["0_6b_kunlunxin"]
-      hetero_train: {}
-      benchmark: {}
-      inference: {}
-      serve: {}
     unit:
       nproc_per_node: 8
       include: "*"

@@ -131,7 +131,7 @@ def test_declared_all_images_use_one_python_environment():
 
 
 @pytest.mark.parametrize(
-    "platform", ["cuda", "musa", "ascend", "hygon", "metax", "kunlunxin"]
+    "platform", ["cuda", "musa", "ascend", "hygon", "metax"]
 )
 def test_inference_images_include_serve_dependencies(platform):
     root = Path(__file__).parents[2]

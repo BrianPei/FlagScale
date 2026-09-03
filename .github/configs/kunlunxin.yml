@@ -28,10 +28,7 @@ image_build:
   target: dev
   network: default
   max_parallel: 1
-  runtime_device_count: '8'
-  runtime_smoke_nproc: '2'
   registry_login: true
-  validation_script: tools/install/kunlunxin/validate_image_build.sh
   runner_labels: ["flagscale-kunlun-p800-gpu8"]
   build_args:
     PIP_INDEX_URL: https://pypi.org/simple
@@ -59,15 +56,7 @@ container_options: >-
   --user root
   --ulimit nofile=65535:65535
 
-timeouts:
-  inference_minutes: 15
-  serve_ready_seconds: 600
-
 pkg_mgr: "conda"
 env_path: "/root/miniconda"
 env_names:
   train: "python310_torch29_cuda"
-  hetero_train: ""
-  inference: ""
-  serve: ""
-  rl: ""
