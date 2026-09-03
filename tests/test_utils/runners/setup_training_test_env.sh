@@ -187,7 +187,7 @@ setup_musa_training_env() {
 import torch
 import torch_musa
 assert torch.musa.is_available()
-    print(f"MUSA training environment ready on {torch.musa.device_count()} devices")
+print(f"MUSA training environment ready on {torch.musa.device_count()} devices")
 '
 }
 
