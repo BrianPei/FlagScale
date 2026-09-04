@@ -92,6 +92,59 @@ def test_platform_source_refs_use_catalog(platform):
             assert re.search(rf"^ARG {build_arg}(?:=|$)", dockerfile, re.MULTILINE)
 
 
+
+def test_declared_all_images_use_one_python_environment():
+    root = Path(__file__).parents[2]
+    declared_all_images = 0
+    for config_path in sorted((root / ".github/configs").glob("*.yml")):
+        config = yaml.safe_load(config_path.read_text())
+        task = config.get("image_build", {}).get("tasks", {}).get("all")
+        if task is None:
+            continue
+        declared_all_images += 1
+
+        assert task["test_roles"] == ["train", "inference"]
+        environments = task["test_environments"]
+        assert set(environments) == {"train", "inference", "serve"}
+
+        env_contracts = list(environments.values())
+        assert all(environment == env_contracts[0] for environment in env_contracts)
+        assert env_contracts[0]["pkg_mgr"] in {"conda", "pip", "uv"}
+        assert env_contracts[0]["env_path"]
+
+        dockerfile = (root / task["dockerfile"]).read_text()
+        normalized_dockerfile = dockerfile.replace("\\\n", " ")
+        install_commands = [
+            command
+            for command in re.split(r"&&|;", normalized_dockerfile)
+            if "install.sh" in command and "--task all" in command
+        ]
+        assert any("--no-task" not in command for command in install_commands)
+        if env_contracts[0]["pkg_mgr"] == "conda":
+            env_name = env_contracts[0]["env_name"]
+            assert env_name
+            assert any(f"--env-name {env_name}" in command for command in install_commands)
+        assert "/opt/flagscale/runtimes/" not in dockerfile
+
+    assert declared_all_images > 0
+
+
+@pytest.mark.parametrize("platform", ["cuda", "musa", "ascend", "hygon", "metax"])
+def test_inference_images_include_serve_dependencies(platform):
+    root = Path(__file__).parents[2]
+    config = yaml.safe_load((root / f".github/configs/{platform}.yml").read_text())
+    task = config["image_build"]["tasks"]["inference"]
+    env_names = config.get("env_names", {})
+
+    assert task["test_roles"] == ["inference"]
+    assert env_names.get("serve", "flagscale-inference") == env_names.get(
+        "inference", "flagscale-inference"
+    )
+    dockerfile = (root / task["dockerfile"]).read_text()
+    assert re.search(rf"--platform\s+{platform}\s+--task\s+inference\b", dockerfile)
+    assert re.search(rf"--platform\s+{platform}\s+--task\s+serve\b", dockerfile)
+
+
 def test_validate_catalog_rejects_unknown_policy():
     with pytest.raises(MODULE.SourceResolutionError, match="unsupported policy"):
         MODULE.validate_catalog(
