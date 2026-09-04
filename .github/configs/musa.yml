@@ -20,9 +20,7 @@ display_name: "MThreads MUSA Tests"
 
 # Latest train/inference images validated end-to-end on S5000.
 # The platform currently does not publish an all-in-one image.
-ci_image: harbor.baai.ac.cn/flagscale/flagscale-train:dev-musa-s5000-py3.10-8aa5314e94bc
 ci_train_image: harbor.baai.ac.cn/flagscale/flagscale-train:dev-musa-s5000-py3.10-8aa5314e94bc
-ci_inference_image: harbor.baai.ac.cn/flagscale/flagscale-inference:dev-musa-s5000-py3.10-8aa5314e94bc
 
 # Runner labels for MThreads MUSA hardware
 runner_labels: ["flagscale-mthreads-s5000-gpu8"]
@@ -52,16 +50,6 @@ image_build:
         FLAGSCALE_TE_VERSION: 2.0.0+e73781e
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-    inference:
-      dockerfile: docker/musa/Dockerfile.inference
-      image: flagos-dev/flagscale-inference
-      base_image: harbor.baai.ac.cn/flagos-dev/transformerengine-fl:manual-20260802-musa-torch2.7.1-e73781e-vllm29ceebd
-      runtime_smoke_nproc: '2'
-      test_roles: [inference]
-      build_args:
-        PKG_MGR: pip
-        PIP_INDEX_URL: https://pypi.org/simple
-        PIP_DEFAULT_TIMEOUT: '300'
 # Container volumes (hardware-specific paths)
 container_volumes:
   - /mnt/airs-business/cicd/baai_datasets:/home/gitlab-runner/data
@@ -79,11 +67,6 @@ container_options: >-
   --user root
   --ulimit nofile=65535:65535
 
-# Runtime allowances for models loaded from the shared network volume.
-timeouts:
-  inference_minutes: 45
-  serve_ready_seconds: 600
-
 # =============================================================================
 # Package Manager Configuration
 # =============================================================================
@@ -96,6 +79,4 @@ env_path: ""
 env_names:
   train: ""
   hetero_train: ""
-  inference: ""
-  serve: ""
   rl: ""

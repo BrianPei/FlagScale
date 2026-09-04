@@ -20,9 +20,7 @@ hardware_name: cuda
 display_name: "CUDA Tests"
 
 # Docker image for this hardware
-ci_image: harbor.baai.ac.cn/flagos/flagscale:cuda12.8.1-cudnn9.7.1-python3.12-torch2.7.0-time2507111538
 ci_train_image: harbor.baai.ac.cn/flagscale/flagscale-train:dev-cu128-py3.12-20260228210721
-ci_inference_image: harbor.baai.ac.cn/flagscale/flagscale-inference:dev-cu128-py3.12-20260302102033
 
 # Runner labels for this hardware
 runner_labels: ['flagscale-nvidia-a100-gpu2-32c-128g']
@@ -43,46 +41,6 @@ image_build:
       image: flagos-dev/flagscale-train
       base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
       test_roles: [train]
-      build_args:
-        CUDA_VERSION: '12.8.1'
-        UBUNTU_VERSION: '22.04'
-        PYTHON_VERSION: '3.12'
-        UV_VERSION: '0.7.2'
-        PKG_MGR: conda
-        PYTORCH_INDEX: https://download.pytorch.org/whl/cu128
-      source_refs:
-        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-        FLAGSCALE_TE_REF: transformer_engine_fl
-    inference:
-      dockerfile: docker/cuda/Dockerfile.inference
-      image: flagos-dev/flagscale-inference
-      base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
-      test_roles: [inference]
-      build_args:
-        CUDA_VERSION: '12.8.1'
-        UBUNTU_VERSION: '22.04'
-        PYTHON_VERSION: '3.12'
-        UV_VERSION: '0.7.2'
-        PKG_MGR: conda
-        PYTORCH_INDEX: https://download.pytorch.org/whl/cu128
-    all:
-      dockerfile: docker/cuda/Dockerfile.all
-      image: flagos-dev/flagscale-all
-      base_image: nvidia/cuda:12.8.1-devel-ubuntu22.04
-      test_roles: [train, inference]
-      test_environments:
-        train:
-          pkg_mgr: conda
-          env_name: flagscale-all
-          env_path: /opt/flagscale/miniconda3
-        inference:
-          pkg_mgr: conda
-          env_name: flagscale-all
-          env_path: /opt/flagscale/miniconda3
-        serve:
-          pkg_mgr: conda
-          env_name: flagscale-all
-          env_path: /opt/flagscale/miniconda3
       build_args:
         CUDA_VERSION: '12.8.1'
         UBUNTU_VERSION: '22.04'
@@ -139,6 +97,4 @@ env_path: "/root/miniconda3"
 env_names:
   train: "flagscale-train"
   hetero_train: "flagscale-train"
-  inference: "flagscale-inference"
-  serve: "flagscale-inference"
   rl: "flagscale-rl"

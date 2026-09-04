@@ -16,9 +16,7 @@ hardware_name: hygon
 display_name: "Hygon BW1000 Tests"
 
 # Stable BW1000 images validated by the Hygon functional tests.
-ci_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260820-hygon-dev-inference
 ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260820-hygon-dev-train
-ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260820-hygon-dev-inference
 
 runner_labels: ["flagscale-hygon-bw1000-gpu8"]
 
@@ -52,24 +50,6 @@ image_build:
           pkg_mgr: pip
           env_name: ""
           env_path: /usr/local
-    inference:
-      dockerfile: docker/hygon/Dockerfile.inference
-      image: flagos-dev/flagscale-inference
-      test_roles: [inference]
-      base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:vllm-plugin-fl-hygon-vllm0.20.2-dtk26.04-py3.10-ci
-      build_args: {}
-      source_refs:
-        FLAGGEMS_REF: flaggems
-        VLLM_PLUGIN_FL_REF: vllm_plugin_fl
-      test_environments:
-        inference:
-          pkg_mgr: pip
-          env_name: ""
-          env_path: /usr/local
-        serve:
-          pkg_mgr: pip
-          env_name: ""
-          env_path: /usr/local
 
 container_volumes:
   - /opt/hyhal:/opt/hyhal:ro
@@ -95,17 +75,9 @@ container_options: >-
   --cap-add SYS_PTRACE
   --security-opt seccomp=unconfined
 
-# Qwen3-4B can take more than 600 seconds to initialize from the shared model
-# volume on BW1000 before the API server becomes ready.
-timeouts:
-  inference_minutes: 15
-  serve_ready_seconds: 900
-
 pkg_mgr: "pip"
 env_path: "/usr/local"
 env_names:
   train: ""
   hetero_train: ""
-  inference: ""
-  serve: ""
   rl: ""

@@ -20,9 +20,7 @@ hardware_name: ascend
 display_name: "Ascend NPU Tests"
 
 # Docker image for this hardware
-ci_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
 ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-train
-ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
 
 # Runner labels for this hardware
 runner_labels: ["flagscale-ascend-ascend910-gpu2-32c-128g"]
@@ -55,15 +53,6 @@ image_build:
       source_refs:
         FLAGSCALE_TE_REF: transformer_engine_fl
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-    inference:
-      dockerfile: docker/ascend/Dockerfile.inference
-      image: flagos-dev/flagscale-inference
-      test_roles: [inference]
-      base_image: harbor.baai.ac.cn/flagos-dev/flagscale:manual-20260812-ascend-dev-inference
-      build_args: {}
-      source_refs:
-        VLLM_PLUGIN_FL_REF: vllm_plugin_fl
-        FLAGGEMS_REF: flaggems
 # Container options for Ascend NPU (no --gpus, use --device for NPU cards)
 container_options: >-
   --device /dev/davinci_manager
@@ -103,6 +92,4 @@ env_path: ""
 env_names:
   train: ""
   hetero_train: ""
-  inference: ""
-  serve: ""
   rl: ""
