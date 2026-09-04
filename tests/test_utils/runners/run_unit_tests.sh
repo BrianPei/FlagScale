@@ -112,6 +112,9 @@ parallel = true
 source = $PROJECT_ROOT
 data_file = $COVERAGE_DIR/.coverage
 EOF
+        if [ "$PLATFORM" = "enflame" ]; then
+            echo "omit = */_remote_module_non_scriptable" >> "$COVERAGERC"
+        fi
     fi
 
     # Use the configured unit-test topology, or all visible accelerators.
@@ -128,7 +131,7 @@ EOF
         # torch_gcu is imported by a site .pth file before coverage starts.
         # Start the worker without site initialization, then add the regular
         # package and project paths explicitly so coverage initializes first.
-        COVERAGE_BOOTSTRAP='import os, runpy, sys, sysconfig; sys.path[:0] = [sysconfig.get_path("purelib"), sysconfig.get_path("platlib")] + [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path]; sys.argv = sys.argv[1:]; runpy.run_module("coverage", run_name="__main__")'
+        COVERAGE_BOOTSTRAP='import os, runpy, sys, sysconfig; sys.path[:0] = [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path] + [sysconfig.get_path("purelib"), sysconfig.get_path("platlib")]; sys.argv = sys.argv[1:]; runpy.run_module("coverage", run_name="__main__")'
         RUNNER_CMD="--no-python python -S -E -c '$COVERAGE_BOOTSTRAP' coverage run --rcfile=$COVERAGERC -m pytest"
     elif [ "$USE_COVERAGE" = true ]; then
         RUNNER_CMD="-m coverage run --rcfile=$COVERAGERC -m pytest"
