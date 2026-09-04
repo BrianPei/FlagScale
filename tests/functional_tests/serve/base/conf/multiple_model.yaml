@@ -1,0 +1,49 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+defaults:
+  - _self_
+  - serve: multiple_model
+
+experiment:
+  exp_name: multiple_model
+  exp_dir: tests/functional_tests/serve/utils/models
+  task:
+    type: serve
+    entrypoint: null
+  runner:
+    hostfile: null
+    deploy:
+      port: 6701
+      use_fs_serve: true
+      enable_composition: true
+      name: /generate
+      request:
+        - arg: prompt
+          type: str
+        - arg: system_prompt
+          type: Optional[str]
+          required: false
+          default: "You are a helpful assistant."
+  envs:
+    CUDA_DEVICE_MAX_CONNECTIONS: 1
+    no_proxy: "127.0.0.1,localhost"
+  cmds:
+    before_start: ulimit -n 65535 && source /root/miniconda3/bin/activate flagscale-inference
+
+action: run
+
+hydra:
+  run:
+    dir: ${experiment.exp_dir}/hydra

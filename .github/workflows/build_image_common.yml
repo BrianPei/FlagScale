@@ -70,9 +70,16 @@ jobs:
       matrix: ${{ steps.contract.outputs.matrix }}
       max_parallel: ${{ steps.contract.outputs.max_parallel }}
       train_image: ${{ steps.contract.outputs.train_image }}
+      inference_image: ${{ steps.contract.outputs.inference_image }}
       train_pkg_mgr: ${{ steps.contract.outputs.train_pkg_mgr }}
       train_env_name: ${{ steps.contract.outputs.train_env_name }}
       train_env_path: ${{ steps.contract.outputs.train_env_path }}
+      inference_pkg_mgr: ${{ steps.contract.outputs.inference_pkg_mgr }}
+      inference_env_name: ${{ steps.contract.outputs.inference_env_name }}
+      inference_env_path: ${{ steps.contract.outputs.inference_env_path }}
+      serve_pkg_mgr: ${{ steps.contract.outputs.serve_pkg_mgr }}
+      serve_env_name: ${{ steps.contract.outputs.serve_env_name }}
+      serve_env_path: ${{ steps.contract.outputs.serve_env_path }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -162,9 +169,17 @@ jobs:
           entries=()
           candidate_test_roles=0
           train_image=$(/usr/local/bin/yq -r '.ci_train_image // .ci_image // ""' "$config_file")
+          inference_image=$(/usr/local/bin/yq -r \
+            '.ci_inference_image // .ci_image // ""' "$config_file")
           train_pkg_mgr=""
           train_env_name=""
           train_env_path=""
+          inference_pkg_mgr=""
+          inference_env_name=""
+          inference_env_path=""
+          serve_pkg_mgr=""
+          serve_env_name=""
+          serve_env_path=""
 
           for raw_task in "${task_names[@]}"; do
             task="${raw_task//[[:space:]]/}"
@@ -359,6 +374,18 @@ jobs:
                     fi
                     candidate_test_roles=$((candidate_test_roles + 1))
                     ;;
+                  inference)
+                    if [ "$all_task_selected" != true ] || [ "$task" = all ]; then
+                      inference_image="$candidate"
+                      inference_pkg_mgr=$(jq -r '.test_environments.inference.pkg_mgr // ""' <<< "$entry")
+                      inference_env_name=$(jq -r '.test_environments.inference.env_name // ""' <<< "$entry")
+                      inference_env_path=$(jq -r '.test_environments.inference.env_path // ""' <<< "$entry")
+                      serve_pkg_mgr=$(jq -r '.test_environments.serve.pkg_mgr // ""' <<< "$entry")
+                      serve_env_name=$(jq -r '.test_environments.serve.env_name // ""' <<< "$entry")
+                      serve_env_path=$(jq -r '.test_environments.serve.env_path // ""' <<< "$entry")
+                    fi
+                    candidate_test_roles=$((candidate_test_roles + 1))
+                    ;;
                   '') ;;
                   *) echo "::error::Unsupported test role: $role"; exit 1 ;;
                 esac
@@ -368,7 +395,7 @@ jobs:
 
           if [ "$BUILD_IMAGES" = true ] && [ "$RUN_TESTS" = true ] && \
              [ "$candidate_test_roles" -eq 0 ]; then
-            echo "::error::Selected tasks do not provide a train test image"
+            echo "::error::Selected tasks do not provide a train or inference test image"
             exit 1
           fi
           matrix=$(printf '%s\n' "${entries[@]}" | jq -s -c '{include: .}')
@@ -379,9 +406,16 @@ jobs:
             echo "matrix=$matrix"
             echo "max_parallel=$max_parallel"
             echo "train_image=$train_image"
+            echo "inference_image=$inference_image"
             echo "train_pkg_mgr=$train_pkg_mgr"
             echo "train_env_name=$train_env_name"
             echo "train_env_path=$train_env_path"
+            echo "inference_pkg_mgr=$inference_pkg_mgr"
+            echo "inference_env_name=$inference_env_name"
+            echo "inference_env_path=$inference_env_path"
+            echo "serve_pkg_mgr=$serve_pkg_mgr"
+            echo "serve_env_name=$serve_env_name"
+            echo "serve_env_path=$serve_env_path"
           } >> "$GITHUB_OUTPUT"
 
   build:
