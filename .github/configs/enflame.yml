@@ -48,4 +48,3 @@ pkg_mgr: "pip"
 env_path: ""
 env_names:
   train: ""
-  hetero_train: ""

@@ -22,8 +22,6 @@ s60:
   tests:
     functional:
       train: {}
-      hetero_train: {}
-      benchmark: {}
     unit:
       nproc_per_node: 1
       include: "*"
