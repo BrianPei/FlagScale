@@ -113,7 +113,12 @@ source = $PROJECT_ROOT
 data_file = $COVERAGE_DIR/.coverage
 EOF
         if [ "$PLATFORM" = "enflame" ]; then
-            echo "omit = */_remote_module_non_scriptable" >> "$COVERAGERC"
+            cat >> "$COVERAGERC" <<EOF
+omit = */_remote_module_non_scriptable
+
+[report]
+ignore_errors = true
+EOF
         fi
     fi
 
