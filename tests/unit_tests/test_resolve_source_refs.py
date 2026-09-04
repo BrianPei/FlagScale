@@ -92,8 +92,6 @@ def test_platform_source_refs_use_catalog(platform):
             assert re.search(rf"^ARG {build_arg}(?:=|$)", dockerfile, re.MULTILINE)
 
 
-
-
 def test_validate_catalog_rejects_unknown_policy():
     with pytest.raises(MODULE.SourceResolutionError, match="unsupported policy"):
         MODULE.validate_catalog(
