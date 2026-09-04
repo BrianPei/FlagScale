@@ -92,7 +92,6 @@ def test_platform_source_refs_use_catalog(platform):
             assert re.search(rf"^ARG {build_arg}(?:=|$)", dockerfile, re.MULTILINE)
 
 
-
 def test_declared_all_images_use_one_python_environment():
     root = Path(__file__).parents[2]
     declared_all_images = 0
