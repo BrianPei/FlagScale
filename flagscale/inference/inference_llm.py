@@ -40,21 +40,19 @@ def inference(cfg):
         "logits_processors is not supported yet."
     )
     sampling_params = SamplingParams(**sampling_cfg)
-    print(f"=> {sampling_params=}", flush=True)
+    print(f"=> {sampling_params=}")
 
     # step 4: build inputs
-    inputs = list(prompts)
-    print(f"=> {inputs=}", flush=True)
+    inputs = [{"prompt": prompt} for prompt in prompts]
+    print(f"=> {inputs=}")
 
     # step 5: generate outputs
     outputs = llm.generate(inputs, sampling_params)
-    assert len(outputs) == len(inputs), f"Expected {len(inputs)} outputs, got {len(outputs)}"
     for output in outputs:
-        assert output.outputs, f"No generated candidates for prompt: {output.prompt!r}"
-        print("*" * 50, flush=True)
-        print(f"{output.prompt=}", flush=True)
-        print(f"{output.outputs[0].text=}", flush=True)
-    print("#" * 50, flush=True)
+        print("*" * 50)
+        print(f"{output.prompt=}")
+        print(f"{output.outputs[0].text=}")
+    print("#" * 50)
 
 
 if __name__ == "__main__":
