@@ -27,6 +27,38 @@ source "$SCRIPT_DIR/utils.sh"
 # generating the launch script, so this propagates to the torchrun workers.
 export PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}"
 
+# CI workflow installs the current PR's FlagScale via `pip install .`, which
+# includes an updated Megatron-LM-FL pinned in requirements/train.txt. However,
+# the image sets PYTHONPATH=$FLAGSCALE_DEPS/Megatron-LM-FL (a fixed version
+# baked into the image) ahead of site-packages, causing the old Megatron to
+# shadow the new one. Move the image's Megatron path to the end of PYTHONPATH
+# so pip-installed packages take precedence. Only affects test runs; the image
+# itself is unchanged.
+if [[ "$PYTHONPATH" == *"$FLAGSCALE_DEPS/Megatron-LM-FL"* ]]; then
+    # Remove old Megatron path and append it at the end
+    MEGATRON_PATH_OLD="$FLAGSCALE_DEPS/Megatron-LM-FL"
+    PYTHONPATH_CLEANED="${PYTHONPATH//$MEGATRON_PATH_OLD:/}"
+    PYTHONPATH_CLEANED="${PYTHONPATH_CLEANED//:$MEGATRON_PATH_OLD/}"
+    PYTHONPATH_CLEANED="${PYTHONPATH_CLEANED//$MEGATRON_PATH_OLD/}"
+    export PYTHONPATH="$PYTHONPATH_CLEANED:$MEGATRON_PATH_OLD"
+    log_info "Adjusted PYTHONPATH: pip-installed packages now take precedence over image Megatron"
+fi
+
+# Isolate transformers dynamic module cache to avoid concurrent write races.
+# When multiple tests load trust_remote_code tokenizers in parallel, they may
+# corrupt the shared ~/.cache/huggingface/modules/transformers_modules/ directory,
+# leading to "module has no attribute 'QWenTokenizer'" errors. Use a per-process
+# cache so each test writes to its own directory.
+export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
+export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/hub}"
+export HF_MODULES_CACHE="${HF_MODULES_CACHE:-$HF_HOME/modules}"
+
+# Create a unique cache directory per test run to prevent race conditions
+TEST_RUN_ID="${GITHUB_RUN_ID:-$$}_$(date +%s)"
+export HF_MODULES_CACHE="$HF_HOME/modules_${TEST_RUN_ID}"
+mkdir -p "$HF_MODULES_CACHE"
+log_info "Using isolated transformers cache: $HF_MODULES_CACHE"
+
 # Defaults
 PLATFORM="default"
 DEVICE=""
