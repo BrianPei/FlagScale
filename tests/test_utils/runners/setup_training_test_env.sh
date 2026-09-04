@@ -127,6 +127,21 @@ setup_cuda_training_env() {
 }
 
 setup_metax_training_env() {
+    local required_files=(
+        /home/gitlab-runner/data/pile_wikipedia_demo/pile_wikipedia_demo.bin
+        /home/gitlab-runner/data/pile_wikipedia_demo/pile_wikipedia_demo.idx
+        /home/gitlab-runner/tokenizers/qwentokenizer/qwen.tiktoken
+        /home/gitlab-runner/tokenizers/qwentokenizer/tokenizer_config.json
+        /home/gitlab-runner/tokenizers/qwentokenizer/tokenization_qwen.py
+    )
+    local required_file
+    for required_file in "${required_files[@]}"; do
+        if [ ! -r "$required_file" ]; then
+            echo "Required MetaX training asset is missing or unreadable: $required_file" >&2
+            return 1
+        fi
+    done
+
     if python -c '
 import transformer_engine
 from megatron.core.models.gpt import GPTModel

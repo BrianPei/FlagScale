@@ -133,14 +133,19 @@ class _HFTokenizerFS(_FlagScaleTokenizerBase):
         super().__init__(path=tokenizer_path)
         from transformers import AutoTokenizer
 
-        if os.path.isdir(tokenizer_path):
+        is_local_path = os.path.isabs(tokenizer_path)
+        if is_local_path:
             tokenizer_path = os.path.abspath(tokenizer_path)
+            if not os.path.isdir(tokenizer_path):
+                raise FileNotFoundError(
+                    f"Local tokenizer directory does not exist or is not mounted: {tokenizer_path}"
+                )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_path,
             trust_remote_code=True,
             use_fast=use_fast,
-            local_files_only=os.path.isdir(tokenizer_path),
+            local_files_only=is_local_path,
         )
         self.eod_id = self.tokenizer.eos_token_id
         self.cls_id = self.tokenizer.bos_token_id
