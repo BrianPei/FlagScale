@@ -56,9 +56,7 @@ concurrency:
 jobs:
   cuda_tests:
     name: CUDA tests
-    if: >-
-      github.head_ref != 'hrscale-Enflame' &&
-      (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'cuda')
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'cuda'
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: cuda

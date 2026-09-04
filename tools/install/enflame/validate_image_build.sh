@@ -12,7 +12,7 @@ candidate="${IMAGE_BUILD_CANDIDATE_IMAGE:?IMAGE_BUILD_CANDIDATE_IMAGE is require
 expected_devices="${IMAGE_BUILD_RUNTIME_DEVICE_COUNT:-8}"
 
 case "$task" in
-    train|inference|all) ;;
+    train) ;;
     *) exit 0 ;;
 esac
 
@@ -33,8 +33,6 @@ docker run --rm \
     --env EXPECTED_DEVICE_COUNT="$expected_devices" \
     --env IMAGE_BUILD_PHASE="$phase" \
     --env IMAGE_BUILD_TASK="$task" \
-    --env VLLM_PLUGINS=fl \
-    --env VLLM_FL_PLATFORM=enflame \
     --entrypoint python \
     "$image" -c '
 import importlib.metadata as metadata
@@ -54,49 +52,18 @@ assert device_count >= int(os.environ["EXPECTED_DEVICE_COUNT"])
 value = torch.ones(16, device="gcu:0")
 assert value.sum().item() == 16
 
-if task in ("train", "all"):
-    import transformer_engine
+import transformer_engine
 
-    print("transformer-engine:", metadata.version("transformer-engine"))
-    if phase == "post":
-        import megatron
-        import megatron.core
+print("transformer-engine:", metadata.version("transformer-engine"))
+if phase == "post":
+    import megatron
+    import megatron.core
 
-        source_path = os.environ["FLAGSCALE_MEGATRON_PATH"]
-        source_revision = subprocess.check_output(
-            ["git", "-C", source_path, "rev-parse", "HEAD"], text=True
-        ).strip()
-        print("megatron-source:", source_revision)
-        assert source_revision == os.environ["FLAGSCALE_MEGATRON_REF"]
-    if task == "train":
-        raise SystemExit(0)
-
-if task == "all":
-    import vllm
-
-    print("vllm:", metadata.version("vllm"))
-    print("vllm-gcu:", metadata.version("vllm-gcu"))
-    print("verl:", metadata.version("verl"))
-    assert metadata.version("vllm").startswith("0.14.1")
-    assert metadata.version("vllm-gcu").startswith("0.14.1")
-    raise SystemExit(0)
-
-platform_plugins = {
-    entry.name: entry.value
-    for entry in metadata.entry_points(group="vllm.platform_plugins")
-}
-general_plugins = {
-    entry.name: entry.value
-    for entry in metadata.entry_points(group="vllm.general_plugins")
-}
-
-print("vllm:", metadata.version("vllm"))
-print("vllm-plugin-fl:", metadata.version("vllm-plugin-fl"))
-print("platform plugins:", platform_plugins)
-print("general plugins:", general_plugins)
-
-assert metadata.version("vllm").startswith("0.20.2")
-assert platform_plugins.get("fl") == "vllm_fl:register"
-assert general_plugins.get("fl") == "vllm_fl:register_model"
+    source_path = os.environ["FLAGSCALE_MEGATRON_PATH"]
+    source_revision = subprocess.check_output(
+        ["git", "-C", source_path, "rev-parse", "HEAD"], text=True
+    ).strip()
+    print("megatron-source:", source_revision)
+    assert source_revision == os.environ["FLAGSCALE_MEGATRON_REF"]
 
 '

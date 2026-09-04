@@ -88,15 +88,14 @@ run_unit_tests_for_device() {
     echo "=========================================="
 
     # Get unit test patterns from platform configuration
-    PARSE_CMD="python \"$SCRIPT_DIR/parse_config.py\" --platform \"$PLATFORM\" --device \"$device\" --type unit"
-
-    PATTERNS=$(eval "$PARSE_CMD" 2>/dev/null) || {
+    PATTERNS=$(run_config_python "$PLATFORM" "$SCRIPT_DIR/parse_config.py" \
+        --platform "$PLATFORM" --device "$device" --type unit 2>/dev/null) || {
         log_error "Failed to parse test configuration for device: $device"
         return 1
     }
 
     # Extract include and exclude patterns using helper
-    PATTERN_OUTPUT=$(echo "$PATTERNS" | python "$SCRIPT_DIR/helpers.py" extract-patterns)
+    PATTERN_OUTPUT=$(echo "$PATTERNS" | run_config_python "$PLATFORM" "$SCRIPT_DIR/helpers.py" extract-patterns)
     INCLUDE=$(echo "$PATTERN_OUTPUT" | grep "^INCLUDE=" | cut -d= -f2-)
     EXCLUDE=$(echo "$PATTERN_OUTPUT" | grep "^EXCLUDE=" | cut -d= -f2-)
     CONFIGURED_NPROC=$(echo "$PATTERN_OUTPUT" | grep "^NPROC_PER_NODE=" | cut -d= -f2-)
@@ -178,7 +177,7 @@ else
     log_info "Running tests for all devices: $DEVICE_TYPES"
 
     # Parse device types using helper
-    DEVICES=$(echo "$DEVICE_TYPES" | python "$SCRIPT_DIR/helpers.py" parse-devices)
+    DEVICES=$(echo "$DEVICE_TYPES" | run_config_python "$PLATFORM" "$SCRIPT_DIR/helpers.py" parse-devices)
 
     OVERALL_EXIT_CODE=0
     for device in $DEVICES; do

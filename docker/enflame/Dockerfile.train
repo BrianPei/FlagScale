@@ -19,6 +19,10 @@ ENV FLAGSCALE_HOME=${FLAGSCALE_HOME} \
     FLAGSCALE_MEGATRON_REF=${FLAGSCALE_MEGATRON_REF} \
     PYTHONPATH=${FLAGSCALE_HOME}/deps/Megatron-LM-FL:${PYTHONPATH}
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends make && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN set -eux; \
     mkdir -p "${FLAGSCALE_MEGATRON_PATH}"; \
     git init -q "${FLAGSCALE_MEGATRON_PATH}"; \
@@ -31,7 +35,12 @@ RUN set -eux; \
     done; \
     git -C "${FLAGSCALE_MEGATRON_PATH}" checkout -q --detach FETCH_HEAD; \
     test "$(git -C "${FLAGSCALE_MEGATRON_PATH}" rev-parse HEAD)" = \
-        "${FLAGSCALE_MEGATRON_REF}"
+        "${FLAGSCALE_MEGATRON_REF}"; \
+    purelib="$(python3 -S -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"; \
+    pybind11_includes="$(PYTHONPATH="${purelib}" python3 -S -m pybind11 --includes)"; \
+    extension_suffix="$(python3-config --extension-suffix)"; \
+    make -C "${FLAGSCALE_MEGATRON_PATH}/megatron/core/datasets" \
+        CPPFLAGS="${pybind11_includes}" LIBEXT="${extension_suffix}"
 
 WORKDIR /workspace
 

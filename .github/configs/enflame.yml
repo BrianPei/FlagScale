@@ -1,14 +1,12 @@
 # Copyright 2026 FlagOS Contributors
 # Licensed under the Apache License, Version 2.0.
 
-# Enflame ZIXIAOC200 image-build configuration. Functional test cases remain
-# disabled until FlagScale-native Enflame fixtures are validated.
+# Enflame ZIXIAOC200 training image-build configuration.
 hardware_name: enflame
 display_name: "Enflame ZIXIAOC200 Tests"
 
-ci_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-enflame-ci
+ci_image: harbor.baai.ac.cn/flagos-dev/flagscale-train:manual-20260902-enflame-dev-524bf844
 ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale-train:manual-20260902-enflame-dev-524bf844
-ci_inference_image: harbor.baai.ac.cn/flagos-dev/flagscale-inference:manual-20260825-enflame-dev-f4319bd2
 
 runner_labels: ["flagscale-enflame-s60-gpu8"]
 
@@ -35,27 +33,6 @@ image_build:
       test_roles: [train]
       source_refs:
         FLAGSCALE_MEGATRON_REF: megatron_lm_fl
-    inference:
-      dockerfile: docker/enflame/Dockerfile.inference
-      image: flagos-dev/flagscale-inference
-      base_image: harbor.baai.ac.cn/flagos-dev/vllm-plugin-fl:v0.20.2-enflame-ci
-      test_roles: [inference]
-      source_refs:
-        VLLM_PLUGIN_FL_REF: vllm_plugin_fl
-    all:
-      dockerfile: docker/enflame/Dockerfile.all
-      image: flagos-dev/flagscale-all
-      base_image: harbor.baai.ac.cn/flagos-dev/megatron-lm-fl:manual-20260810-enflame-dev
-      test_roles: [train, inference]
-      test_environments:
-        train: &enflame_all_environment
-          pkg_mgr: pip
-          env_name: ""
-          env_path: /usr/local
-        inference: *enflame_all_environment
-        serve: *enflame_all_environment
-      source_refs:
-        FLAGSCALE_MEGATRON_REF: megatron_lm_fl
 
 container_options: >-
   --privileged
@@ -67,15 +44,8 @@ container_options: >-
   --env PIP_BREAK_SYSTEM_PACKAGES=1
   --ulimit nofile=65535:65535
 
-timeouts:
-  inference_minutes: 30
-  serve_ready_seconds: 900
-
 pkg_mgr: "pip"
 env_path: ""
 env_names:
   train: ""
   hetero_train: ""
-  inference: ""
-  serve: ""
-  rl: ""
