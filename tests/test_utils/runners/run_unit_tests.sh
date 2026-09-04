@@ -124,7 +124,13 @@ EOF
 
     # Use 'coverage run' instead of pytest-cov to avoid SQLite concurrent write conflicts:
     # each torchrun rank writes its own .coverage.<host>.<pid>.<random> fragment independently.
-    if [ "$USE_COVERAGE" = true ]; then
+    if [ "$USE_COVERAGE" = true ] && [ "$PLATFORM" = "enflame" ]; then
+        # torch_gcu is imported by a site .pth file before coverage starts.
+        # Start the worker without site initialization, then add the regular
+        # package and project paths explicitly so coverage initializes first.
+        COVERAGE_BOOTSTRAP='import os, runpy, sys, sysconfig; sys.path[:0] = [sysconfig.get_path("purelib"), sysconfig.get_path("platlib")] + [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path]; sys.argv = sys.argv[1:]; runpy.run_module("coverage", run_name="__main__")'
+        RUNNER_CMD="--no-python python -S -E -c '$COVERAGE_BOOTSTRAP' coverage run --rcfile=$COVERAGERC -m pytest"
+    elif [ "$USE_COVERAGE" = true ]; then
         RUNNER_CMD="-m coverage run --rcfile=$COVERAGERC -m pytest"
     else
         RUNNER_CMD="-m pytest"
