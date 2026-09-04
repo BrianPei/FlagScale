@@ -132,8 +132,20 @@ class _HFTokenizerFS(_FlagScaleTokenizerBase):
     def __init__(self, tokenizer_path, use_fast=True):
         super().__init__(path=tokenizer_path)
         from transformers import AutoTokenizer
+        import os
+
+        # Normalize path to absolute if it exists locally
+        # HuggingFace validates repo IDs even with local_files_only=True,
+        # so we need to ensure local paths are properly formatted
+        if os.path.isdir(tokenizer_path):
+            # It's a local directory - use absolute path
+            tokenizer_path = os.path.abspath(tokenizer_path)
+
         self.tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_path, trust_remote_code=True, use_fast=use_fast
+            tokenizer_path,
+            trust_remote_code=True,
+            use_fast=use_fast,
+            local_files_only=os.path.isdir(tokenizer_path)
         )
         self.eod_id = self.tokenizer.eos_token_id
         self.cls_id = self.tokenizer.bos_token_id
