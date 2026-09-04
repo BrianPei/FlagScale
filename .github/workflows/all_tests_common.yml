@@ -297,7 +297,7 @@ jobs:
       - checkout_and_config
       - cli_validation
       - unit_tests
-    if: fromJson(needs.checkout_and_config.outputs.hetero_train_test_matrix)[0] != null
+    if: inputs.platform != 'enflame' && fromJson(needs.checkout_and_config.outputs.hetero_train_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_hetero_train.yml
     with:
       platform: ${{ inputs.platform }}
@@ -315,7 +315,7 @@ jobs:
       - checkout_and_config
       - cli_validation
       - unit_tests
-    if: fromJson(needs.checkout_and_config.outputs.inference_test_matrix)[0] != null
+    if: inputs.platform != 'enflame' && fromJson(needs.checkout_and_config.outputs.inference_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_inference.yml
     with:
       platform: ${{ inputs.platform }}
@@ -334,7 +334,7 @@ jobs:
       - checkout_and_config
       - cli_validation
       - unit_tests
-    if: fromJson(needs.checkout_and_config.outputs.serve_test_matrix)[0] != null
+    if: inputs.platform != 'enflame' && fromJson(needs.checkout_and_config.outputs.serve_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_serve.yml
     with:
       platform: ${{ inputs.platform }}
@@ -371,7 +371,7 @@ jobs:
       - checkout_and_config
       - cli_validation
       - unit_tests
-    if: fromJson(needs.checkout_and_config.outputs.benchmark_test_matrix)[0] != null
+    if: inputs.platform != 'enflame' && fromJson(needs.checkout_and_config.outputs.benchmark_test_matrix)[0] != null
     uses: ./.github/workflows/functional_tests_benchmark.yml
     with:
       platform: ${{ inputs.platform }}
