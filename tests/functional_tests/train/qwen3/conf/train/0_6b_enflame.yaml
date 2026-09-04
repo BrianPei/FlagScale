@@ -16,7 +16,7 @@ defaults:
   - data
 
 data:
-  data_path: /data/flagscale-ci/qwen3/qwen3_test_text_document
+  data_path: /tmp/qwen3-enflame-data/qwen3_test_text_document
   tokenizer:
     tokenizer_path: /data/models/Qwen/Qwen3-0.6B
 
