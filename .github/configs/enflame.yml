@@ -5,8 +5,8 @@
 hardware_name: enflame
 display_name: "Enflame ZIXIAOC200 Tests"
 
-ci_image: harbor.baai.ac.cn/flagos-dev/flagscale-train:manual-20260902-enflame-dev-524bf844
-ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale-train:manual-20260902-enflame-dev-524bf844
+ci_image: harbor.baai.ac.cn/flagos-dev/flagscale-train:manual-20260904-enflame-train-verified
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale-train:manual-20260904-enflame-train-verified
 
 runner_labels: ["flagscale-enflame-s60-gpu8"]
 
