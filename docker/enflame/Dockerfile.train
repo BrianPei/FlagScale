@@ -36,6 +36,11 @@ RUN set -eux; \
     git -C "${FLAGSCALE_MEGATRON_PATH}" checkout -q --detach FETCH_HEAD; \
     test "$(git -C "${FLAGSCALE_MEGATRON_PATH}" rev-parse HEAD)" = \
         "${FLAGSCALE_MEGATRON_REF}"; \
+    sed -i \
+        's/if torch.cuda.device_count() > 0 and torch.cuda.is_available():/if torch.version.cuda is not None and torch.cuda.device_count() > 0 and torch.cuda.is_available():/' \
+        "${FLAGSCALE_MEGATRON_PATH}/megatron/plugin/platform/platform_cuda.py"; \
+    grep -F 'torch.version.cuda is not None' \
+        "${FLAGSCALE_MEGATRON_PATH}/megatron/plugin/platform/platform_cuda.py"; \
     purelib="$(python3 -S -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"; \
     pybind11_includes="$(PYTHONPATH="${purelib}" python3 -S -m pybind11 --includes)"; \
     extension_suffix="$(python3-config --extension-suffix)"; \

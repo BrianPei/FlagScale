@@ -21,7 +21,8 @@ s60:
   name: "s60"
   tests:
     functional:
-      train: {}
+      train:
+        qwen3: ["0_6b_enflame"]
     unit:
       nproc_per_node: 1
       include: "*"
