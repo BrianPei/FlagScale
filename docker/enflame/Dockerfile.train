@@ -34,8 +34,13 @@ RUN set -eux; \
         sleep $((attempt * 10)); \
     done; \
     git -C "${FLAGSCALE_MEGATRON_PATH}" checkout -q --detach FETCH_HEAD; \
-    test "$(git -C "${FLAGSCALE_MEGATRON_PATH}" rev-parse HEAD)" = \
-        "${FLAGSCALE_MEGATRON_REF}"; \
+    actual_ref="$(git -C "${FLAGSCALE_MEGATRON_PATH}" rev-parse HEAD)"; \
+    if printf '%s' "${FLAGSCALE_MEGATRON_REF}" | grep -Eq '^[0-9a-fA-F]{40}$'; then \
+        test "${actual_ref}" = "${FLAGSCALE_MEGATRON_REF}"; \
+    else \
+        fetched_ref="$(git -C "${FLAGSCALE_MEGATRON_PATH}" rev-parse FETCH_HEAD)"; \
+        test "${actual_ref}" = "${fetched_ref}"; \
+    fi; \
     sed -i \
         's/if torch.cuda.device_count() > 0 and torch.cuda.is_available():/if torch.version.cuda is not None and torch.cuda.device_count() > 0 and torch.cuda.is_available():/' \
         "${FLAGSCALE_MEGATRON_PATH}/megatron/plugin/platform/platform_cuda.py"; \

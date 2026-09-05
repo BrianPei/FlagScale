@@ -137,30 +137,33 @@ EOF
         # Start the worker without site initialization, then add the regular
         # package and project paths explicitly so coverage initializes first.
         COVERAGE_BOOTSTRAP='import os, runpy, sys, sysconfig; sys.path[:0] = [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path] + [sysconfig.get_path("purelib"), sysconfig.get_path("platlib")]; sys.argv = sys.argv[1:]; runpy.run_module("coverage", run_name="__main__")'
-        RUNNER_CMD="--no-python python -S -E -c '$COVERAGE_BOOTSTRAP' coverage run --rcfile=$COVERAGERC -m pytest"
+        RUNNER_CMD=(--no-python python -S -E -c "$COVERAGE_BOOTSTRAP" coverage run "--rcfile=$COVERAGERC" -m pytest)
     elif [ "$USE_COVERAGE" = true ]; then
-        RUNNER_CMD="-m coverage run --rcfile=$COVERAGERC -m pytest"
+        RUNNER_CMD=(-m coverage run "--rcfile=$COVERAGERC" -m pytest)
     else
-        RUNNER_CMD="-m pytest"
+        RUNNER_CMD=(-m pytest)
     fi
 
     TEST_TARGETS="tests/unit_tests/"
     if [ -n "$INCLUDE" ] && [ "$INCLUDE" != "*" ]; then
         TEST_TARGETS="$INCLUDE"
     fi
+    read -r -a TEST_TARGET_ARGS <<< "$TEST_TARGETS"
 
-    PYTEST_CMD="torchrun --nproc_per_node=$NPROC $RUNNER_CMD $TEST_TARGETS -v --tb=short"
+    PYTEST_CMD=(torchrun "--nproc_per_node=$NPROC" "${RUNNER_CMD[@]}" "${TEST_TARGET_ARGS[@]}" -v --tb=short)
     wait_for_gpu || return 1
     # Apply exclude patterns if any
     if [ -n "$EXCLUDE" ]; then
-        PYTEST_CMD="torchrun --nproc_per_node=$NPROC $RUNNER_CMD $EXCLUDE $TEST_TARGETS -v --tb=short"
+        read -r -a EXCLUDE_ARGS <<< "$EXCLUDE"
+        PYTEST_CMD=(torchrun "--nproc_per_node=$NPROC" "${RUNNER_CMD[@]}" "${EXCLUDE_ARGS[@]}" "${TEST_TARGET_ARGS[@]}" -v --tb=short)
     fi
 
-    log_info "Command: $PYTEST_CMD"
+    printf -v printable_cmd '%q ' "${PYTEST_CMD[@]}"
+    log_info "Command: $printable_cmd"
 
     # Run unit tests
     set +e
-    eval "$PYTEST_CMD"
+    "${PYTEST_CMD[@]}"
     local test_exit=$?
     set -e
 
