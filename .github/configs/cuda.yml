@@ -142,3 +142,31 @@ env_names:
   inference: "flagscale-inference"
   serve: "flagscale-inference"
   rl: "flagscale-rl"
+
+# Setup script for environment preparation
+setup_script: .github/scripts/set_env_cuda.sh
+
+# =============================================================================
+# Dependencies Configuration (Megatron-LM-FL & TE-FL)
+# =============================================================================
+dependencies:
+  megatron_lm_fl:
+    enabled: true
+    repository: flagos-ai/Megatron-LM-FL
+    ref: main
+    runtime:
+      install_mode: pythonpath
+      environment:
+        MEGATRON_FL_PREFER: flagos
+
+  te_fl:
+    enabled: true
+    repository: flagos-ai/TransformerEngine-FL
+    ref: main
+    build_mode: cuda
+    runtime:
+      environment:
+        TE_FL_PREFER: flagos
+      install_pip_args: []
+      pip_packages: []
+

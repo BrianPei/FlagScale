@@ -55,54 +55,117 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare-dependencies-cuda:
+    name: prepare-deps-cuda
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: cuda
+
+  prepare-dependencies-ascend:
+    name: prepare-deps-ascend
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: ascend
+
+  prepare-dependencies-enflame:
+    name: prepare-deps-enflame
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: enflame
+
+  prepare-dependencies-hygon:
+    name: prepare-deps-hygon
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: hygon
+
+  prepare-dependencies-metax:
+    name: prepare-deps-metax
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: metax
+
+  prepare-dependencies-musa:
+    name: prepare-deps-musa
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: musa
+
+  prepare-dependencies-kunlunxin:
+    name: prepare-deps-kunlunxin
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: kunlunxin
+
   cuda_tests:
     name: CUDA tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'cuda'
+    needs: prepare-dependencies-cuda
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: cuda
+      megatron_cache_key: ${{ needs.prepare-dependencies-cuda.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.prepare-dependencies-cuda.outputs.te_fl_cache_key }}
 
   ascend_tests:
     name: Ascend tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ascend'
+    needs: prepare-dependencies-ascend
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: ascend
+      megatron_cache_key: ${{ needs.prepare-dependencies-ascend.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.prepare-dependencies-ascend.outputs.te_fl_cache_key }}
 
   enflame_tests:
     name: Enflame tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'enflame'
+    needs: prepare-dependencies-enflame
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: enflame
+      megatron_cache_key: ${{ needs.prepare-dependencies-enflame.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.prepare-dependencies-enflame.outputs.te_fl_cache_key }}
 
   hygon_tests:
     name: Hygon tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'hygon'
+    needs: prepare-dependencies-hygon
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: hygon
+      megatron_cache_key: ${{ needs.prepare-dependencies-hygon.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.prepare-dependencies-hygon.outputs.te_fl_cache_key }}
 
   metax_tests:
     name: MetaX tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'metax'
+    needs: prepare-dependencies-metax
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: metax
+      megatron_cache_key: ${{ needs.prepare-dependencies-metax.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.prepare-dependencies-metax.outputs.te_fl_cache_key }}
 
   musa_tests:
     name: MThreads MUSA tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'musa'
+    needs: prepare-dependencies-musa
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: musa
+      megatron_cache_key: ${{ needs.prepare-dependencies-musa.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.prepare-dependencies-musa.outputs.te_fl_cache_key }}
 
   kunlunxin_tests:
     name: Kunlunxin P800 tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'kunlunxin'
+    needs: prepare-dependencies-kunlunxin
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: kunlunxin
+      megatron_cache_key: ${{ needs.prepare-dependencies-kunlunxin.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.prepare-dependencies-kunlunxin.outputs.te_fl_cache_key }}
 
   all_tests:
     name: all_tests
