@@ -70,7 +70,16 @@ run_unit_tests_for_device() {
     log_info "Running unit tests for device: $device"
 
     # Set up PYTHONPATH
-    export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train:${PYTHONPATH:-}"
+    # CRITICAL: Ensure megatron-lm-fl-install is loaded BEFORE any other megatron paths
+    # to prevent namespace conflicts with flagscale/train/megatron/
+    MEGATRON_INSTALL_DIR="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
+    if [ -d "$MEGATRON_INSTALL_DIR" ]; then
+        export PYTHONPATH="$MEGATRON_INSTALL_DIR:$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train"
+    else
+        export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train:${PYTHONPATH:-}"
+    fi
+    # Remove any镜像 paths that might conflict
+    export PYTHONNOUSERSITE=1
     export FLAGSCALE_TEST_PLATFORM="$PLATFORM"
     export FLAGSCALE_TEST_DEVICE_TYPE="$device"
     export FLAGSCALE_TEST_DIST_BACKEND="${FLAGSCALE_TEST_DIST_BACKEND:-$(default_dist_backend "$PLATFORM")}"
