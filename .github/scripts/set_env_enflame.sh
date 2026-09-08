@@ -9,6 +9,10 @@ echo "Setting up Enflame GCU environment"
 
 ci_activate_python_environment
 
+# Remove pre-installed TE-FL from image to avoid import conflicts
+echo "Removing pre-installed transformer-engine from image..."
+pip uninstall -y transformer-engine || echo "No pre-installed transformer-engine found"
+
 if ! command -v efml-smi >/dev/null 2>&1; then
   echo "::warning::efml-smi not found, skipping Enflame validation"
 else

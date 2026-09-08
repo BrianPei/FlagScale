@@ -9,10 +9,14 @@ echo "Setting up MetaX C550 environment"
 
 ci_activate_python_environment
 
-# Remove pre-installed Megatron-LM-FL and TE-FL from镜像 to ensure CI-built versions are used
+# Remove pre-installed packages from image to avoid import conflicts
+echo "Removing pre-installed megatron-core and transformer-engine from image..."
+pip uninstall -y megatron-core || echo "No pre-installed megatron-core found"
+pip uninstall -y transformer-engine || echo "No pre-installed transformer-engine found"
+
+# Clean up pre-installed directories from PYTHONPATH
 if [ -n "${PYTHONPATH:-}" ]; then
   echo "Original PYTHONPATH: $PYTHONPATH"
-  # Remove镜像 pre-installed paths
   PYTHONPATH=$(echo "$PYTHONPATH" | tr ':' '\n' | grep -v '/opt/flagscale/deps' | grep -v '/workspace/Megatron-LM-FL' | tr '\n' ':' | sed 's/:$//')
   export PYTHONPATH
   echo "Cleaned PYTHONPATH: $PYTHONPATH"
