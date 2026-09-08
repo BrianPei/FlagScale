@@ -347,10 +347,12 @@ jobs:
           cd "$MEGATRON_REPO"
           "$python_bin" -m pip install --no-deps --no-build-isolation --target "$OUTPUT_DIR" .
           echo "Megatron-LM-FL installed to: $OUTPUT_DIR"
-          if [ ! -f "$OUTPUT_DIR/megatron/__init__.py" ]; then
+          if [ ! -f "$OUTPUT_DIR/megatron/__init__.py" ] && [ ! -f "$OUTPUT_DIR/megatron_core/__init__.py" ]; then
             echo "::error::Megatron-LM-FL installation incomplete" >&2
+            ls -la "$OUTPUT_DIR/" >&2 || true
             exit 1
           fi
+          echo "Megatron-LM-FL installation verified"
 
       - name: Build TE-FL wheel on cache miss
         if: needs.resolve.outputs.te_fl_enabled == 'true' && steps.te_fl_cache.outputs.cache-hit != 'true'
