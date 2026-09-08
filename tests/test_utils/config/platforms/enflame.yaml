@@ -29,3 +29,5 @@ s60:
       exclude:
         - tests/unit_tests/test_parallel_context.py
         - tests/unit_tests/test_spiky_loss_detector.py
+        # The Enflame training image does not provide the optional VLA stack.
+        - tests/unit_tests/models/vla

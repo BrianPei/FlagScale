@@ -3,6 +3,7 @@
 import os
 import sys
 import types
+from importlib.machinery import ModuleSpec
 
 
 def _flash_attention_is_disabled() -> bool:
@@ -32,7 +33,10 @@ def _patch_te_fl_backends_flash_attn_import():
         if module_name not in sys.modules:
             stub = types.ModuleType(module_name)
             stub.__file__ = f"<{module_name} stub - disabled by NVTE_FLASH_ATTN=0>"
-            stub.__path__ = []
+            is_package = module_name == "flash_attn"
+            stub.__spec__ = ModuleSpec(module_name, loader=None, is_package=is_package)
+            if is_package:
+                stub.__path__ = []
 
             def _make_unavailable_attr(mod_name: str):
                 def _unavailable_attr(name: str):
