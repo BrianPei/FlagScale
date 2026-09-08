@@ -173,4 +173,5 @@ dependencies:
       environment:
         TE_FL_PREFER: flagos
       install_pip_args: []
-      pip_packages: [megatron-energon[av_decode]~=7.0]
+      pip_packages:
+        - "megatron-energon[av_decode]~=7.0"
