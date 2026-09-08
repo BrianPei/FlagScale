@@ -139,4 +139,7 @@ dependencies:
         TE_FL_SKIP_CUDA: "1"
         TE_FL_PREFER: flagos
       install_pip_args: []
-      pip_packages: [flag-gems, sqlalchemy, megatron-energon[av_decode]~=7.0]
+      pip_packages:
+        - flag-gems
+        - sqlalchemy
+        - "megatron-energon[av_decode]~=7.0"
