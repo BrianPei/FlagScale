@@ -168,8 +168,13 @@ dependencies:
     repository: flagos-ai/TransformerEngine-FL
     ref: main
     build_mode: cuda
+    build_environment:
+      # NCCL-EP requires the internal nccl_device.h header, which is not
+      # shipped by the system NCCL installation in the CUDA CI image.
+      NVTE_WITH_NCCL_EP: "0"
     runtime:
       environment:
+        NVTE_WITH_NCCL_EP: "0"
         TE_FL_PREFER: flagos
       install_pip_args: []
       pip_packages:
