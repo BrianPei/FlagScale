@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Shared, platform-neutral helpers for CI environment setup scripts.
-set -euo pipefail
+# Callers own their shell options because this file is sourced by both strict
+# CI setup scripts and runners that intentionally do not enable nounset.
 
 CI_SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CI_PROJECT_ROOT="$(cd "$CI_SETUP_DIR/../.." && pwd)"
@@ -22,6 +23,106 @@ ci_export_env() {
   if [ -n "${GITHUB_ENV:-}" ]; then
     printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
   fi
+}
+
+ci_resolve_python_bin() {
+  local python_bin="${CI_PYTHON_BIN:-}"
+
+  if [ -n "$python_bin" ]; then
+    python_bin=$(command -v "$python_bin" 2>/dev/null || true)
+  else
+    python_bin=$(command -v python || command -v python3 || true)
+  fi
+  if [ -z "$python_bin" ] || [ ! -x "$python_bin" ]; then
+    echo "::error::Python executable not found" >&2
+    return 1
+  fi
+
+  export CI_PYTHON_BIN="$python_bin"
+}
+
+ci_prepend_pythonpath() {
+  local entry="$1"
+  local current="${PYTHONPATH:-}"
+  local updated
+
+  [ -n "$entry" ] || return 0
+  updated=$("${CI_PYTHON_BIN:-python3}" - "$entry" "$current" <<'PY'
+import os
+import sys
+
+entry = sys.argv[1]
+paths = [entry]
+entry_real_path = os.path.realpath(entry)
+paths.extend(
+    path
+    for path in sys.argv[2].split(os.pathsep)
+    if path and os.path.realpath(path) != entry_real_path
+)
+print(os.pathsep.join(paths))
+PY
+  )
+  ci_export_env PYTHONPATH "$updated"
+}
+
+ci_sanitize_training_pythonpath() {
+  local current="${PYTHONPATH:-}"
+  local sanitized
+
+  sanitized=$("${CI_PYTHON_BIN:-python3}" - \
+    "$current" \
+    "${MEGATRON_INSTALL_DIR:-}" \
+    "${CI_PYTHON_COMPAT_DIR:-}" \
+    "$CI_PROJECT_ROOT" <<'PY'
+import os
+import sys
+import sysconfig
+
+paths = sys.argv[1].split(os.pathsep)
+preserved = {
+    os.path.realpath(path)
+    for path in sys.argv[2:]
+    if path
+}
+preserved.update(
+    os.path.realpath(path)
+    for path in (sysconfig.get_path("purelib"), sysconfig.get_path("platlib"))
+    if path
+)
+result = []
+seen = set()
+
+for path in paths:
+    if not path:
+        continue
+    real_path = os.path.realpath(path)
+    if real_path in seen:
+        continue
+    seen.add(real_path)
+
+    shadows_training_dependency = any(
+        os.path.isdir(os.path.join(real_path, package))
+        for package in ("megatron", "transformer_engine")
+    )
+    if real_path in preserved or not shadows_training_dependency:
+        result.append(path)
+    else:
+        print(
+            f"Removed conflicting training dependency path: {path}",
+            file=sys.stderr,
+        )
+
+print(os.pathsep.join(result))
+PY
+  )
+  ci_export_env PYTHONPATH "$sanitized"
+}
+
+ci_configure_training_pythonpath() {
+  ci_sanitize_training_pythonpath
+  ci_prepend_pythonpath "$CI_PROJECT_ROOT"
+  ci_prepend_pythonpath "${CI_PYTHON_COMPAT_DIR:-}"
+  ci_prepend_pythonpath "${MEGATRON_INSTALL_DIR:-}"
 }
 
 ci_apply_env_json() {
@@ -65,15 +166,47 @@ PY
 }
 
 ci_activate_python_environment() {
-  if [ -f /opt/conda/etc/profile.d/conda.sh ]; then
-    source /opt/conda/etc/profile.d/conda.sh
-    conda activate base
-  fi
+  local pkg_mgr="${CI_RUNTIME_PKG_MGR:-pip}"
+  local env_name="${CI_RUNTIME_ENV_NAME:-}"
+  local env_path="${CI_RUNTIME_ENV_PATH:-}"
+
+  case "$pkg_mgr" in
+    conda)
+      [ -n "$env_name" ] || {
+        echo "::error::CI_RUNTIME_ENV_NAME is required for conda" >&2
+        return 1
+      }
+      [ -f "$env_path/etc/profile.d/conda.sh" ] || {
+        echo "::error::Invalid conda installation: $env_path" >&2
+        return 1
+      }
+      source "$env_path/etc/profile.d/conda.sh"
+      conda activate "$env_name"
+      ;;
+    uv)
+      [ -f "$env_path/bin/activate" ] || {
+        echo "::error::Invalid uv environment: $env_path" >&2
+        return 1
+      }
+      source "$env_path/bin/activate"
+      ;;
+    pip)
+      ;;
+    *)
+      echo "::error::Unsupported runtime package manager: $pkg_mgr" >&2
+      return 1
+      ;;
+  esac
 
   local python_bin
-  python_bin=$(command -v python3)
+  python_bin=$(command -v python || command -v python3 || true)
+  if [ -z "$python_bin" ] || [ ! -x "$python_bin" ]; then
+    echo "::error::Python executable not found after environment activation" >&2
+    return 1
+  fi
   ci_export_env PATH "$PATH"
   ci_export_env CI_PYTHON_BIN "$python_bin"
+  ci_sanitize_training_pythonpath
   echo "Python: $python_bin ($($python_bin --version 2>&1))"
 }
 

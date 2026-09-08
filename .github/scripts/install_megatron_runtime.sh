@@ -4,6 +4,10 @@ set -euo pipefail
 
 : "${MEGATRON_INSTALL_DIR:?MEGATRON_INSTALL_DIR is required}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_COMPAT_DIR="$SCRIPT_DIR/python_compat"
+source "$SCRIPT_DIR/set_env_common.sh"
+
 python_bin="${CI_PYTHON_BIN:-$(command -v python3)}"
 if [ ! -x "$python_bin" ]; then
   echo "::error::Python executable not found: $python_bin" >&2
@@ -15,19 +19,15 @@ if [ ! -d "$MEGATRON_INSTALL_DIR" ]; then
   exit 1
 fi
 
-# CRITICAL: Remove any site-packages megatron-core to prevent conflicts
+# Remove only a site-packages copy.  Keep the prepared target directory intact
+# even when it is already present on PYTHONPATH from an earlier CI step.
 echo "Removing any site-packages megatron-core to ensure PYTHONPATH priority..."
-"$python_bin" -m pip uninstall -y megatron-core >/dev/null 2>&1 || true
+env -u PYTHONPATH PYTHONNOUSERSITE=1 \
+  "$python_bin" -m pip uninstall -y megatron-core >/dev/null 2>&1 || true
 
-# Set PYTHONPATH with absolute priority
-export PYTHONPATH="${MEGATRON_INSTALL_DIR}:${PYTHONPATH:-}"
-# Disable user site-packages to prevent interference
-export PYTHONNOUSERSITE=1
-
-if [ -n "${GITHUB_ENV:-}" ]; then
-  echo "PYTHONPATH=${PYTHONPATH}" >> "$GITHUB_ENV"
-  echo "PYTHONNOUSERSITE=1" >> "$GITHUB_ENV"
-fi
+export CI_PYTHON_COMPAT_DIR="$PYTHON_COMPAT_DIR"
+ci_configure_training_pythonpath
+ci_export_env PYTHONNOUSERSITE 1
 
 "$python_bin" - <<'PY'
 import sys
@@ -44,6 +44,13 @@ try:
     print(f"Megatron-LM-FL import passed: {megatron.__file__}")
     print(f"Megatron-Core version: {getattr(megatron.core, '__version__', 'unknown')}")
     print(f"Megatron-Core path: {megatron.core.__file__}")
+
+    expected_root = os.path.realpath(megatron_path)
+    actual_path = os.path.realpath(megatron.core.__file__)
+    if os.path.commonpath([expected_root, actual_path]) != expected_root:
+        raise ImportError(
+            f"megatron.core resolved outside the prepared runtime: {actual_path}"
+        )
 
     # Verify critical modules exist
     try:

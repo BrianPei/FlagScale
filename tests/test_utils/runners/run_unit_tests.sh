@@ -20,6 +20,8 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 source "$SCRIPT_DIR/utils.sh"
+source "$PROJECT_ROOT/.github/scripts/set_env_common.sh"
+ci_resolve_python_bin
 
 # Defaults
 PLATFORM="default"
@@ -69,16 +71,14 @@ run_unit_tests_for_device() {
 
     log_info "Running unit tests for device: $device"
 
-    # Set up PYTHONPATH
-    # CRITICAL: Ensure megatron-lm-fl-install is loaded BEFORE any other megatron paths
-    # to prevent namespace conflicts with flagscale/train/megatron/
-    MEGATRON_INSTALL_DIR="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
-    if [ -d "$MEGATRON_INSTALL_DIR" ]; then
-        export PYTHONPATH="$MEGATRON_INSTALL_DIR:$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train"
+    local prepared_megatron_dir="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
+    if [ -d "$prepared_megatron_dir" ]; then
+        export MEGATRON_INSTALL_DIR="$prepared_megatron_dir"
+        export CI_PYTHON_COMPAT_DIR="$PROJECT_ROOT/.github/scripts/python_compat"
+        ci_configure_training_pythonpath
     else
         export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train:${PYTHONPATH:-}"
     fi
-    # Remove any镜像 paths that might conflict
     export PYTHONNOUSERSITE=1
     export FLAGSCALE_TEST_PLATFORM="$PLATFORM"
     export FLAGSCALE_TEST_DEVICE_TYPE="$device"
@@ -146,7 +146,7 @@ EOF
         # Start the worker without site initialization, then add the regular
         # package and project paths explicitly so coverage initializes first.
         COVERAGE_BOOTSTRAP='import os, runpy, sys, sysconfig; sys.path[:0] = [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path] + [sysconfig.get_path("purelib"), sysconfig.get_path("platlib")]; sys.argv = sys.argv[1:]; runpy.run_module("coverage", run_name="__main__")'
-        RUNNER_CMD=(--no-python python -S -E -c "$COVERAGE_BOOTSTRAP" coverage run "--rcfile=$COVERAGERC" -m pytest)
+        RUNNER_CMD=(--no-python "$CI_PYTHON_BIN" -S -E -c "$COVERAGE_BOOTSTRAP" coverage run "--rcfile=$COVERAGERC" -m pytest)
     elif [ "$USE_COVERAGE" = true ]; then
         RUNNER_CMD=(-m coverage run "--rcfile=$COVERAGERC" -m pytest)
     else
@@ -179,8 +179,8 @@ EOF
     # All ranks have exited — safe to combine fragment files and generate report
     if [ "$USE_COVERAGE" = true ]; then
         log_info "Combining distributed coverage data..."
-        python -m coverage combine --rcfile="$COVERAGERC" "$COVERAGE_DIR"
-        python -m coverage json --rcfile="$COVERAGERC" -o "$COVERAGE_DIR/coverage.json"
+        "$CI_PYTHON_BIN" -m coverage combine --rcfile="$COVERAGERC" "$COVERAGE_DIR"
+        "$CI_PYTHON_BIN" -m coverage json --rcfile="$COVERAGERC" -o "$COVERAGE_DIR/coverage.json"
     fi
 
     return $test_exit

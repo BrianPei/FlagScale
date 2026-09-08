@@ -181,7 +181,7 @@ jobs:
         with:
           path: megatron-lm-fl-install
           key: ${{ inputs.megatron_cache_key }}
-          fail-on-cache-miss: false
+          fail-on-cache-miss: true
 
       - name: Restore TE-FL cache
         if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != ''
@@ -189,48 +189,26 @@ jobs:
         with:
           path: te-fl-wheel
           key: ${{ inputs.te_fl_cache_key }}
-          fail-on-cache-miss: false
+          fail-on-cache-miss: true
 
-      - name: Install Megatron-LM-FL runtime
-        if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != ''
+      - name: Install prepared training runtime
+        if: inputs.megatron_lm_fl_enabled == 'true' || inputs.te_fl_enabled == 'true'
         run: |
           set -euo pipefail
           cd $PROJECT_ROOT
 
-          export MEGATRON_INSTALL_DIR="${GITHUB_WORKSPACE}/megatron-lm-fl-install"
-          export CI_RUNTIME_ENVIRONMENT_JSON='${{ inputs.megatron_runtime_environment }}'
-
-          if [ ! -d "$MEGATRON_INSTALL_DIR" ]; then
-            echo "::warning::Megatron-LM-FL cache not restored, skipping runtime installation"
-            exit 0
-          fi
-
-          source .github/scripts/set_env_common.sh
-          ci_apply_env_json "$CI_RUNTIME_ENVIRONMENT_JSON"
-
-          bash .github/scripts/install_megatron_runtime.sh
-
-      - name: Install TE-FL runtime
-        if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != ''
-        run: |
-          set -euo pipefail
-          cd $PROJECT_ROOT
-
-          export TE_FL_WHEEL_DIR="${GITHUB_WORKSPACE}/te-fl-wheel"
-          export CI_RUNTIME_ENVIRONMENT_JSON='${{ inputs.te_fl_runtime_environment }}'
-          export CI_RUNTIME_PIP_INSTALL_ARGS_JSON='${{ inputs.te_fl_install_pip_args }}'
-          export CI_RUNTIME_PIP_PACKAGES_JSON='${{ inputs.te_fl_runtime_pip_packages }}'
-
-          if [ ! -d "$TE_FL_WHEEL_DIR" ]; then
-            echo "::warning::TE-FL cache not restored, skipping runtime installation"
-            exit 0
-          fi
-
-          source .github/scripts/set_env_common.sh
-          ci_apply_env_json "$CI_RUNTIME_ENVIRONMENT_JSON"
-          ci_install_runtime_packages
-
-          bash .github/scripts/install_te_fl_runtime.sh
+          export MEGATRON_LM_FL_ENABLED='${{ inputs.megatron_lm_fl_enabled }}'
+          export MEGATRON_CACHE_KEY='${{ inputs.megatron_cache_key }}'
+          export MEGATRON_RUNTIME_ENVIRONMENT='${{ inputs.megatron_runtime_environment }}'
+          export TE_FL_ENABLED='${{ inputs.te_fl_enabled }}'
+          export TE_FL_CACHE_KEY='${{ inputs.te_fl_cache_key }}'
+          export TE_FL_RUNTIME_ENVIRONMENT='${{ inputs.te_fl_runtime_environment }}'
+          export TE_FL_INSTALL_PIP_ARGS='${{ inputs.te_fl_install_pip_args }}'
+          export TE_FL_RUNTIME_PIP_PACKAGES='${{ inputs.te_fl_runtime_pip_packages }}'
+          export CI_RUNTIME_PKG_MGR='${{ inputs.pkg_mgr }}'
+          export CI_RUNTIME_ENV_NAME='${{ inputs.env_name }}'
+          export CI_RUNTIME_ENV_PATH='${{ inputs.env_path }}'
+          bash .github/scripts/install_training_runtime.sh
 
       - name: Setup unit test environment
         run: |
@@ -277,11 +255,12 @@ jobs:
               ;;
           esac
 
-          echo "Python location: $(command -v python)"
-          echo "Python version: $(python --version)"
+          echo "Python location: ${CI_PYTHON_BIN:-python3}"
+          echo "Python version: $(${CI_PYTHON_BIN:-python3} --version)"
 
           set +e
-          export PYTHONPATH="${PYTHONPATH:-}:$PROJECT_ROOT/flagscale/train"
+          # PYTHONPATH is set by run_unit_tests.sh with correct priority
+          # Do NOT override it here to prevent path order conflicts
           bash ./tests/test_utils/runners/run_unit_tests.sh \
             --platform '${{ inputs.platform }}' \
             --device '${{ inputs.device }}' \

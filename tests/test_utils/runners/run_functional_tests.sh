@@ -20,6 +20,8 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 source "$SCRIPT_DIR/utils.sh"
+source "$PROJECT_ROOT/.github/scripts/set_env_common.sh"
+ci_resolve_python_bin
 
 # Ensure the repo root is on PYTHONPATH so training subprocesses can import
 # top-level packages that are not shipped by `pip install .` (e.g. `tools`,
@@ -28,9 +30,11 @@ source "$SCRIPT_DIR/utils.sh"
 #
 # CRITICAL: Place megatron-lm-fl-install FIRST to prevent namespace conflicts
 # with flagscale/train/megatron/ (which has no 'core' submodule).
-MEGATRON_INSTALL_DIR="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
-if [ -d "$MEGATRON_INSTALL_DIR" ]; then
-    export PYTHONPATH="$MEGATRON_INSTALL_DIR:$PROJECT_ROOT:${PYTHONPATH:-}"
+prepared_megatron_dir="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
+if [ -d "$prepared_megatron_dir" ]; then
+    export MEGATRON_INSTALL_DIR="$prepared_megatron_dir"
+    export CI_PYTHON_COMPAT_DIR="$PROJECT_ROOT/.github/scripts/python_compat"
+    ci_configure_training_pythonpath
 else
     export PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}"
 fi
@@ -177,8 +181,10 @@ run_test() {
     # Build command as an array to avoid eval and ensure safe quoting.
     local check_results="$PROJECT_ROOT/tests/test_utils/runners/check_results.py"
     if [ -f "$check_results" ]; then
+        local python_bin
+        python_bin=$(runner_python_bin) || return 1
         local validator_cmd=(
-            python -m pytest "${check_results}::${compare_function}"
+            "$python_bin" -m pytest "${check_results}::${compare_function}"
             --path=tests/functional_tests
             "--task=$task" "--model=$model"
             "--case=$config" "--platform=$PLATFORM"

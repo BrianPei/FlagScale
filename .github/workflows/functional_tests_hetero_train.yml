@@ -52,6 +52,38 @@ on:
         type: string
         description: Environment path (venv path for uv, conda installation path for conda)
         default: "/opt/venv"
+      megatron_cache_key:
+        required: false
+        type: string
+        default: ''
+      te_fl_cache_key:
+        required: false
+        type: string
+        default: ''
+      megatron_lm_fl_enabled:
+        required: false
+        type: string
+        default: 'false'
+      te_fl_enabled:
+        required: false
+        type: string
+        default: 'false'
+      megatron_runtime_environment:
+        required: false
+        type: string
+        default: '{}'
+      te_fl_runtime_environment:
+        required: false
+        type: string
+        default: '{}'
+      te_fl_install_pip_args:
+        required: false
+        type: string
+        default: '[]'
+      te_fl_runtime_pip_packages:
+        required: false
+        type: string
+        default: '[]'
 
 jobs:
   functional_test_hetero_train:
@@ -138,6 +170,40 @@ jobs:
       - name: Check environment info
         run: cd $PROJECT_ROOT && bash ./tests/test_utils/runners/check_env.sh
 
+      - name: Restore Megatron-LM-FL cache
+        if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: megatron-lm-fl-install
+          key: ${{ inputs.megatron_cache_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore TE-FL cache
+        if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: te-fl-wheel
+          key: ${{ inputs.te_fl_cache_key }}
+          fail-on-cache-miss: true
+
+      - name: Install prepared training runtime
+        if: inputs.megatron_lm_fl_enabled == 'true' || inputs.te_fl_enabled == 'true'
+        run: |
+          set -euo pipefail
+          cd $PROJECT_ROOT
+          export MEGATRON_LM_FL_ENABLED='${{ inputs.megatron_lm_fl_enabled }}'
+          export MEGATRON_CACHE_KEY='${{ inputs.megatron_cache_key }}'
+          export MEGATRON_RUNTIME_ENVIRONMENT='${{ inputs.megatron_runtime_environment }}'
+          export TE_FL_ENABLED='${{ inputs.te_fl_enabled }}'
+          export TE_FL_CACHE_KEY='${{ inputs.te_fl_cache_key }}'
+          export TE_FL_RUNTIME_ENVIRONMENT='${{ inputs.te_fl_runtime_environment }}'
+          export TE_FL_INSTALL_PIP_ARGS='${{ inputs.te_fl_install_pip_args }}'
+          export TE_FL_RUNTIME_PIP_PACKAGES='${{ inputs.te_fl_runtime_pip_packages }}'
+          export CI_RUNTIME_PKG_MGR='${{ inputs.pkg_mgr }}'
+          export CI_RUNTIME_ENV_NAME='${{ inputs.env_name }}'
+          export CI_RUNTIME_ENV_PATH='${{ inputs.env_path }}'
+          bash .github/scripts/install_training_runtime.sh
+
       - name: Install dependencies for heterogeneous training
         run: |
           set -euo pipefail
@@ -197,9 +263,9 @@ jobs:
               ;;
           esac
 
-          # Display Python environment info
-          echo "Python location: $(which python)"
-          echo "Python version: $(python --version)"
+          # Display the interpreter selected during environment setup.
+          echo "Python location: ${CI_PYTHON_BIN:-python3}"
+          echo "Python version: $(${CI_PYTHON_BIN:-python3} --version)"
 
           # Run functional tests using run_tests.sh
           bash "$PROJECT_ROOT/tests/test_utils/runners/run_tests.sh" \

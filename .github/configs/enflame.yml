@@ -71,8 +71,7 @@ dependencies:
     ref: main
     runtime:
       install_mode: pythonpath
-      environment:
-        MEGATRON_FL_PREFER: flagos
+      environment: {}
 
   te_fl:
     enabled: true

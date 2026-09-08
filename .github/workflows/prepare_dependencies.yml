@@ -5,6 +5,9 @@ on:
     inputs:
       platform: {required: true, type: string}
       image_override: {required: false, type: string, default: ''}
+      train_pkg_mgr: {required: false, type: string, default: ''}
+      train_env_name: {required: false, type: string, default: ''}
+      train_env_path: {required: false, type: string, default: ''}
     outputs:
       megatron_cache_key:
         value: ${{ jobs.prepare.outputs.megatron_cache_key }}
@@ -34,6 +37,10 @@ jobs:
       te_fl_runtime_environment: ${{ steps.config.outputs.te_fl_runtime_environment }}
       te_fl_install_pip_args: ${{ steps.config.outputs.te_fl_install_pip_args }}
       te_fl_runtime_pip_packages: ${{ steps.config.outputs.te_fl_runtime_pip_packages }}
+      pkg_mgr: ${{ steps.config.outputs.pkg_mgr }}
+      env_name: ${{ steps.config.outputs.env_name }}
+      env_path: ${{ steps.config.outputs.env_path }}
+      runtime_contract_key: ${{ steps.config.outputs.runtime_contract_key }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -53,6 +60,9 @@ jobs:
         env:
           PLATFORM: ${{ inputs.platform }}
           IMAGE_OVERRIDE: ${{ inputs.image_override }}
+          PKG_MGR_OVERRIDE: ${{ inputs.train_pkg_mgr }}
+          ENV_NAME_OVERRIDE: ${{ inputs.train_env_name }}
+          ENV_PATH_OVERRIDE: ${{ inputs.train_env_path }}
         run: |
           set -euo pipefail
 
@@ -71,6 +81,12 @@ jobs:
           options=$(yq -r '.container_options // ""' "$config_file")
           setup_script=$(yq -r '.setup_script // ""' "$config_file")
           nproc_per_node=$(yq -r '.test_matrix.unit.nproc_per_node // .test_config.nproc_per_node // ""' "$config_file")
+          pkg_mgr=$(yq -r '.pkg_mgr // "pip"' "$config_file")
+          env_name=$(yq -r '.env_names.train // ""' "$config_file")
+          env_path=$(yq -r '.env_path // ""' "$config_file")
+          [ -z "$PKG_MGR_OVERRIDE" ] || pkg_mgr="$PKG_MGR_OVERRIDE"
+          [ -z "$ENV_NAME_OVERRIDE" ] || env_name="$ENV_NAME_OVERRIDE"
+          [ -z "$ENV_PATH_OVERRIDE" ] || env_path="$ENV_PATH_OVERRIDE"
 
           megatron_enabled=$(yq -r '.dependencies.megatron_lm_fl.enabled // false' "$config_file")
           megatron_repo=$(yq -r '.dependencies.megatron_lm_fl.repository // "flagos-ai/Megatron-LM-FL"' "$config_file")
@@ -93,6 +109,21 @@ jobs:
           fi
           if [ "$runs_on" = '[]' ]; then
             echo "::error::runner_labels is required in $config_file" >&2
+            exit 1
+          fi
+          case "$pkg_mgr" in
+            conda|pip|uv) ;;
+            *)
+              echo "::error::Unsupported training package manager: $pkg_mgr" >&2
+              exit 1
+              ;;
+          esac
+          if [ "$pkg_mgr" = conda ] && { [ -z "$env_name" ] || [ -z "$env_path" ]; }; then
+            echo "::error::Conda training environment requires env_names.train and env_path" >&2
+            exit 1
+          fi
+          if [ "$pkg_mgr" = uv ] && [ -z "$env_path" ]; then
+            echo "::error::uv training environment requires env_path" >&2
             exit 1
           fi
           if [ "$megatron_enabled" = true ] || [ "$te_fl_enabled" = true ]; then
@@ -121,6 +152,14 @@ jobs:
             fi
           fi
 
+          runtime_contract_key=$(printf '%s\n' \
+            'training-runtime-v2' \
+            "$pkg_mgr" "$env_name" "$env_path" \
+            "$megatron_runtime_environment" \
+            "$te_fl_build_mode" "$te_fl_build_environment" \
+            "$te_fl_runtime_environment" "$te_fl_install_pip_args" \
+            "$te_fl_runtime_pip_packages" | sha256sum | awk '{print substr($1,1,16)}')
+
           {
             echo "image=$image"
             echo "runs_on=$runs_on"
@@ -140,12 +179,17 @@ jobs:
             echo "te_fl_runtime_environment=$te_fl_runtime_environment"
             echo "te_fl_install_pip_args=$te_fl_install_pip_args"
             echo "te_fl_runtime_pip_packages=$te_fl_runtime_pip_packages"
+            echo "pkg_mgr=$pkg_mgr"
+            echo "env_name=$env_name"
+            echo "env_path=$env_path"
+            echo "runtime_contract_key=$runtime_contract_key"
           } >> "$GITHUB_OUTPUT"
 
           echo "Platform: $PLATFORM"
           echo "Image: $image"
           echo "Megatron-LM-FL enabled: $megatron_enabled"
           echo "TE-FL enabled: $te_fl_enabled"
+          echo "Training environment: $pkg_mgr ${env_name:-<system>} ${env_path:-<default>}"
 
   prepare:
     name: deps-${{ inputs.platform }}
@@ -256,6 +300,7 @@ jobs:
         env:
           PLATFORM: ${{ inputs.platform }}
           IMAGE: ${{ needs.resolve.outputs.image }}
+          RUNTIME_CONTRACT_KEY: ${{ needs.resolve.outputs.runtime_contract_key }}
         run: |
           set -euo pipefail
           commit=$(git -C "$GITHUB_WORKSPACE/megatron-lm-fl" rev-parse HEAD)
@@ -265,7 +310,7 @@ jobs:
           fi
           echo "Megatron-LM-FL commit: $commit"
           image_key=$(printf '%s' "$IMAGE" | sha256sum | awk '{print substr($1,1,16)}')
-          key="megatron-lm-fl-${PLATFORM}-${commit}-${image_key}"
+          key="megatron-lm-fl-v3-${PLATFORM}-${commit}-${image_key}-${RUNTIME_CONTRACT_KEY}"
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "Megatron-LM-FL cache key: $key"
 
@@ -275,6 +320,7 @@ jobs:
         env:
           PLATFORM: ${{ inputs.platform }}
           IMAGE: ${{ needs.resolve.outputs.image }}
+          RUNTIME_CONTRACT_KEY: ${{ needs.resolve.outputs.runtime_contract_key }}
         run: |
           set -euo pipefail
           commit=$(git -C "$GITHUB_WORKSPACE/te-fl" rev-parse HEAD)
@@ -284,7 +330,7 @@ jobs:
           fi
           echo "TE-FL commit: $commit"
           image_key=$(printf '%s' "$IMAGE" | sha256sum | awk '{print substr($1,1,16)}')
-          key="te-fl-${PLATFORM}-${commit}-${image_key}"
+          key="te-fl-v2-${PLATFORM}-${commit}-${image_key}-${RUNTIME_CONTRACT_KEY}"
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "TE-FL wheel cache key: $key"
 
@@ -315,6 +361,9 @@ jobs:
           FLAGSCALE_CI_IMAGE: ${{ needs.resolve.outputs.image }}
           TE_FL_BUILD_ENV_JSON: ${{ needs.resolve.outputs.te_fl_build_environment }}
           SETUP_SCRIPT: ${{ needs.resolve.outputs.setup_script }}
+          CI_RUNTIME_PKG_MGR: ${{ needs.resolve.outputs.pkg_mgr }}
+          CI_RUNTIME_ENV_NAME: ${{ needs.resolve.outputs.env_name }}
+          CI_RUNTIME_ENV_PATH: ${{ needs.resolve.outputs.env_path }}
         run: |
           set -euo pipefail
           if [[ "$SETUP_SCRIPT" = /* || "$SETUP_SCRIPT" == *".."* || ! -f "$GITHUB_WORKSPACE/$SETUP_SCRIPT" ]]; then
@@ -355,6 +404,14 @@ jobs:
             echo "Applying Python version workaround for $python_version"
             sed -i.bak 's/requires-python = ">=3.12"/requires-python = ">=3.10"/' pyproject.toml
           fi
+
+          # Megatron-LM-FL imports pybind11 from setup metadata. Build
+          # isolation is disabled so install the build dependency explicitly
+          # in the selected CI environment before generating metadata.
+          "$python_bin" -m pip install \
+            --no-cache-dir \
+            --root-user-action=ignore \
+            "pybind11==3.0.1"
 
           echo "Building Megatron-LM-FL from $MEGATRON_REPO"
           "$python_bin" -m pip install --no-deps --no-build-isolation --target "$OUTPUT_DIR" .

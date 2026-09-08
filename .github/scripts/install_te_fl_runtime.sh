@@ -4,6 +4,9 @@ set -euo pipefail
 
 : "${TE_FL_WHEEL_DIR:?TE_FL_WHEEL_DIR is required}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_COMPAT_DIR="$SCRIPT_DIR/python_compat"
+source "$SCRIPT_DIR/set_env_common.sh"
 python_bin="${CI_PYTHON_BIN:-$(command -v python3)}"
 if [ ! -x "$python_bin" ]; then
   echo "::error::TE-FL Python executable not found: $python_bin" >&2
@@ -25,7 +28,7 @@ if [ "${#wheels[@]}" -ne 1 ]; then
 fi
 
 install_pip_args=()
-install_pip_args_json="${TE_FL_INSTALL_PIP_ARGS_JSON:-[]}"
+install_pip_args_json="${CI_RUNTIME_PIP_INSTALL_ARGS_JSON:-[]}"
 parsed_install_pip_args=''
 if ! parsed_install_pip_args=$("$python_bin" - "$install_pip_args_json" <<'PY'
 import json
@@ -59,16 +62,15 @@ while IFS=$'\t' read -r record_type arg; do
   esac
 done <<< "$parsed_install_pip_args"
 
+export CI_PYTHON_COMPAT_DIR="$PYTHON_COMPAT_DIR"
+ci_configure_training_pythonpath
+ci_export_env PYTHONNOUSERSITE 1
+
 # Uninstall all existing TransformerEngine variants
 "$python_bin" -m pip uninstall -y \
   transformer-engine transformer-engine-torch \
   transformer-engine-cu11 transformer-engine-cu12 transformer-engine-cu13 \
   >/dev/null 2>&1 || true
-
-# CRITICAL: Uninstall any existing megatron-core to prevent version conflicts
-# This ensures TE-FL installation won't trigger a downgrade via dependency resolution
-echo "Removing any existing megatron-core to prevent version conflicts..."
-"$python_bin" -m pip uninstall -y megatron-core >/dev/null 2>&1 || true
 
 # Install TE-FL wheel with --no-deps to prevent pip from resolving and downgrading dependencies
 "$python_bin" -m pip install \
@@ -79,9 +81,24 @@ echo "Removing any existing megatron-core to prevent version conflicts..."
   "${wheels[0]}"
 
 "$python_bin" - <<'PY'
+import os
 import sys
+import sysconfig
 import transformer_engine
 
 print(f"TE-FL Python: {sys.executable}")
 print(f"TE-FL wheel import passed: {transformer_engine.__file__}")
+
+actual_path = os.path.realpath(transformer_engine.__file__ or "")
+install_roots = {
+    os.path.realpath(path)
+    for path in (sysconfig.get_path("purelib"), sysconfig.get_path("platlib"))
+    if path
+}
+if not actual_path or not any(
+    os.path.commonpath([root, actual_path]) == root for root in install_roots
+):
+    raise ImportError(
+        f"transformer_engine resolved outside the active Python environment: {actual_path}"
+    )
 PY

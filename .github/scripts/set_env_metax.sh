@@ -9,19 +9,6 @@ echo "Setting up MetaX C550 environment"
 
 ci_activate_python_environment
 
-# Remove pre-installed packages from image to avoid import conflicts
-echo "Removing pre-installed megatron-core and transformer-engine from image..."
-pip uninstall -y megatron-core || echo "No pre-installed megatron-core found"
-pip uninstall -y transformer-engine || echo "No pre-installed transformer-engine found"
-
-# Clean up pre-installed directories from PYTHONPATH
-if [ -n "${PYTHONPATH:-}" ]; then
-  echo "Original PYTHONPATH: $PYTHONPATH"
-  PYTHONPATH=$(echo "$PYTHONPATH" | tr ':' '\n' | grep -v '/opt/flagscale/deps' | grep -v '/workspace/Megatron-LM-FL' | tr '\n' ':' | sed 's/:$//')
-  export PYTHONPATH
-  echo "Cleaned PYTHONPATH: $PYTHONPATH"
-fi
-
 if ! command -v maca-check >/dev/null 2>&1; then
   echo "::warning::maca-check not found, skipping MACA validation"
 else
@@ -29,7 +16,7 @@ else
 fi
 
 if [ -n "${CI_NPROC_PER_NODE:-}" ]; then
-  python3 - <<'PY'
+  "$CI_PYTHON_BIN" - <<'PY'
 import os
 import sys
 
