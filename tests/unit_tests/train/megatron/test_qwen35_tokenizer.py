@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from megatron.training.tokenizer import tokenizer
+from flagscale.train.megatron.training.tokenizer import tokenizer
 
 
 @pytest.mark.parametrize("model_vocab,expected", [(248320, 248320), (None, 248064)])

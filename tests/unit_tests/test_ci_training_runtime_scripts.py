@@ -175,6 +175,7 @@ def test_flash_attention_fallback_imports_and_fails_only_when_used():
         [
             sys.executable,
             "-c",
+            "import sitecustomize; "
             "from flash_attn_2_cuda import varlen_bwd; "
             "assert callable(varlen_bwd); "
             "\ntry:\n varlen_bwd()\nexcept RuntimeError as exc:\n print(exc)\nelse:\n raise AssertionError('fallback unexpectedly succeeded')",
@@ -187,6 +188,31 @@ def test_flash_attention_fallback_imports_and_fails_only_when_used():
     )
 
     assert "FlashAttention is disabled for this CI runtime" in result.stdout
+
+
+def test_enflame_coverage_bootstrap_loads_sitecustomize():
+    bootstrap = (
+        'import os, runpy, sys, sysconfig\n'
+        'sys.path[:0] = [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path] + '
+        '[sysconfig.get_path("purelib"), sysconfig.get_path("platlib")]\n'
+        'try:\n'
+        '    import sitecustomize\n'
+        'except ImportError:\n'
+        '    pass\n'
+        'print("sitecustomize" in sys.modules)'
+    )
+    env = os.environ.copy()
+    env.update(PYTHONPATH=str(COMPAT_DIR), TE_FL_SKIP_CUDA="1")
+    result = subprocess.run(
+        [sys.executable, "-S", "-E", "-c", bootstrap],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+
+    assert "True" in result.stdout
 
 
 def test_candidate_image_tests_require_prepared_dependencies():

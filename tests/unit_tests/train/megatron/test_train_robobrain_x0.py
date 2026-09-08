@@ -61,11 +61,7 @@ _mock_modules = [
     "megatron.training.checkpointing",
     "megatron.training.dist_signal_handler",
     "megatron.training.global_vars",
-    "megatron.training.spiky_loss",
-    "megatron.training.tokenizer",
-    "megatron.training.tokenizer.tokenizer",
     "megatron.training.training",
-    "megatron.training.utils",
     "megatron.training.yaml_arguments",
     # external dependencies
     "webdataset",
