@@ -216,12 +216,12 @@ jobs:
           set -euo pipefail
           cd $PROJECT_ROOT
 
-          export TE_FL_INSTALL_DIR="${GITHUB_WORKSPACE}/te-fl-wheel"
+          export TE_FL_WHEEL_DIR="${GITHUB_WORKSPACE}/te-fl-wheel"
           export CI_RUNTIME_ENVIRONMENT_JSON='${{ inputs.te_fl_runtime_environment }}'
           export CI_RUNTIME_PIP_INSTALL_ARGS_JSON='${{ inputs.te_fl_install_pip_args }}'
           export CI_RUNTIME_PIP_PACKAGES_JSON='${{ inputs.te_fl_runtime_pip_packages }}'
 
-          if [ ! -d "$TE_FL_INSTALL_DIR" ]; then
+          if [ ! -d "$TE_FL_WHEEL_DIR" ]; then
             echo "::warning::TE-FL cache not restored, skipping runtime installation"
             exit 0
           fi
