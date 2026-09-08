@@ -12,6 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Apply compatibility patches BEFORE any test imports
+# This must happen before pytest imports any test modules
+import sys
+import os
+
+# Ensure flagscale package is in path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from flagscale.train.compatibility_patches import apply_all_patches
+
+apply_all_patches()
+
 import pytest
 
 
