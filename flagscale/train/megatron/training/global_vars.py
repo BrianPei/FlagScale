@@ -19,7 +19,7 @@ from megatron.training.dist_signal_handler import DistributedSignalHandler
 
 ########## FlagScale Begin ##########
 from flagscale.train.megatron.training.tokenizer import build_tokenizer
-from megatron.training.spiky_loss import SpikyLossDetector
+from flagscale.train.megatron.training.spiky_loss import SpikyLossDetector
 from megatron.plugin.utils import get_device_type_for_comm
 ########## FlagScale End ##########
 
