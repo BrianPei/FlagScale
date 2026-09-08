@@ -18,6 +18,12 @@ if rank != 0:
     warnings.filterwarnings("ignore", category=UserWarning)
     warnings.filterwarnings("ignore", category=FutureWarning)
 
+# Apply compatibility patches BEFORE any heavy imports that might trigger missing dependencies
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from flagscale.train.compatibility_patches import apply_all_patches
+apply_all_patches()
+
 from functools import partial
 from typing import Any, List, Optional, Tuple
 

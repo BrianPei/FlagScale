@@ -59,11 +59,18 @@ while IFS=$'\t' read -r record_type arg; do
   esac
 done <<< "$parsed_install_pip_args"
 
+# Uninstall all existing TransformerEngine variants
 "$python_bin" -m pip uninstall -y \
   transformer-engine transformer-engine-torch \
   transformer-engine-cu11 transformer-engine-cu12 transformer-engine-cu13 \
   >/dev/null 2>&1 || true
 
+# CRITICAL: Uninstall any existing megatron-core to prevent version conflicts
+# This ensures TE-FL installation won't trigger a downgrade via dependency resolution
+echo "Removing any existing megatron-core to prevent version conflicts..."
+"$python_bin" -m pip uninstall -y megatron-core >/dev/null 2>&1 || true
+
+# Install TE-FL wheel with --no-deps to prevent pip from resolving and downgrading dependencies
 "$python_bin" -m pip install \
   --force-reinstall \
   --no-deps \
