@@ -145,9 +145,10 @@ EOF
         # torch_gcu is imported by a site .pth file before coverage starts.
         # Start the worker without site initialization, then add the regular
         # package and project paths explicitly so coverage initializes first.
-        COVERAGE_BOOTSTRAP='import os, runpy, sys, sysconfig; sys.path[:0] = [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path] + [sysconfig.get_path("purelib"), sysconfig.get_path("platlib")]; '
-        COVERAGE_BOOTSTRAP+='try:'$'\n'"    import sitecustomize"$'\n'"except ImportError:"$'\n'"    pass"$'\n'
-        COVERAGE_BOOTSTRAP+='sys.argv = sys.argv[1:]; runpy.run_module("coverage", run_name="__main__")'
+        COVERAGE_BOOTSTRAP=$'import os, runpy, sys, sysconfig\n'
+        COVERAGE_BOOTSTRAP+=$'sys.path[:0] = [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path] + [sysconfig.get_path("purelib"), sysconfig.get_path("platlib")]\n'
+        COVERAGE_BOOTSTRAP+=$'try:\n    import sitecustomize\nexcept ImportError:\n    pass\n'
+        COVERAGE_BOOTSTRAP+=$'sys.argv = sys.argv[1:]\nrunpy.run_module("coverage", run_name="__main__")'
         RUNNER_CMD=(--no-python "$CI_PYTHON_BIN" -S -E -c "$COVERAGE_BOOTSTRAP" coverage run "--rcfile=$COVERAGERC" -m pytest)
     elif [ "$USE_COVERAGE" = true ]; then
         RUNNER_CMD=(-m coverage run "--rcfile=$COVERAGERC" -m pytest)

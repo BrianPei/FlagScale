@@ -91,7 +91,7 @@ from megatron.energon import (
     get_val_datasets,
 )
 from megatron.training.global_vars import get_tokenizer
-from megatron.training.tokenizer import build_tokenizer
+from flagscale.train.megatron.training.tokenizer import build_tokenizer
 
 # from tools.datasets.qwenvl.data.dataset_helpers_action import TaskEncoder, print_error_handler
 # from tools.datasets.qwenvl.data.dataset_helpers_action_unified_plus_sub import TaskEncoder, print_error_handler

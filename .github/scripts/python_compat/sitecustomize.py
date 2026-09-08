@@ -25,6 +25,7 @@ def _patch_te_fl_backends_flash_attn_import():
     for module_name in (
         "flash_attn",
         "flash_attn.flash_attn_interface",
+        "flash_attn_interface",
         "flash_attn_2_cuda",
         "flash_attn_3_cuda",
     ):
