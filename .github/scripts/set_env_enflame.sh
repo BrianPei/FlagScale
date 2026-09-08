@@ -34,4 +34,49 @@ except Exception as e:
 PY
 fi
 
+# Patch TE-FL flash_attn detection for torch_gcu compatibility
+python3 - <<'PY'
+import sys
+import os
+
+try:
+    import transformer_engine.pytorch.attention.dot_product_attention.backends as te_backends
+    backends_file = te_backends.__file__
+
+    with open(backends_file, 'r') as f:
+        content = f.read()
+
+    # Only patch if not already patched
+    if 'torch_gcu' not in content and 'flash_attn_2_cuda' in content:
+        # Find the flash_attn import section and add torch_gcu guard
+        original = '''else:
+        if torch.cuda.is_available() and get_device_compute_capability() >= (10, 0):'''
+
+        patched = '''else:
+        # Skip flash_attn in torch_gcu environment (Enflame GCU compatibility)
+        try:
+            import torch_gcu
+            skip_flash_attn = True
+        except ImportError:
+            skip_flash_attn = False
+
+        if skip_flash_attn:
+            pass
+        elif torch.cuda.is_available() and get_device_compute_capability() >= (10, 0):'''
+
+        if original in content:
+            content = content.replace(original, patched)
+            with open(backends_file, 'w') as f:
+                f.write(content)
+            print(f"Patched TE-FL backends.py for torch_gcu: {backends_file}")
+        else:
+            print(f"::warning::TE-FL backends.py structure changed, patch skipped")
+    else:
+        print("TE-FL backends.py already patched or no patch needed")
+except ImportError:
+    print("::warning::TE-FL not installed yet, patch will be applied at runtime if needed")
+except Exception as e:
+    print(f"::warning::Failed to patch TE-FL backends.py: {e}")
+PY
+
 echo "Enflame GCU environment setup complete"
