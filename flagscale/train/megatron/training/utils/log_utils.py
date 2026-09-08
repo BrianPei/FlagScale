@@ -7,12 +7,31 @@ from functools import partial
 from logging import Filter, LogRecord
 from typing import Callable
 
-from megatron.core._rank_utils import safe_get_rank, safe_get_world_size
+from megatron.core._rank_utils import safe_get_rank
 from megatron.training.utils import print_rank_0
 import torch
 
 
 logger = logging.getLogger(__name__)
+
+
+def safe_get_world_size() -> int:
+    """Get the distributed world size safely, even if torch.distributed is not initialized.
+
+    Returns the world size from torch.distributed if initialized, otherwise falls back
+    to the WORLD_SIZE environment variable, defaulting to 1.
+
+    Returns:
+        int: The world size of the current process group.
+    """
+    if torch.distributed.is_initialized():
+        return torch.distributed.get_world_size()
+
+    # If torch.distributed is not initialized, try to read environment variables.
+    try:
+        return int(os.environ.get("WORLD_SIZE", 1))
+    except (ValueError, TypeError):
+        return 1
 
 
 def warning_filter(record: LogRecord) -> bool:

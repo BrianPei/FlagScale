@@ -55,117 +55,131 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare-dependencies-cuda:
-    name: prepare-deps-cuda
+  # CUDA Platform
+  cuda_prepare:
+    name: CUDA / prepare-deps
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'cuda'
     uses: ./.github/workflows/prepare_dependencies.yml
     with:
       platform: cuda
-
-  prepare-dependencies-ascend:
-    name: prepare-deps-ascend
-    uses: ./.github/workflows/prepare_dependencies.yml
-    with:
-      platform: ascend
-
-  prepare-dependencies-enflame:
-    name: prepare-deps-enflame
-    uses: ./.github/workflows/prepare_dependencies.yml
-    with:
-      platform: enflame
-
-  prepare-dependencies-hygon:
-    name: prepare-deps-hygon
-    uses: ./.github/workflows/prepare_dependencies.yml
-    with:
-      platform: hygon
-
-  prepare-dependencies-metax:
-    name: prepare-deps-metax
-    uses: ./.github/workflows/prepare_dependencies.yml
-    with:
-      platform: metax
-
-  prepare-dependencies-musa:
-    name: prepare-deps-musa
-    uses: ./.github/workflows/prepare_dependencies.yml
-    with:
-      platform: musa
-
-  prepare-dependencies-kunlunxin:
-    name: prepare-deps-kunlunxin
-    uses: ./.github/workflows/prepare_dependencies.yml
-    with:
-      platform: kunlunxin
 
   cuda_tests:
-    name: CUDA tests
+    name: CUDA / tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'cuda'
-    needs: prepare-dependencies-cuda
+    needs: cuda_prepare
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: cuda
-      megatron_cache_key: ${{ needs.prepare-dependencies-cuda.outputs.megatron_cache_key }}
-      te_fl_cache_key: ${{ needs.prepare-dependencies-cuda.outputs.te_fl_cache_key }}
+      megatron_cache_key: ${{ needs.cuda_prepare.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.cuda_prepare.outputs.te_fl_cache_key }}
+
+  # Ascend Platform
+  ascend_prepare:
+    name: Ascend / prepare-deps
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ascend'
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: ascend
 
   ascend_tests:
-    name: Ascend tests
+    name: Ascend / tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ascend'
-    needs: prepare-dependencies-ascend
+    needs: ascend_prepare
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: ascend
-      megatron_cache_key: ${{ needs.prepare-dependencies-ascend.outputs.megatron_cache_key }}
-      te_fl_cache_key: ${{ needs.prepare-dependencies-ascend.outputs.te_fl_cache_key }}
+      megatron_cache_key: ${{ needs.ascend_prepare.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.ascend_prepare.outputs.te_fl_cache_key }}
+
+  # Enflame Platform
+  enflame_prepare:
+    name: Enflame / prepare-deps
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'enflame'
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: enflame
 
   enflame_tests:
-    name: Enflame tests
+    name: Enflame / tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'enflame'
-    needs: prepare-dependencies-enflame
+    needs: enflame_prepare
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: enflame
-      megatron_cache_key: ${{ needs.prepare-dependencies-enflame.outputs.megatron_cache_key }}
-      te_fl_cache_key: ${{ needs.prepare-dependencies-enflame.outputs.te_fl_cache_key }}
+      megatron_cache_key: ${{ needs.enflame_prepare.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.enflame_prepare.outputs.te_fl_cache_key }}
+
+  # Hygon Platform
+  hygon_prepare:
+    name: Hygon / prepare-deps
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'hygon'
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: hygon
 
   hygon_tests:
-    name: Hygon tests
+    name: Hygon / tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'hygon'
-    needs: prepare-dependencies-hygon
+    needs: hygon_prepare
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: hygon
-      megatron_cache_key: ${{ needs.prepare-dependencies-hygon.outputs.megatron_cache_key }}
-      te_fl_cache_key: ${{ needs.prepare-dependencies-hygon.outputs.te_fl_cache_key }}
+      megatron_cache_key: ${{ needs.hygon_prepare.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.hygon_prepare.outputs.te_fl_cache_key }}
+
+  # MetaX Platform
+  metax_prepare:
+    name: MetaX / prepare-deps
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'metax'
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: metax
 
   metax_tests:
-    name: MetaX tests
+    name: MetaX / tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'metax'
-    needs: prepare-dependencies-metax
+    needs: metax_prepare
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: metax
-      megatron_cache_key: ${{ needs.prepare-dependencies-metax.outputs.megatron_cache_key }}
-      te_fl_cache_key: ${{ needs.prepare-dependencies-metax.outputs.te_fl_cache_key }}
+      megatron_cache_key: ${{ needs.metax_prepare.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.metax_prepare.outputs.te_fl_cache_key }}
+
+  # MUSA Platform
+  musa_prepare:
+    name: MUSA / prepare-deps
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'musa'
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: musa
 
   musa_tests:
-    name: MThreads MUSA tests
+    name: MUSA / tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'musa'
-    needs: prepare-dependencies-musa
+    needs: musa_prepare
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: musa
-      megatron_cache_key: ${{ needs.prepare-dependencies-musa.outputs.megatron_cache_key }}
-      te_fl_cache_key: ${{ needs.prepare-dependencies-musa.outputs.te_fl_cache_key }}
+      megatron_cache_key: ${{ needs.musa_prepare.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.musa_prepare.outputs.te_fl_cache_key }}
+
+  # Kunlunxin Platform
+  kunlunxin_prepare:
+    name: Kunlunxin / prepare-deps
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'kunlunxin'
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: kunlunxin
 
   kunlunxin_tests:
-    name: Kunlunxin P800 tests
+    name: Kunlunxin / tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'kunlunxin'
-    needs: prepare-dependencies-kunlunxin
+    needs: kunlunxin_prepare
     uses: ./.github/workflows/all_tests_common.yml
     with:
       platform: kunlunxin
-      megatron_cache_key: ${{ needs.prepare-dependencies-kunlunxin.outputs.megatron_cache_key }}
-      te_fl_cache_key: ${{ needs.prepare-dependencies-kunlunxin.outputs.te_fl_cache_key }}
+      megatron_cache_key: ${{ needs.kunlunxin_prepare.outputs.megatron_cache_key }}
+      te_fl_cache_key: ${{ needs.kunlunxin_prepare.outputs.te_fl_cache_key }}
 
   all_tests:
     name: all_tests

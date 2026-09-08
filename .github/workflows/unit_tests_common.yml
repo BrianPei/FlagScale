@@ -52,6 +52,46 @@ on:
         type: string
         description: Environment path (venv path for uv, conda installation path for conda)
         default: "/opt/venv"
+      megatron_cache_key:
+        required: false
+        type: string
+        default: ''
+        description: Megatron-LM-FL cache key from prepare_dependencies
+      te_fl_cache_key:
+        required: false
+        type: string
+        default: ''
+        description: TE-FL cache key from prepare_dependencies
+      megatron_lm_fl_enabled:
+        required: false
+        type: string
+        default: 'false'
+        description: Whether Megatron-LM-FL dependency is enabled
+      te_fl_enabled:
+        required: false
+        type: string
+        default: 'false'
+        description: Whether TE-FL dependency is enabled
+      megatron_runtime_environment:
+        required: false
+        type: string
+        default: '{}'
+        description: Megatron-LM-FL runtime environment variables (JSON)
+      te_fl_runtime_environment:
+        required: false
+        type: string
+        default: '{}'
+        description: TE-FL runtime environment variables (JSON)
+      te_fl_install_pip_args:
+        required: false
+        type: string
+        default: '[]'
+        description: TE-FL pip install arguments (JSON array)
+      te_fl_runtime_pip_packages:
+        required: false
+        type: string
+        default: '[]'
+        description: TE-FL runtime pip packages (JSON array)
 
 jobs:
   unit_test:
@@ -134,6 +174,53 @@ jobs:
 
       - name: Check environment info
         run: cd $PROJECT_ROOT && bash ./tests/test_utils/runners/check_env.sh
+
+      - name: Restore Megatron-LM-FL cache
+        if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: /opt/flagscale/deps/Megatron-LM-FL
+          key: ${{ inputs.megatron_cache_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore TE-FL cache
+        if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: /opt/flagscale/deps/TransformerEngine-FL
+          key: ${{ inputs.te_fl_cache_key }}
+          fail-on-cache-miss: true
+
+      - name: Install Megatron-LM-FL runtime
+        if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != ''
+        run: |
+          set -euo pipefail
+          cd $PROJECT_ROOT
+
+          export MEGATRON_INSTALL_DIR="/opt/flagscale/deps/Megatron-LM-FL"
+          export CI_RUNTIME_ENVIRONMENT_JSON='${{ inputs.megatron_runtime_environment }}'
+
+          source .github/scripts/set_env_common.sh
+          ci_apply_env_json "$CI_RUNTIME_ENVIRONMENT_JSON"
+
+          bash .github/scripts/install_megatron_runtime.sh
+
+      - name: Install TE-FL runtime
+        if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != ''
+        run: |
+          set -euo pipefail
+          cd $PROJECT_ROOT
+
+          export TE_FL_INSTALL_DIR="/opt/flagscale/deps/TransformerEngine-FL"
+          export CI_RUNTIME_ENVIRONMENT_JSON='${{ inputs.te_fl_runtime_environment }}'
+          export CI_RUNTIME_PIP_INSTALL_ARGS_JSON='${{ inputs.te_fl_install_pip_args }}'
+          export CI_RUNTIME_PIP_PACKAGES_JSON='${{ inputs.te_fl_runtime_pip_packages }}'
+
+          source .github/scripts/set_env_common.sh
+          ci_apply_env_json "$CI_RUNTIME_ENVIRONMENT_JSON"
+          ci_install_runtime_packages
+
+          bash .github/scripts/install_te_fl_runtime.sh
 
       - name: Setup unit test environment
         run: |
