@@ -9,6 +9,11 @@ echo "Setting up Hygon DCU environment"
 
 ci_activate_python_environment
 
+# Remove pre-installed packages from image to avoid import conflicts
+echo "Removing pre-installed megatron-core and transformer-engine from image..."
+pip uninstall -y megatron-core || echo "No pre-installed megatron-core found"
+pip uninstall -y transformer-engine || echo "No pre-installed transformer-engine found"
+
 if ! command -v rocm-smi >/dev/null 2>&1; then
   echo "::warning::rocm-smi not found, skipping Hygon validation"
 else
