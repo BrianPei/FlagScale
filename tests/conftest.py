@@ -14,8 +14,8 @@
 
 # Apply compatibility patches BEFORE any test imports
 # This must happen before pytest imports any test modules
-import sys
 import os
+import sys
 
 # Ensure flagscale package is in path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
