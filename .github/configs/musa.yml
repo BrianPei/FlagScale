@@ -139,3 +139,4 @@ dependencies:
       install_pip_args: []
       pip_packages:
         - onnxscript
+        - megatron-energon[av_decode]~=7.0
