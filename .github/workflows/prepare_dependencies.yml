@@ -343,16 +343,37 @@ jobs:
             echo "::error::Python executable not found: $python_bin" >&2
             exit 1
           fi
-          echo "Building Megatron-LM-FL from $MEGATRON_REPO"
+
+          # Check Python version and workaround if needed
+          python_version=$("$python_bin" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          echo "Python version: $python_version"
+
           cd "$MEGATRON_REPO"
+
+          # Workaround for Python < 3.12: temporarily patch pyproject.toml
+          if [[ "$python_version" < "3.12" ]]; then
+            echo "Applying Python version workaround for $python_version"
+            sed -i.bak 's/requires-python = ">=3.12"/requires-python = ">=3.10"/' pyproject.toml
+          fi
+
+          echo "Building Megatron-LM-FL from $MEGATRON_REPO"
           "$python_bin" -m pip install --no-deps --no-build-isolation --target "$OUTPUT_DIR" .
+
+          # Restore original pyproject.toml if modified
+          if [ -f pyproject.toml.bak ]; then
+            mv pyproject.toml.bak pyproject.toml
+          fi
+
           echo "Megatron-LM-FL installed to: $OUTPUT_DIR"
-          if [ ! -f "$OUTPUT_DIR/megatron/__init__.py" ] && [ ! -f "$OUTPUT_DIR/megatron_core/__init__.py" ]; then
-            echo "::error::Megatron-LM-FL installation incomplete" >&2
-            ls -la "$OUTPUT_DIR/" >&2 || true
+          ls -la "$OUTPUT_DIR/" || true
+
+          # Verify installation
+          if [ -f "$OUTPUT_DIR/megatron/__init__.py" ] || [ -f "$OUTPUT_DIR/megatron_core/__init__.py" ]; then
+            echo "Megatron-LM-FL installation verified"
+          else
+            echo "::error::Megatron-LM-FL installation incomplete: megatron/__init__.py not found" >&2
             exit 1
           fi
-          echo "Megatron-LM-FL installation verified"
 
       - name: Build TE-FL wheel on cache miss
         if: needs.resolve.outputs.te_fl_enabled == 'true' && steps.te_fl_cache.outputs.cache-hit != 'true'
