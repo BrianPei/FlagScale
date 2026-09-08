@@ -43,6 +43,7 @@ def _patch_te_fl_backends_flash_attn_import():
                         f"{mod_name}.{name} is unavailable because FlashAttention "
                         "is disabled for this CI runtime (NVTE_FLASH_ATTN=0)"
                     )
+
                 return _unavailable_attr
 
             stub.__getattr__ = _make_unavailable_attr(module_name)
