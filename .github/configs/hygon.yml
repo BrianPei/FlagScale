@@ -113,6 +113,11 @@ env_names:
 # Setup script for environment preparation
 setup_script: .github/scripts/set_env_hygon.sh
 
+# Test matrix configuration for unit tests
+test_matrix:
+  unit:
+    nproc_per_node: 8
+
 # =============================================================================
 # Dependencies Configuration (Megatron-LM-FL & TE-FL)
 # =============================================================================
