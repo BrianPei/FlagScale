@@ -188,18 +188,19 @@ jobs:
           key: ${{ inputs.te_fl_cache_key }}
           fail-on-cache-miss: false
 
-      - name: Warn on cache miss
+      - name: Fail on dependency cache miss
         if: |
           (inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != '' && steps.megatron_cache_restore.outputs.cache-hit != 'true') ||
           (inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != '' && steps.te_fl_cache_restore.outputs.cache-hit != 'true')
         run: |
-          echo "::warning::Dependency cache miss detected. Tests will run with image-provided dependencies."
+          echo "::error::Prepared dependency cache miss detected; tests require the prepared training runtime." >&2
           if [ "${{ steps.megatron_cache_restore.outputs.cache-hit }}" != "true" ] && [ "${{ inputs.megatron_lm_fl_enabled }}" = "true" ]; then
-            echo "::warning::Megatron-LM-FL cache miss: ${{ inputs.megatron_cache_key }}"
+            echo "::error::Megatron-LM-FL cache miss: ${{ inputs.megatron_cache_key }}" >&2
           fi
           if [ "${{ steps.te_fl_cache_restore.outputs.cache-hit }}" != "true" ] && [ "${{ inputs.te_fl_enabled }}" = "true" ]; then
-            echo "::warning::TE-FL cache miss: ${{ inputs.te_fl_cache_key }}"
+            echo "::error::TE-FL cache miss: ${{ inputs.te_fl_cache_key }}" >&2
           fi
+          exit 1
 
       - name: Install prepared training runtime
         if: inputs.megatron_lm_fl_enabled == 'true' || inputs.te_fl_enabled == 'true'

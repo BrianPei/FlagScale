@@ -266,6 +266,25 @@ def test_training_workflows_use_shared_runtime_before_test_setup():
         assert install_runtime < setup_tests
 
 
+def test_training_workflows_fail_when_prepared_dependency_cache_is_missing():
+    for relative_path in (
+        ".github/workflows/unit_tests_common.yml",
+        ".github/workflows/functional_tests_train.yml",
+        ".github/workflows/functional_tests_hetero_train.yml",
+        ".github/workflows/functional_tests_benchmark.yml",
+    ):
+        workflow = (ROOT / relative_path).read_text()
+
+        assert "name: Fail on dependency cache miss" in workflow
+        assert "Tests will run with image-provided dependencies" not in workflow
+        cache_step = workflow.index("name: Fail on dependency cache miss")
+        cache_step_end = workflow.find("\n      - name:", cache_step + 1)
+        if cache_step_end == -1:
+            cache_step_end = len(workflow)
+        cache_block = workflow[cache_step:cache_step_end]
+        assert "exit 1" in cache_block
+
+
 def test_training_workflows_use_the_selected_python_interpreter():
     for relative_path in (
         ".github/workflows/unit_tests_common.yml",
