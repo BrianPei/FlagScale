@@ -365,13 +365,23 @@ jobs:
           fi
 
           echo "Megatron-LM-FL installed to: $OUTPUT_DIR"
+          echo "Directory listing:"
           ls -la "$OUTPUT_DIR/" || true
 
+          # Check for megatron subdirectory content
+          if [ -d "$OUTPUT_DIR/megatron" ]; then
+            echo "megatron/ directory contents:"
+            ls -la "$OUTPUT_DIR/megatron/" | head -10 || true
+          fi
+
           # Verify installation
-          if [ -f "$OUTPUT_DIR/megatron/__init__.py" ] || [ -f "$OUTPUT_DIR/megatron_core/__init__.py" ]; then
-            echo "Megatron-LM-FL installation verified"
+          if [ -f "$OUTPUT_DIR/megatron/__init__.py" ]; then
+            echo "✓ Megatron-LM-FL installation verified: megatron/__init__.py found"
+          elif [ -f "$OUTPUT_DIR/megatron_core/__init__.py" ]; then
+            echo "✓ Megatron-LM-FL installation verified: megatron_core/__init__.py found"
           else
-            echo "::error::Megatron-LM-FL installation incomplete: megatron/__init__.py not found" >&2
+            echo "::error::Megatron-LM-FL installation incomplete: neither megatron/__init__.py nor megatron_core/__init__.py found" >&2
+            find "$OUTPUT_DIR" -name "__init__.py" -type f | head -20 || true
             exit 1
           fi
 
