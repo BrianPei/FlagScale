@@ -44,16 +44,16 @@ from megatron.core.models.gpt.heterogeneous.heterogeneous_layer_specs import (
 )
 from megatron.core.rerun_state_machine import get_rerun_state_machine
 from megatron.core.transformer.spec_utils import import_module
-from megatron.core.utils import StragglerDetector
+from megatron.core.utils import (
+    StragglerDetector,
+    get_batch_on_this_cp_rank,
+    get_batch_on_this_tp_rank,
+)
 from megatron.training import get_args, get_timers, get_tokenizer, print_rank_0
 from megatron.training.argument_utils import pretrain_cfg_container_from_args
 from megatron.training.arguments import core_transformer_config_from_args, parse_and_validate_args
 from megatron.training.checkpointing import get_checkpoint_name  # for dataloder
-from megatron.training.utils import (
-    get_batch_on_this_cp_rank,
-    get_batch_on_this_tp_rank,
-    get_blend_and_blend_per_split,
-)
+from megatron.training.utils import get_blend_and_blend_per_split
 from megatron.training.yaml_arguments import core_transformer_config_from_yaml
 
 # # For pytorch 2.6
@@ -91,7 +91,7 @@ from megatron.energon import (
     get_val_datasets,
 )
 from megatron.training.global_vars import get_tokenizer
-from flagscale.train.megatron.training.tokenizer import build_tokenizer
+from megatron.training.tokenizer import build_tokenizer
 
 # from tools.datasets.qwenvl.data.dataset_helpers_action import TaskEncoder, print_error_handler
 # from tools.datasets.qwenvl.data.dataset_helpers_action_unified_plus_sub import TaskEncoder, print_error_handler

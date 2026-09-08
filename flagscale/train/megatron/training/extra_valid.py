@@ -23,7 +23,11 @@ from megatron.core.datasets.utils import get_blend_from_list
 from megatron.core.rerun_state_machine import RerunDataIterator
 from megatron.training.datasets.data_samplers import build_pretraining_data_loader
 from megatron.training import get_args, get_tokenizer, print_rank_0
-from megatron.training.global_vars import get_tensorboard_writer, get_wandb_writer, get_extra_valid_datasets, set_extra_valid_datasets
+from megatron.training.global_vars import get_tensorboard_writer, get_wandb_writer
+from .global_vars import (
+    get_extra_valid_datasets,
+    set_extra_valid_datasets,
+)
 from megatron.training.utils import is_last_rank, print_rank_last
 
 from megatron.plugin.platform import get_platform

@@ -71,7 +71,7 @@ from megatron.energon import (
     get_val_datasets,
 )
 
-from flagscale.train.megatron.training.tokenizer import build_tokenizer
+from megatron.training.tokenizer import build_tokenizer
 from megatron.training.global_vars import get_tokenizer
 
 from flagscale.models.megatron.qwen2_5_vl.tensor_parallel import broadcast_data

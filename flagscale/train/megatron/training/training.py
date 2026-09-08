@@ -292,7 +292,7 @@ stimer = StragglerDetector()
 
 
 ########## FlagScale Begin ##########
-from megatron.training.global_vars import get_spiky_loss_detector
+from .global_vars import get_spiky_loss_detector
 from megatron.training.peft import PEFT # Import PEFT from peft module
 from megatron.plugin.hetero.parallel_context import get_parallel_context
 from flagscale.runner.straggler import (
