@@ -47,7 +47,7 @@ ci_prepend_pythonpath() {
   local updated
 
   [ -n "$entry" ] || return 0
-  updated=$("${CI_PYTHON_BIN:-python3}" - "$entry" "$current" <<'PY'
+  updated=$("${CI_PYTHON_BIN:-python3}" -S - "$entry" "$current" <<'PY'
 import os
 import sys
 
@@ -69,7 +69,7 @@ ci_sanitize_training_pythonpath() {
   local current="${PYTHONPATH:-}"
   local sanitized
 
-  sanitized=$("${CI_PYTHON_BIN:-python3}" - \
+  sanitized=$("${CI_PYTHON_BIN:-python3}" -S - \
     "$current" \
     "${MEGATRON_INSTALL_DIR:-}" \
     "${CI_PYTHON_COMPAT_DIR:-}" \
@@ -132,7 +132,7 @@ ci_apply_env_json() {
   local name
   local value
 
-  if ! entries=$("$python_bin" - "$environment_json" <<'PY'
+  if ! entries=$("$python_bin" -S - "$environment_json" <<'PY'
 import json
 import re
 import sys
@@ -220,7 +220,7 @@ ci_install_runtime_packages() {
   local -a packages=()
   local -a install_args=()
 
-  if ! parsed=$("$python_bin" - "$packages_json" "$install_args_json" <<'PY'
+  if ! parsed=$("$python_bin" -S - "$packages_json" "$install_args_json" <<'PY'
 import json
 import sys
 

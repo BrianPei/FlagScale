@@ -74,6 +74,29 @@ def test_sanitize_training_pythonpath_removes_foreign_shadowing_paths(tmp_path):
     assert str(image_te) in result.stderr
 
 
+def test_pythonpath_helpers_skip_vendor_startup_hooks(tmp_path):
+    noisy_site = tmp_path / "noisy-site"
+    noisy_site.mkdir()
+    (noisy_site / "sitecustomize.py").write_text("print('vendor startup noise')\n")
+
+    env = os.environ.copy()
+    env.update(
+        CI_PYTHON_BIN=sys.executable,
+        PYTHONPATH=str(noisy_site),
+        MEGATRON_INSTALL_DIR="",
+        CI_PYTHON_COMPAT_DIR="",
+    )
+    result = run_common_helper(
+        'CI_PROJECT_ROOT="$PROJECT_ROOT_OVERRIDE"\n'
+        "ci_sanitize_training_pythonpath\n"
+        'printf "RESULT=%s\\n" "$PYTHONPATH"',
+        {**env, "PROJECT_ROOT_OVERRIDE": str(tmp_path / "project")},
+    )
+
+    assert "vendor startup noise" not in result.stdout
+    assert "vendor startup noise" not in result.stderr
+
+
 def test_prepend_pythonpath_deduplicates_equivalent_paths(tmp_path):
     target = tmp_path / "target"
     target.mkdir()
