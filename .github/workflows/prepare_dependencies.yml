@@ -364,26 +364,12 @@ jobs:
             mv pyproject.toml.bak pyproject.toml
           fi
 
-          echo "Megatron-LM-FL installed to: $OUTPUT_DIR"
-          echo "Directory listing:"
-          ls -la "$OUTPUT_DIR/" || true
-
-          # Check for megatron subdirectory content
-          if [ -d "$OUTPUT_DIR/megatron" ]; then
-            echo "megatron/ directory contents:"
-            ls -la "$OUTPUT_DIR/megatron/" | head -10 || true
-          fi
-
-          # Verify installation
-          if [ -f "$OUTPUT_DIR/megatron/__init__.py" ]; then
-            echo "✓ Megatron-LM-FL installation verified: megatron/__init__.py found"
-          elif [ -f "$OUTPUT_DIR/megatron_core/__init__.py" ]; then
-            echo "✓ Megatron-LM-FL installation verified: megatron_core/__init__.py found"
-          else
-            echo "::error::Megatron-LM-FL installation incomplete: neither megatron/__init__.py nor megatron_core/__init__.py found" >&2
-            find "$OUTPUT_DIR" -name "__init__.py" -type f | head -20 || true
+          # Verify installation: check for megatron.core package
+          if [ ! -f "$OUTPUT_DIR/megatron/core/__init__.py" ]; then
+            echo "::error::Megatron-LM-FL installation failed: megatron.core package not found" >&2
             exit 1
           fi
+          echo "Megatron-LM-FL installed to: $OUTPUT_DIR"
 
       - name: Build TE-FL wheel on cache miss
         if: needs.resolve.outputs.te_fl_enabled == 'true' && steps.te_fl_cache.outputs.cache-hit != 'true'
