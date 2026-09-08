@@ -40,8 +40,8 @@ from .global_vars import (
     set_global_writers,
     set_spiky_loss_detector,
 )
-from megatron.backend_config import configure_backend_environment
-from megatron.training.arguments_fs import FSTrainArguments
+from ..backend_config import configure_backend_environment
+from .arguments_fs import FSTrainArguments
 from megatron.plugin.hetero.parallel_context import set_parallel_context
 from megatron.plugin.decorators import overridable
 from megatron.plugin.platform import get_platform
