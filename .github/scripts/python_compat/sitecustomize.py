@@ -38,11 +38,20 @@ def _patch_te_fl_backends_flash_attn_import():
                     if name in ("__file__", "__path__", "__spec__", "__loader__", "__package__"):
                         raise AttributeError(f"module '{mod_name}' has no attribute '{name}'")
 
-                    # Immediately raise on attribute access to block "from X import Y"
-                    raise RuntimeError(
-                        f"{mod_name}.{name} is unavailable because FlashAttention "
-                        "is disabled for this CI runtime (NVTE_FLASH_ATTN=0)"
-                    )
+                    class _UnavailableStub:
+                        def __init__(self, full_name: str):
+                            self._full_name = full_name
+
+                        def __call__(self, *args, **kwargs):
+                            raise RuntimeError(
+                                f"{self._full_name} is unavailable because FlashAttention "
+                                "is disabled for this CI runtime (NVTE_FLASH_ATTN=0)"
+                            )
+
+                        def __getattr__(self, attr: str):
+                            return _UnavailableStub(f"{self._full_name}.{attr}")
+
+                    return _UnavailableStub(f"{mod_name}.{name}")
 
                 return _unavailable_attr
 
