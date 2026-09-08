@@ -177,19 +177,34 @@ jobs:
 
       - name: Restore Megatron-LM-FL cache
         if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != ''
+        id: megatron_cache_restore
         uses: actions/cache/restore@v4
         with:
           path: megatron-lm-fl-install
           key: ${{ inputs.megatron_cache_key }}
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
 
       - name: Restore TE-FL cache
         if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != ''
+        id: te_fl_cache_restore
         uses: actions/cache/restore@v4
         with:
           path: te-fl-wheel
           key: ${{ inputs.te_fl_cache_key }}
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
+
+      - name: Warn on cache miss
+        if: |
+          (inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != '' && steps.megatron_cache_restore.outputs.cache-hit != 'true') ||
+          (inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != '' && steps.te_fl_cache_restore.outputs.cache-hit != 'true')
+        run: |
+          echo "::warning::Dependency cache miss detected. Tests will run with image-provided dependencies."
+          if [ "${{ steps.megatron_cache_restore.outputs.cache-hit }}" != "true" ] && [ "${{ inputs.megatron_lm_fl_enabled }}" = "true" ]; then
+            echo "::warning::Megatron-LM-FL cache miss: ${{ inputs.megatron_cache_key }}"
+          fi
+          if [ "${{ steps.te_fl_cache_restore.outputs.cache-hit }}" != "true" ] && [ "${{ inputs.te_fl_enabled }}" = "true" ]; then
+            echo "::warning::TE-FL cache miss: ${{ inputs.te_fl_cache_key }}"
+          fi
 
       - name: Install prepared training runtime
         if: inputs.megatron_lm_fl_enabled == 'true' || inputs.te_fl_enabled == 'true'
