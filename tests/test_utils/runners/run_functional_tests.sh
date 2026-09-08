@@ -25,7 +25,16 @@ source "$SCRIPT_DIR/utils.sh"
 # top-level packages that are not shipped by `pip install .` (e.g. `tools`,
 # used by train_qwen*_vl.py). The runner appends the pre-set PYTHONPATH when
 # generating the launch script, so this propagates to the torchrun workers.
-export PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}"
+#
+# CRITICAL: Place megatron-lm-fl-install FIRST to prevent namespace conflicts
+# with flagscale/train/megatron/ (which has no 'core' submodule).
+MEGATRON_INSTALL_DIR="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
+if [ -d "$MEGATRON_INSTALL_DIR" ]; then
+    export PYTHONPATH="$MEGATRON_INSTALL_DIR:$PROJECT_ROOT:${PYTHONPATH:-}"
+else
+    export PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}"
+fi
+export PYTHONNOUSERSITE=1
 
 # Preserve dependency paths selected by the image or environment setup.
 # Source-only Megatron installations may not exist in site-packages.
