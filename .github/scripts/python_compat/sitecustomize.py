@@ -9,30 +9,44 @@ def _flash_attention_is_disabled() -> bool:
     return os.environ.get("TE_FL_SKIP_CUDA") == "1" or os.environ.get("NVTE_FLASH_ATTN") == "0"
 
 
-if _flash_attention_is_disabled():
-    try:
-        import flash_attn_2_cuda  # noqa: F401
-    except (ImportError, ModuleNotFoundError):
-        # Some TE-FL releases import this optional CUDA extension while loading
-        # their backend registry, before the caller can select a vendor backend.
-        module = types.ModuleType("flash_attn_2_cuda")
+def _patch_te_fl_backends_flash_attn_import():
+    """Prevent TE-FL from importing flash-attn when NVTE_FLASH_ATTN=0.
 
-        # Set __file__ to a sentinel path to prevent __getattr__ from intercepting it
-        # and to avoid triggering "built-in module" errors in inspect.getsourcefile()
-        module.__file__ = "<flash_attn_2_cuda stub>"
+    TE-FL backends.py:108 checks fa_utils.is_installed but ignores _NVTE_FLASH_ATTN,
+    causing ImportError on non-CUDA platforms even when flash-attn is explicitly disabled.
 
-        def unavailable(name: str):
-            # Whitelist special attributes that should not raise errors
-            if name in ("__file__", "__path__", "__spec__", "__loader__", "__package__"):
-                raise AttributeError(f"module 'flash_attn_2_cuda' has no attribute '{name}'")
+    This patch intercepts the import chain and blocks flash_attn modules from being loaded
+    when the disable flag is set, before TE-FL's backend registry attempts to import them.
+    """
+    if not _flash_attention_is_disabled():
+        return
 
-            def fail(*args, **kwargs):
-                raise RuntimeError(
-                    f"flash_attn_2_cuda.{name} is unavailable because CUDA "
-                    "FlashAttention is disabled for this CI runtime"
-                )
+    # Block flash_attn package family
+    for module_name in (
+        "flash_attn",
+        "flash_attn.flash_attn_interface",
+        "flash_attn_2_cuda",
+        "flash_attn_3_cuda",
+    ):
+        if module_name not in sys.modules:
+            stub = types.ModuleType(module_name)
+            stub.__file__ = f"<{module_name} stub - disabled by NVTE_FLASH_ATTN=0>"
+            stub.__path__ = []
 
-            return fail
+            def _make_unavailable_attr(mod_name: str):
+                def _unavailable_attr(name: str):
+                    if name in ("__file__", "__path__", "__spec__", "__loader__", "__package__"):
+                        raise AttributeError(f"module '{mod_name}' has no attribute '{name}'")
 
-        module.__getattr__ = unavailable
-        sys.modules[module.__name__] = module
+                    # Immediately raise on attribute access to block "from X import Y"
+                    raise RuntimeError(
+                        f"{mod_name}.{name} is unavailable because FlashAttention "
+                        "is disabled for this CI runtime (NVTE_FLASH_ATTN=0)"
+                    )
+                return _unavailable_attr
+
+            stub.__getattr__ = _make_unavailable_attr(module_name)
+            sys.modules[module_name] = stub
+
+
+_patch_te_fl_backends_flash_attn_import()
