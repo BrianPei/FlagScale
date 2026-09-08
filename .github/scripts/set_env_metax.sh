@@ -9,6 +9,15 @@ echo "Setting up MetaX C550 environment"
 
 ci_activate_python_environment
 
+# Remove pre-installed Megatron-LM-FL and TE-FL from镜像 to ensure CI-built versions are used
+if [ -n "${PYTHONPATH:-}" ]; then
+  echo "Original PYTHONPATH: $PYTHONPATH"
+  # Remove镜像 pre-installed paths
+  PYTHONPATH=$(echo "$PYTHONPATH" | tr ':' '\n' | grep -v '/opt/flagscale/deps' | grep -v '/workspace/Megatron-LM-FL' | tr '\n' ':' | sed 's/:$//')
+  export PYTHONPATH
+  echo "Cleaned PYTHONPATH: $PYTHONPATH"
+fi
+
 if ! command -v maca-check >/dev/null 2>&1; then
   echo "::warning::maca-check not found, skipping MACA validation"
 else
