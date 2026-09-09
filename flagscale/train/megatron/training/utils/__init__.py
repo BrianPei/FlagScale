@@ -24,9 +24,8 @@ from megatron.training.utils.common_utils import (
     get_nvtx_range,
     has_nvrx_installed,
     has_nvrx_checkpointing_async_support,
-    get_batch_on_this_cp_rank,
-    get_batch_on_this_tp_rank,
-    unwrap_model,
 )
+
+from megatron.core.utils import get_batch_on_this_cp_rank, get_batch_on_this_tp_rank, unwrap_model
 
 from megatron.training.utils.log_utils import append_to_progress_log
