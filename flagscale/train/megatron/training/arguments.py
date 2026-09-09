@@ -457,7 +457,7 @@ def validate_args(args, defaults={}):
     update_use_dist_ckpt(args)
 
     ######### FlagScale Begin #########
-    enable_hetero = defaults.get("enable_hetero", False)
+    enable_hetero = getattr(args, "enable_hetero", defaults.get("enable_hetero", False))
     standalone_embedding_stage = defaults.get("standalone_embedding_stage", False)
     multiple_of = defaults.get("multiple_of", None)
     hidden_dim_multiplier = defaults.get("hidden_dim_multiplier", None)
