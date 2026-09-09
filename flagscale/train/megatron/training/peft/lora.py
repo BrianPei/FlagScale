@@ -24,8 +24,8 @@ import torch.nn as nn
 
 from megatron.training.utils import unwrap_model
 
-from megatron.training.peft.peft import PEFT, AdapterWrapper
-from megatron.training.peft.utils import (
+from .peft import PEFT, AdapterWrapper
+from .utils import (
     ParallelLinearAdapter,
     get_adapter_attributes_from_linear,
     is_expert_linear,
