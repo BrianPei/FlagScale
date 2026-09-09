@@ -1772,7 +1772,10 @@ def pretrain(
 
     ########## FlagScale Begin ##########
     if extra_valid_dataset_provider is not None:
-        from megatron.training.extra_valid import extra_evaluate_and_print_results, build_extra_valid_data_iterators
+        from flagscale.train.megatron.training.extra_valid import (
+            build_extra_valid_data_iterators,
+            extra_evaluate_and_print_results,
+        )
         # NOTE(zhaoyinglia): Must rebuild the dataloaders for extra validation here,
         # to guarantee extra validation start from extra_iter=0 every time,
         # but we don't need to rebuild the datasets.
@@ -4327,7 +4330,10 @@ def train(
         ########## FlagScale Begin ##########
         # Extra Evaluation =====================================================================
         if args.extra_eval_interval and iteration % args.extra_eval_interval == 0:
-            from megatron.training.extra_valid import extra_evaluate_and_print_results, build_extra_valid_data_iterators
+            from flagscale.train.megatron.training.extra_valid import (
+                build_extra_valid_data_iterators,
+                extra_evaluate_and_print_results,
+            )
             # NOTE(zhaoyinglia): Must rebuild the dataloaders for extra validation here,
             # to guarantee extra validation start from extra_iter=0 every time,
             # but we don't need to rebuild the datasets.

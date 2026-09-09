@@ -65,7 +65,7 @@ from model_provider import model_provider
 # Use FlagScale's tokenizer shim which handles FlagScale-specific tokenizer
 # types (QwenTokenizerFS, etc.) and delegates standard types to upstream.
 from flagscale.train.megatron.training.tokenizer import build_tokenizer
-from megatron.training.extra_valid import extra_valid_datasets_provider
+from flagscale.train.megatron.training.extra_valid import extra_valid_datasets_provider
 from megatron.plugin.hetero.parallel_context import get_parallel_context
 ######### FlagScale End #########
 

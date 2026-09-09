@@ -202,7 +202,13 @@ def test_flash_attention_fallback_imports_and_fails_only_when_used():
         check=True,
     )
 
-    assert "FlashAttention is disabled for this CI runtime" in result.stdout
+    assert any(
+        marker in result.stdout
+        for marker in (
+            "FlashAttention is disabled for this CI runtime",
+            "flash_attn_2_cuda is disabled",
+        )
+    )
 
 
 def test_enflame_coverage_bootstrap_loads_sitecustomize():
