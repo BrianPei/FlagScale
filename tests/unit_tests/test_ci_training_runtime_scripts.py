@@ -342,6 +342,14 @@ def test_prepare_workflow_uploads_same_run_dependency_artifacts():
     assert "actions/upload-artifact@v4" in workflow
     assert "prepared-megatron-${{ inputs.platform }}-${{ github.run_id }}" in workflow
     assert "prepared-te-fl-${{ inputs.platform }}-${{ github.run_id }}" in workflow
+    assert (
+        "if: needs.resolve.outputs.megatron_enabled == 'true' && "
+        "steps.megatron_cache.outputs.cache-hit != 'true'"
+    ) in workflow
+    assert (
+        "if: needs.resolve.outputs.te_fl_enabled == 'true' && "
+        "steps.te_fl_cache.outputs.cache-hit != 'true'"
+    ) in workflow
 
 
 def test_training_workflows_use_the_selected_python_interpreter():
