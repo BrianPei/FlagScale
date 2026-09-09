@@ -188,19 +188,32 @@ jobs:
           key: ${{ inputs.te_fl_cache_key }}
           fail-on-cache-miss: false
 
-      - name: Fail on dependency cache miss
-        if: |
-          (inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != '' && steps.megatron_cache_restore.outputs.cache-hit != 'true') ||
-          (inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != '' && steps.te_fl_cache_restore.outputs.cache-hit != 'true')
+      - name: Restore prepared Megatron artifact
+        if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != '' && steps.megatron_cache_restore.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: prepared-megatron-${{ inputs.platform }}-${{ github.run_id }}
+          path: megatron-lm-fl-install
+
+      - name: Restore prepared TE-FL artifact
+        if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != '' && steps.te_fl_cache_restore.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: prepared-te-fl-${{ inputs.platform }}-${{ github.run_id }}
+          path: te-fl-wheel
+
+      - name: Validate prepared training runtime
+        if: inputs.megatron_lm_fl_enabled == 'true' || inputs.te_fl_enabled == 'true'
         run: |
-          echo "::error::Prepared dependency cache miss detected; tests require the prepared training runtime." >&2
-          if [ "${{ steps.megatron_cache_restore.outputs.cache-hit }}" != "true" ] && [ "${{ inputs.megatron_lm_fl_enabled }}" = "true" ]; then
-            echo "::error::Megatron-LM-FL cache miss: ${{ inputs.megatron_cache_key }}" >&2
+          set -euo pipefail
+          if [ "${{ inputs.megatron_lm_fl_enabled }}" = "true" ] && [ ! -f megatron-lm-fl-install/megatron/core/__init__.py ]; then
+            echo "::error::Prepared Megatron-LM-FL runtime is missing megatron/core/__init__.py" >&2
+            exit 1
           fi
-          if [ "${{ steps.te_fl_cache_restore.outputs.cache-hit }}" != "true" ] && [ "${{ inputs.te_fl_enabled }}" = "true" ]; then
-            echo "::error::TE-FL cache miss: ${{ inputs.te_fl_cache_key }}" >&2
+          if [ "${{ inputs.te_fl_enabled }}" = "true" ] && ! find te-fl-wheel -maxdepth 1 -type f -name 'transformer_engine*.whl' -print -quit | grep -q .; then
+            echo "::error::Prepared TE-FL wheel is missing" >&2
+            exit 1
           fi
-          exit 1
 
       - name: Install prepared training runtime
         if: inputs.megatron_lm_fl_enabled == 'true' || inputs.te_fl_enabled == 'true'

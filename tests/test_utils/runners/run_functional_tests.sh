@@ -28,8 +28,8 @@ ci_resolve_python_bin
 # used by train_qwen*_vl.py). The runner appends the pre-set PYTHONPATH when
 # generating the launch script, so this propagates to the torchrun workers.
 #
-# CRITICAL: Place megatron-lm-fl-install FIRST to prevent namespace conflicts
-# with flagscale/train/megatron/ (which has no 'core' submodule).
+# The FlagScale training tree is a namespace overlay: it supplies
+# megatron.training while the prepared runtime supplies megatron.core.
 prepared_megatron_dir="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
 if [ -d "$prepared_megatron_dir" ]; then
     export MEGATRON_INSTALL_DIR="$prepared_megatron_dir"

@@ -74,6 +74,38 @@ def test_sanitize_training_pythonpath_removes_foreign_shadowing_paths(tmp_path):
     assert str(image_te) in result.stderr
 
 
+def test_configure_training_pythonpath_places_flagscale_overlay_before_prepared_runtime(tmp_path):
+    prepared = tmp_path / "prepared-megatron"
+    compatibility = tmp_path / "compatibility"
+    (prepared / "megatron").mkdir(parents=True)
+    compatibility.mkdir()
+
+    env = os.environ.copy()
+    env.update(
+        CI_PYTHON_BIN=sys.executable,
+        MEGATRON_INSTALL_DIR=str(prepared),
+        CI_PYTHON_COMPAT_DIR=str(compatibility),
+        PYTHONPATH="",
+    )
+    result = run_common_helper(
+        'ci_configure_training_pythonpath\nprintf "RESULT=%s\\n" "$PYTHONPATH"',
+        env,
+    )
+
+    value = next(
+        line.removeprefix("RESULT=")
+        for line in result.stdout.splitlines()
+        if line.startswith("RESULT=")
+    )
+    paths = value.split(os.pathsep)
+    assert paths[:4] == [
+        str(compatibility),
+        str(ROOT / "flagscale/train"),
+        str(prepared),
+        str(ROOT),
+    ]
+
+
 def test_pythonpath_helpers_skip_vendor_startup_hooks(tmp_path):
     noisy_site = tmp_path / "noisy-site"
     noisy_site.mkdir()
@@ -287,7 +319,7 @@ def test_training_workflows_use_shared_runtime_before_test_setup():
         assert install_runtime < setup_tests
 
 
-def test_training_workflows_fail_when_prepared_dependency_cache_is_missing():
+def test_training_workflows_restore_prepared_dependencies_from_cache_or_artifact():
     for relative_path in (
         ".github/workflows/unit_tests_common.yml",
         ".github/workflows/functional_tests_train.yml",
@@ -296,14 +328,20 @@ def test_training_workflows_fail_when_prepared_dependency_cache_is_missing():
     ):
         workflow = (ROOT / relative_path).read_text()
 
-        assert "name: Fail on dependency cache miss" in workflow
+        assert "actions/cache/restore@v4" in workflow
+        assert "actions/download-artifact@v4" in workflow
+        assert "name: Validate prepared training runtime" in workflow
         assert "Tests will run with image-provided dependencies" not in workflow
-        cache_step = workflow.index("name: Fail on dependency cache miss")
-        cache_step_end = workflow.find("\n      - name:", cache_step + 1)
-        if cache_step_end == -1:
-            cache_step_end = len(workflow)
-        cache_block = workflow[cache_step:cache_step_end]
-        assert "exit 1" in cache_block
+        assert "Prepared TE-FL wheel is missing" in workflow
+
+
+def test_prepare_workflow_uploads_same_run_dependency_artifacts():
+    workflow = (ROOT / ".github/workflows/prepare_dependencies.yml").read_text()
+
+    assert "actions/cache/save@v4" in workflow
+    assert "actions/upload-artifact@v4" in workflow
+    assert "prepared-megatron-${{ inputs.platform }}-${{ github.run_id }}" in workflow
+    assert "prepared-te-fl-${{ inputs.platform }}-${{ github.run_id }}" in workflow
 
 
 def test_training_workflows_use_the_selected_python_interpreter():

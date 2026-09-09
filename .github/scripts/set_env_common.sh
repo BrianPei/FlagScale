@@ -68,11 +68,13 @@ PY
 ci_sanitize_training_pythonpath() {
   local current="${PYTHONPATH:-}"
   local sanitized
+  local training_overlay="${CI_TRAINING_OVERLAY_DIR:-$CI_PROJECT_ROOT/flagscale/train}"
 
   sanitized=$("${CI_PYTHON_BIN:-python3}" -S - \
     "$current" \
     "${MEGATRON_INSTALL_DIR:-}" \
     "${CI_PYTHON_COMPAT_DIR:-}" \
+    "$training_overlay" \
     "$CI_PROJECT_ROOT" <<'PY'
 import os
 import sys
@@ -119,10 +121,13 @@ PY
 }
 
 ci_configure_training_pythonpath() {
+  local training_overlay="${CI_TRAINING_OVERLAY_DIR:-$CI_PROJECT_ROOT/flagscale/train}"
+
   ci_sanitize_training_pythonpath
   ci_prepend_pythonpath "$CI_PROJECT_ROOT"
-  ci_prepend_pythonpath "${CI_PYTHON_COMPAT_DIR:-}"
   ci_prepend_pythonpath "${MEGATRON_INSTALL_DIR:-}"
+  ci_prepend_pythonpath "$training_overlay"
+  ci_prepend_pythonpath "${CI_PYTHON_COMPAT_DIR:-}"
 }
 
 ci_apply_env_json() {
