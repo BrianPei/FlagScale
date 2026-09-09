@@ -22,10 +22,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 import torch
 import torch.nn as nn
 
-from megatron.core.utils import unwrap_model
+from megatron.training.utils import unwrap_model
 
-from .peft import PEFT, AdapterWrapper
-from .utils import (
+from megatron.training.peft.peft import PEFT, AdapterWrapper
+from megatron.training.peft.utils import (
     ParallelLinearAdapter,
     get_adapter_attributes_from_linear,
     is_expert_linear,

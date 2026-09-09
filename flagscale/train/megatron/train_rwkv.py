@@ -28,11 +28,7 @@ from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transfor
 from megatron.core.rerun_state_machine import get_rerun_state_machine
 from megatron.core.transformer import TransformerConfig
 from megatron.core.transformer.spec_utils import import_module
-from megatron.core.utils import (
-    StragglerDetector,
-    get_batch_on_this_cp_rank,
-    get_batch_on_this_tp_rank,
-)
+from megatron.core.utils import StragglerDetector
 from megatron.training import (
     get_args,
     get_timers,
@@ -43,7 +39,11 @@ from megatron.training import (
 from megatron.training.argument_utils import pretrain_cfg_container_from_args
 from megatron.training.arguments import core_transformer_config_from_args, parse_and_validate_args
 from megatron.training.datasets.sft_dataset import SFTDataset
-from megatron.training.utils import get_blend_and_blend_per_split
+from megatron.training.utils import (
+    get_batch_on_this_cp_rank,
+    get_batch_on_this_tp_rank,
+    get_blend_and_blend_per_split,
+)
 
 from flagscale.models.megatron.rwkv.rwkv_model import RWKVModel
 
