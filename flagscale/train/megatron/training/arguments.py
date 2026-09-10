@@ -54,7 +54,7 @@ from megatron.core.quantization.utils import (
 
 from megatron.training.argument_utils import ArgumentGroupFactory, core_transformer_config_from_args
 ######### FlagScale Begin #########
-from .arguments_fs import add_flagscale_arguments
+from megatron.training.arguments_fs import add_flagscale_arguments
 
 from megatron.plugin.platform import get_platform
 cur_platform = get_platform()

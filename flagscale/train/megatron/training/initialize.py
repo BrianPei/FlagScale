@@ -36,12 +36,10 @@ from megatron.training.async_utils import init_persistent_async_worker
 from megatron.training.utils import is_rank0, print_rank_0, warn_rank_0
 
 ########## FlagScale Begin ##########
-from .global_vars import (
-    set_global_writers,
-    set_spiky_loss_detector,
-)
-from ..backend_config import configure_backend_environment
-from .arguments_fs import FSTrainArguments
+from megatron.training.global_vars import set_global_writers
+from megatron.backend_config import configure_backend_environment
+from megatron.training.arguments_fs import FSTrainArguments
+from megatron.training.global_vars import set_spiky_loss_detector
 from megatron.plugin.hetero.parallel_context import set_parallel_context
 from megatron.plugin.decorators import overridable
 from megatron.plugin.platform import get_platform

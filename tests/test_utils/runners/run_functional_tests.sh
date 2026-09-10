@@ -33,7 +33,6 @@ ci_resolve_python_bin
 prepared_megatron_dir="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
 if [ -d "$prepared_megatron_dir" ]; then
     export MEGATRON_INSTALL_DIR="$prepared_megatron_dir"
-    export CI_PYTHON_COMPAT_DIR="$PROJECT_ROOT/.github/scripts/python_compat"
     ci_configure_training_pythonpath
 else
     export PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}"

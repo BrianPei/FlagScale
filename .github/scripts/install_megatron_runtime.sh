@@ -5,7 +5,6 @@ set -euo pipefail
 : "${MEGATRON_INSTALL_DIR:?MEGATRON_INSTALL_DIR is required}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_COMPAT_DIR="$SCRIPT_DIR/python_compat"
 source "$SCRIPT_DIR/set_env_common.sh"
 
 python_bin="${CI_PYTHON_BIN:-$(command -v python3)}"
@@ -25,7 +24,6 @@ echo "Removing any site-packages megatron-core to ensure PYTHONPATH priority..."
 env -u PYTHONPATH PYTHONNOUSERSITE=1 \
   "$python_bin" -m pip uninstall -y megatron-core >/dev/null 2>&1 || true
 
-export CI_PYTHON_COMPAT_DIR="$PYTHON_COMPAT_DIR"
 ci_configure_training_pythonpath
 ci_export_env PYTHONNOUSERSITE 1
 

@@ -5,7 +5,6 @@ set -euo pipefail
 : "${TE_FL_WHEEL_DIR:?TE_FL_WHEEL_DIR is required}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_COMPAT_DIR="$SCRIPT_DIR/python_compat"
 source "$SCRIPT_DIR/set_env_common.sh"
 python_bin="${CI_PYTHON_BIN:-$(command -v python3)}"
 if [ ! -x "$python_bin" ]; then
@@ -62,7 +61,6 @@ while IFS=$'\t' read -r record_type arg; do
   esac
 done <<< "$parsed_install_pip_args"
 
-export CI_PYTHON_COMPAT_DIR="$PYTHON_COMPAT_DIR"
 ci_configure_training_pythonpath
 ci_export_env PYTHONNOUSERSITE 1
 

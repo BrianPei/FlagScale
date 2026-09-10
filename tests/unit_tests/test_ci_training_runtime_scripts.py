@@ -9,7 +9,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 COMMON_SCRIPT = ROOT / ".github/scripts/set_env_common.sh"
-COMPAT_DIR = ROOT / ".github/scripts/python_compat"
 
 
 def run_common_helper(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -29,12 +28,11 @@ def test_sanitize_training_pythonpath_removes_foreign_shadowing_paths(tmp_path):
     installed = tmp_path / "site-packages"
     prepared = tmp_path / "prepared-megatron"
     unrelated = tmp_path / "FlagCX"
-    compatibility = tmp_path / "compatibility"
     project = tmp_path / "project"
 
     for root, package in ((image_megatron, "megatron"), (image_te, "transformer_engine")):
         (root / package).mkdir(parents=True)
-    for path in (installed, prepared, unrelated, compatibility, project):
+    for path in (installed, prepared, unrelated, project):
         path.mkdir(parents=True)
     (installed / "megatron").mkdir()
     (prepared / "megatron").mkdir()
@@ -43,7 +41,6 @@ def test_sanitize_training_pythonpath_removes_foreign_shadowing_paths(tmp_path):
     env.update(
         CI_PYTHON_BIN=sys.executable,
         MEGATRON_INSTALL_DIR=str(prepared),
-        CI_PYTHON_COMPAT_DIR=str(compatibility),
         PYTHONPATH=os.pathsep.join(
             [
                 str(image_megatron),
@@ -76,15 +73,12 @@ def test_sanitize_training_pythonpath_removes_foreign_shadowing_paths(tmp_path):
 
 def test_configure_training_pythonpath_places_flagscale_overlay_before_prepared_runtime(tmp_path):
     prepared = tmp_path / "prepared-megatron"
-    compatibility = tmp_path / "compatibility"
     (prepared / "megatron").mkdir(parents=True)
-    compatibility.mkdir()
 
     env = os.environ.copy()
     env.update(
         CI_PYTHON_BIN=sys.executable,
         MEGATRON_INSTALL_DIR=str(prepared),
-        CI_PYTHON_COMPAT_DIR=str(compatibility),
         PYTHONPATH="",
     )
     result = run_common_helper(
@@ -98,8 +92,7 @@ def test_configure_training_pythonpath_places_flagscale_overlay_before_prepared_
         if line.startswith("RESULT=")
     )
     paths = value.split(os.pathsep)
-    assert paths[:4] == [
-        str(compatibility),
+    assert paths[:3] == [
         str(ROOT / "flagscale/train"),
         str(prepared),
         str(ROOT),
@@ -116,7 +109,6 @@ def test_pythonpath_helpers_skip_vendor_startup_hooks(tmp_path):
         CI_PYTHON_BIN=sys.executable,
         PYTHONPATH=str(noisy_site),
         MEGATRON_INSTALL_DIR="",
-        CI_PYTHON_COMPAT_DIR="",
     )
     result = run_common_helper(
         'CI_PROJECT_ROOT="$PROJECT_ROOT_OVERRIDE"\n'
@@ -142,6 +134,35 @@ def test_flagscale_peft_imports_are_package_relative():
     assert "from .peft import PEFT, AdapterWrapper" in lora
     assert "from .utils import" in lora
     assert "from megatron.training.peft" not in lora
+
+
+def test_flagscale_training_overlay_entrypoints_use_megatron_namespace():
+    expected_imports = {
+        "flagscale/train/megatron/training/arguments.py": (
+            "from megatron.training.arguments_fs import add_flagscale_arguments",
+        ),
+        "flagscale/train/megatron/training/extra_valid.py": (
+            "from megatron.training.global_vars import get_tensorboard_writer",
+        ),
+        "flagscale/train/megatron/training/global_vars.py": (
+            "from megatron.training.tokenizer import build_tokenizer",
+            "from megatron.training.spiky_loss import SpikyLossDetector",
+        ),
+        "flagscale/train/megatron/training/initialize.py": (
+            "from megatron.training.global_vars import set_global_writers",
+            "from megatron.backend_config import configure_backend_environment",
+            "from megatron.training.arguments_fs import FSTrainArguments",
+            "from megatron.training.global_vars import set_spiky_loss_detector",
+        ),
+        "flagscale/train/megatron/training/training.py": (
+            "from megatron.training.global_vars import get_spiky_loss_detector",
+        ),
+    }
+
+    for relative_path, imports in expected_imports.items():
+        source = (ROOT / relative_path).read_text()
+        for import_statement in imports:
+            assert import_statement in source
 
 
 def test_prepend_pythonpath_deduplicates_equivalent_paths(tmp_path):
@@ -209,63 +230,6 @@ def test_resolve_python_bin_uses_active_path(tmp_path):
     result = run_common_helper('ci_resolve_python_bin\nprintf "RESULT=%s\\n" "$CI_PYTHON_BIN"', env)
 
     assert f"RESULT={python}" in result.stdout
-
-
-def test_flash_attention_fallback_imports_and_fails_only_when_used():
-    env = os.environ.copy()
-    env.update(
-        PYTHONPATH=str(COMPAT_DIR),
-        TE_FL_SKIP_CUDA="1",
-        PYTHONNOUSERSITE="1",
-    )
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sitecustomize; "
-            "from flash_attn_2_cuda import varlen_bwd; "
-            "assert callable(varlen_bwd); "
-            "\ntry:\n varlen_bwd()\nexcept RuntimeError as exc:\n print(exc)\nelse:\n raise AssertionError('fallback unexpectedly succeeded')",
-        ],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=True,
-    )
-
-    assert any(
-        marker in result.stdout
-        for marker in (
-            "FlashAttention is disabled for this CI runtime",
-            "flash_attn_2_cuda is disabled",
-        )
-    )
-
-
-def test_enflame_coverage_bootstrap_loads_sitecustomize():
-    bootstrap = (
-        "import os, runpy, sys, sysconfig\n"
-        'sys.path[:0] = [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path] + '
-        '[sysconfig.get_path("purelib"), sysconfig.get_path("platlib")]\n'
-        "try:\n"
-        "    import sitecustomize\n"
-        "except ImportError:\n"
-        "    pass\n"
-        'print("sitecustomize" in sys.modules)'
-    )
-    env = os.environ.copy()
-    env.update(PYTHONPATH=str(COMPAT_DIR), TE_FL_SKIP_CUDA="1")
-    result = subprocess.run(
-        [sys.executable, "-S", "-E", "-c", bootstrap],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=True,
-    )
-
-    assert "True" in result.stdout
 
 
 def test_candidate_image_tests_require_prepared_dependencies():
@@ -400,6 +364,14 @@ def test_platform_setup_scripts_only_activate_and_validate_runtime():
         assert "site-packages" not in script
         assert "install_megatron_runtime" not in script
         assert "install_te_fl_runtime" not in script
+
+
+def test_enflame_setup_does_not_initialize_torch_gcu_before_platform_selection():
+    script = (ROOT / ".github/scripts/set_env_enflame.sh").read_text()
+
+    assert "efml-smi" in script
+    assert "torch_gcu" not in script
+    assert "torch.gcu" not in script
 
 
 def test_inference_workflows_do_not_install_training_runtime():

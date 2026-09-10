@@ -31,6 +31,7 @@ from megatron.training.checkpointing import get_checkpoint_name
 from megatron.core.enums import ModelType
 from megatron.core.rerun_state_machine import get_rerun_state_machine
 from megatron.core.utils import StragglerDetector, get_attr_wrapped_model
+
 from megatron.training.utils import unwrap_model
 from megatron.training import get_args, get_timers, get_tokenizer, print_rank_0
 from megatron.training.argument_utils import pretrain_cfg_container_from_args
@@ -67,7 +68,7 @@ from megatron.energon import (
     get_val_datasets,
 )
 
-from megatron.training.tokenizer import build_tokenizer
+from megatron.training.tokenizer.tokenizer import build_tokenizer
 from megatron.training.global_vars import get_tokenizer
 
 from flagscale.models.megatron.qwen2_5_vl.tensor_parallel import broadcast_data

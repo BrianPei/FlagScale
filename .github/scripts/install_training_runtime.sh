@@ -8,7 +8,6 @@ cd "$PROJECT_ROOT"
 source .github/scripts/set_env_common.sh
 
 workspace_root="${GITHUB_WORKSPACE:-$(dirname "$PROJECT_ROOT")}"
-export CI_PYTHON_COMPAT_DIR="$PROJECT_ROOT/.github/scripts/python_compat"
 if [ "${MEGATRON_LM_FL_ENABLED:-false}" = "true" ]; then
   export MEGATRON_INSTALL_DIR="$workspace_root/megatron-lm-fl-install"
 fi
