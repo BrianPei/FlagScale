@@ -7,6 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 COMMON_SCRIPT = ROOT / ".github/scripts/set_env_common.sh"
 
@@ -252,7 +255,9 @@ def test_functional_runner_configures_prepared_pythonpath():
 def test_unit_runner_preserves_prepared_environment(tmp_path):
     script = (ROOT / "tests/test_utils/runners/run_unit_tests.sh").read_text()
     export_line = next(
-        line.strip() for line in script.splitlines() if line.strip().startswith("export PYTHONPATH=")
+        line.strip()
+        for line in script.splitlines()
+        if line.strip().startswith("export PYTHONPATH=")
     )
     prepared = str(tmp_path / "prepared-megatron")
     inherited = os.pathsep.join((prepared, str(tmp_path / "other-dependency")))
@@ -293,6 +298,52 @@ def test_training_workflows_use_shared_runtime_before_test_setup():
 
         assert workflow.count("bash .github/scripts/install_training_runtime.sh") == 1
         assert install_runtime < setup_tests
+
+
+def test_parallel_context_uses_training_overlay_namespace():
+    script = (ROOT / "tests/unit_tests/test_parallel_context.py").read_text()
+    assert "from megatron.training.arguments_fs import FSTrainArguments" in script
+    assert "flagscale.train.megatron.training" not in script
+
+
+@pytest.mark.parametrize(
+    "prepare_result,test_result,should_pass",
+    [
+        ("success", "success", True),
+        ("skipped", "skipped", True),
+        ("failure", "skipped", False),
+        ("cancelled", "skipped", False),
+        ("success", "failure", False),
+        ("success", "cancelled", False),
+        ("success", "skipped", False),
+    ],
+)
+def test_all_tests_reports_preparation_and_test_failures(prepare_result, test_result, should_pass):
+    workflow = yaml.safe_load((ROOT / ".github/workflows/all_tests.yml").read_text())
+    jobs = workflow["jobs"]
+    summary = jobs["all_tests"]
+    dependencies = {name for name in jobs if name.endswith(("_prepare", "_tests"))} - {"all_tests"}
+    assert set(summary["needs"]) == dependencies
+    assert summary["if"] == "always()"
+    step = summary["steps"][0]
+    assert step["env"]["JOB_RESULTS"] == "${{ toJSON(needs) }}"
+
+    # Exercise each platform independently while all other platforms are unselected.
+    for prepare in sorted(name for name in dependencies if name.endswith("_prepare")):
+        results = {name: {"result": "skipped"} for name in dependencies}
+        results[prepare]["result"] = prepare_result
+        tests = prepare.removesuffix("_prepare") + "_tests"
+        results[tests]["result"] = test_result
+        env = os.environ.copy()
+        env["JOB_RESULTS"] = json.dumps(results)
+        result = subprocess.run(
+            ["bash", "-e", "-c", step["run"]],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert (result.returncode == 0) == should_pass, result.stdout + result.stderr
 
 
 def test_training_workflows_restore_prepared_dependencies_from_cache_or_artifact():

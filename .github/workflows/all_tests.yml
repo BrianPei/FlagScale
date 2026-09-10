@@ -184,6 +184,13 @@ jobs:
   all_tests:
     name: all_tests
     needs:
+      - cuda_prepare
+      - ascend_prepare
+      - enflame_prepare
+      - hygon_prepare
+      - metax_prepare
+      - musa_prepare
+      - kunlunxin_prepare
       - cuda_tests
       - ascend_tests
       - enflame_tests
@@ -195,53 +202,27 @@ jobs:
     if: always()
     steps:
       - name: Verify workflow status
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
         run: |
-          failed=false
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
 
-          if [ "${{ needs.cuda_tests.result }}" != "success" ] && \
-             [ "${{ needs.cuda_tests.result }}" != "skipped" ]; then
-            echo "CUDA tests failed"
-            failed=true
-          fi
-
-          if [ "${{ needs.ascend_tests.result }}" != "success" ] && \
-             [ "${{ needs.ascend_tests.result }}" != "skipped" ]; then
-            echo "❌ Ascend tests failed"
-            failed=true
-          fi
-
-          if [ "${{ needs.enflame_tests.result }}" != "success" ] && \
-             [ "${{ needs.enflame_tests.result }}" != "skipped" ]; then
-            echo "Enflame tests failed"
-            failed=true
-          fi
-
-          if [ "${{ needs.hygon_tests.result }}" != "success" ] && \
-             [ "${{ needs.hygon_tests.result }}" != "skipped" ]; then
-            echo "Hygon tests failed"
-            failed=true
-          fi
-
-          if [ "${{ needs.metax_tests.result }}" != "success" ] && \
-             [ "${{ needs.metax_tests.result }}" != "skipped" ]; then
-            echo "❌ MetaX C550 tests failed"
-            failed=true
-          fi
-
-          if [ "${{ needs.musa_tests.result }}" != "success" ] && \
-             [ "${{ needs.musa_tests.result }}" != "skipped" ]; then
-            echo "MThreads MUSA tests failed"
-            failed=true
-          fi
-
-          if [ "${{ needs.kunlunxin_tests.result }}" != "success" ] && \
-             [ "${{ needs.kunlunxin_tests.result }}" != "skipped" ]; then
-            echo "Kunlunxin P800 tests failed"
-            failed=true
-          fi
-
-          if [ "$failed" = "true" ]; then
-            exit 1
-          fi
-
-          echo "✅ All requested platform tests passed!"
+          jobs = json.loads(os.environ["JOB_RESULTS"])
+          failed = False
+          for name, job in jobs.items():
+              result = job["result"]
+              if result not in ("success", "skipped"):
+                  print(f"::error::{name}: {result}")
+                  failed = True
+              if name.endswith("_prepare") and result == "success":
+                  tests = name.removesuffix("_prepare") + "_tests"
+                  if jobs[tests]["result"] != "success":
+                      print(f"::error::{tests} did not succeed after preparation")
+                      failed = True
+          if failed:
+              sys.exit(1)
+          print("All requested platform tests passed!")
+          PY
