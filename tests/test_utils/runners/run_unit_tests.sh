@@ -20,8 +20,6 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 source "$SCRIPT_DIR/utils.sh"
-source "$PROJECT_ROOT/.github/scripts/set_env_common.sh"
-ci_resolve_python_bin
 
 # Defaults
 PLATFORM="default"
@@ -71,13 +69,8 @@ run_unit_tests_for_device() {
 
     log_info "Running unit tests for device: $device"
 
-    local prepared_megatron_dir="${GITHUB_WORKSPACE:-$PROJECT_ROOT/..}/megatron-lm-fl-install"
-    if [ -d "$prepared_megatron_dir" ]; then
-        export MEGATRON_INSTALL_DIR="$prepared_megatron_dir"
-        ci_configure_training_pythonpath
-    else
-        export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train:${PYTHONPATH:-}"
-    fi
+    # Set up PYTHONPATH
+    export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train:${PYTHONPATH:-}"
     export PYTHONNOUSERSITE=1
     export FLAGSCALE_TEST_PLATFORM="$PLATFORM"
     export FLAGSCALE_TEST_DEVICE_TYPE="$device"
