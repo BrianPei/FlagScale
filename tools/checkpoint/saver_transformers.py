@@ -69,7 +69,7 @@ def save_checkpoint(queue, args):
 
     try:
         from megatron.training.arguments import parse_args, validate_args
-        from megatron.core.tokenizers.utils.build_tokenizer import vocab_size_with_padding
+        from megatron.training.tokenizer.tokenizer import vocab_size_with_padding
     except ModuleNotFoundError:
         print("Unable to import Megatron, please specify the path to Megatron using --megatron-path. Exiting.")
         queue.put("exit")

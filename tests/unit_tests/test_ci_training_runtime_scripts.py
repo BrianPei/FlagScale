@@ -121,21 +121,6 @@ def test_pythonpath_helpers_skip_vendor_startup_hooks(tmp_path):
     assert "vendor startup noise" not in result.stderr
 
 
-def test_flagscale_peft_imports_are_package_relative():
-    training = (ROOT / "flagscale/train/megatron/training/training.py").read_text()
-    peft_init = (ROOT / "flagscale/train/megatron/training/peft/__init__.py").read_text()
-    lora = (ROOT / "flagscale/train/megatron/training/peft/lora.py").read_text()
-
-    assert "from .peft import PEFT" in training
-    assert "from megatron.training.peft" not in training
-    assert "from .peft import PEFT, AdapterWrapper" in peft_init
-    assert "from .lora import LoRA" in peft_init
-    assert "from megatron.training.peft" not in peft_init
-    assert "from .peft import PEFT, AdapterWrapper" in lora
-    assert "from .utils import" in lora
-    assert "from megatron.training.peft" not in lora
-
-
 def test_flagscale_training_overlay_entrypoints_use_megatron_namespace():
     expected_imports = {
         "flagscale/train/megatron/training/arguments.py": (

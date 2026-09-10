@@ -71,7 +71,7 @@ def save_checkpoint(queue, args):
         from megatron.training.arguments import parse_args, validate_args
         from megatron.training.checkpointing import save_checkpoint, get_checkpoint_name
         from megatron.training.global_vars import set_global_variables, get_args
-        from megatron.core.tokenizers.utils.build_tokenizer import vocab_size_with_padding
+        from megatron.training.tokenizer.tokenizer import vocab_size_with_padding
         from megatron.core import mpu
         from megatron.core.tensor_parallel.random import (
                 get_cuda_rng_tracker, _DATA_PARALLEL_RNG_TRACKER_NAME,

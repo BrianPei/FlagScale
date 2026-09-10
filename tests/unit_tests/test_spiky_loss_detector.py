@@ -14,9 +14,8 @@
 
 import torch
 
+from megatron.training.spiky_loss import SpikyLossDetector
 from tests.unit_tests.test_utilities import Utils
-
-from flagscale.train.megatron.training.spiky_loss import SpikyLossDetector
 
 
 def test_spiky_loss_detector(pp_size=2, threshold=0.2):
