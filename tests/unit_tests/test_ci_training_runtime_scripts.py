@@ -240,17 +240,44 @@ def test_runtime_reestablishes_pythonpath_after_environment_configuration():
     assert configure > last_environment_apply
 
 
-def test_training_runners_share_prepared_pythonpath_configuration():
-    for relative_path in (
-        "tests/test_utils/runners/run_unit_tests.sh",
-        "tests/test_utils/runners/run_functional_tests.sh",
-    ):
-        script = (ROOT / relative_path).read_text()
-        source_common = script.index('source "$PROJECT_ROOT/.github/scripts/set_env_common.sh"')
-        resolve_python = script.index("ci_resolve_python_bin")
-        configure_pythonpath = script.index("ci_configure_training_pythonpath")
+def test_functional_runner_configures_prepared_pythonpath():
+    script = (ROOT / "tests/test_utils/runners/run_functional_tests.sh").read_text()
+    source_common = script.index('source "$PROJECT_ROOT/.github/scripts/set_env_common.sh"')
+    resolve_python = script.index("ci_resolve_python_bin")
+    configure_pythonpath = script.index("ci_configure_training_pythonpath")
 
-        assert source_common < resolve_python < configure_pythonpath
+    assert source_common < resolve_python < configure_pythonpath
+
+
+def test_unit_runner_preserves_prepared_environment(tmp_path):
+    script = (ROOT / "tests/test_utils/runners/run_unit_tests.sh").read_text()
+    export_line = next(
+        line.strip() for line in script.splitlines() if line.strip().startswith("export PYTHONPATH=")
+    )
+    prepared = str(tmp_path / "prepared-megatron")
+    inherited = os.pathsep.join((prepared, str(tmp_path / "other-dependency")))
+    env = os.environ.copy()
+    env.update(PROJECT_ROOT=str(ROOT), PYTHONPATH=inherited, CI_PYTHON_BIN=sys.executable)
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'{export_line}\nsource "$1"\nprintf "%s\\n" "$PYTHONPATH"\nrunner_python_bin',
+            "bash",
+            str(ROOT / "tests/test_utils/runners/utils.sh"),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        os.pathsep.join((str(ROOT), str(ROOT / "flagscale/train"), inherited)),
+        sys.executable,
+    ]
 
 
 def test_training_workflows_use_shared_runtime_before_test_setup():
@@ -325,11 +352,11 @@ def test_megatron_prepare_installs_build_dependencies_before_building():
 
 def test_training_setup_exports_and_runners_use_ci_python_bin():
     setup_script = (ROOT / "tests/test_utils/runners/setup_training_test_env.sh").read_text()
+    assert "ci_resolve_python_bin" in setup_script
     assert 'ci_export_env CI_PYTHON_BIN "$PYTHON_BIN"' in setup_script
 
     unit_runner = (ROOT / "tests/test_utils/runners/run_unit_tests.sh").read_text()
     assert 'source "$SCRIPT_DIR/utils.sh"' in unit_runner
-    assert "ci_resolve_python_bin" in unit_runner
     assert 'RUNNER_CMD=(--no-python "$CI_PYTHON_BIN"' in unit_runner
     assert '"$CI_PYTHON_BIN" -m coverage' in unit_runner
 
