@@ -258,8 +258,11 @@ def test_unit_runner_preserves_prepared_environment(tmp_path):
     assert "ci_resolve_python_bin" in script
     assert "ci_configure_training_pythonpath" in script
     assert 'export MEGATRON_INSTALL_DIR="$prepared_megatron_dir"' in script
-    assert 'Prepared Megatron-LM-FL runtime is required' in script
-    assert 'export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train:${PYTHONPATH:-}"' not in script
+    assert "Prepared Megatron-LM-FL runtime is required" in script
+    assert (
+        'export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train:${PYTHONPATH:-}"'
+        not in script
+    )
 
 
 def test_training_workflows_use_shared_runtime_before_test_setup():
