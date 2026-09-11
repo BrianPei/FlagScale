@@ -14,6 +14,14 @@ import os
 import warnings
 
 rank = int(os.environ.get('RANK', 0))
+
+# Transformers copies trust-remote-code modules into HF_MODULES_CACHE.  A
+# shared directory lets torchrun ranks observe a partially copied module.
+_hf_home = os.environ.get('HF_HOME', os.path.expanduser('~/.cache/huggingface'))
+_hf_run_id = os.environ.get('GITHUB_RUN_ID', str(os.getppid()))
+os.environ['HF_MODULES_CACHE'] = os.path.join(_hf_home, f'modules_{_hf_run_id}_rank_{rank}')
+os.makedirs(os.environ['HF_MODULES_CACHE'], exist_ok=True)
+
 if rank != 0:
     warnings.filterwarnings("ignore", category=UserWarning)
     warnings.filterwarnings("ignore", category=FutureWarning)
