@@ -334,6 +334,13 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "TE-FL wheel cache key: $key"
 
+      - name: Reset prepared runtime directories
+        if: needs.resolve.outputs.megatron_enabled == 'true' || needs.resolve.outputs.te_fl_enabled == 'true'
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf megatron-lm-fl-install te-fl-wheel
+
       - name: Restore Megatron-LM-FL cache
         if: needs.resolve.outputs.megatron_enabled == 'true'
         id: megatron_cache
@@ -349,6 +356,20 @@ jobs:
         with:
           path: te-fl-wheel
           key: ${{ steps.te_fl_cache_key.outputs.key }}
+
+      - name: Validate cached TE-FL wheel
+        if: needs.resolve.outputs.te_fl_enabled == 'true' && steps.te_fl_cache.outputs.cache-hit == 'true'
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mapfile -t te_fl_wheels < <(
+            find te-fl-wheel -maxdepth 1 -type f -name 'transformer_engine*.whl' -print 2>/dev/null | sort
+          )
+          if [ "${#te_fl_wheels[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one cached TE-FL wheel, found ${#te_fl_wheels[@]}" >&2
+            printf '  %s\n' "${te_fl_wheels[@]}" >&2
+            exit 1
+          fi
 
       - name: Setup build environment
         if: |

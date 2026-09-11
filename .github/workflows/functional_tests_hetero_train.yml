@@ -170,6 +170,13 @@ jobs:
       - name: Check environment info
         run: cd $PROJECT_ROOT && bash ./tests/test_utils/runners/check_env.sh
 
+      - name: Reset prepared runtime directories
+        if: inputs.megatron_lm_fl_enabled == 'true' || inputs.te_fl_enabled == 'true'
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf megatron-lm-fl-install te-fl-wheel
+
       - name: Restore Megatron-LM-FL cache
         if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != ''
         id: megatron_cache_restore
@@ -210,9 +217,15 @@ jobs:
             echo "::error::Prepared Megatron-LM-FL runtime is missing megatron/core/__init__.py" >&2
             exit 1
           fi
-          if [ "${{ inputs.te_fl_enabled }}" = "true" ] && ! find te-fl-wheel -maxdepth 1 -type f -name 'transformer_engine*.whl' -print -quit | grep -q .; then
-            echo "::error::Prepared TE-FL wheel is missing" >&2
-            exit 1
+          if [ "${{ inputs.te_fl_enabled }}" = "true" ]; then
+            mapfile -t te_fl_wheels < <(
+              find te-fl-wheel -maxdepth 1 -type f -name 'transformer_engine*.whl' -print 2>/dev/null | sort
+            )
+            if [ "${#te_fl_wheels[@]}" -ne 1 ]; then
+              echo "::error::Expected exactly one TE-FL wheel, found ${#te_fl_wheels[@]}" >&2
+              printf '  %s\n' "${te_fl_wheels[@]}" >&2
+              exit 1
+            fi
           fi
 
       - name: Install prepared training runtime

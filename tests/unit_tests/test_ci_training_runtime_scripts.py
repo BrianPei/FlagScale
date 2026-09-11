@@ -339,7 +339,8 @@ def test_training_workflows_restore_prepared_dependencies_from_cache_or_artifact
         assert "actions/download-artifact@v4" in workflow
         assert "name: Validate prepared training runtime" in workflow
         assert "Tests will run with image-provided dependencies" not in workflow
-        assert "Prepared TE-FL wheel is missing" in workflow
+        assert "Expected exactly one TE-FL wheel" in workflow
+        assert "name: Reset prepared runtime directories" in workflow
 
 
 def test_prepare_workflow_uploads_same_run_dependency_artifacts():
