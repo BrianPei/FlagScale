@@ -56,10 +56,18 @@ on:
         required: false
         type: string
         default: ''
+      megatron_artifact_available:
+        required: false
+        type: string
+        default: 'false'
       te_fl_cache_key:
         required: false
         type: string
         default: ''
+      te_fl_artifact_available:
+        required: false
+        type: string
+        default: 'false'
       megatron_lm_fl_enabled:
         required: false
         type: string
@@ -196,14 +204,14 @@ jobs:
           fail-on-cache-miss: false
 
       - name: Restore prepared Megatron artifact
-        if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != '' && steps.megatron_cache_restore.outputs.cache-hit != 'true'
+        if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != '' && steps.megatron_cache_restore.outputs.cache-hit != 'true' && inputs.megatron_artifact_available == 'true'
         uses: actions/download-artifact@v4
         with:
           name: prepared-megatron-${{ inputs.platform }}-${{ github.run_id }}
           path: megatron-lm-fl-install
 
       - name: Restore prepared TE-FL artifact
-        if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != '' && steps.te_fl_cache_restore.outputs.cache-hit != 'true'
+        if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != '' && steps.te_fl_cache_restore.outputs.cache-hit != 'true' && inputs.te_fl_artifact_available == 'true'
         uses: actions/download-artifact@v4
         with:
           name: prepared-te-fl-${{ inputs.platform }}-${{ github.run_id }}

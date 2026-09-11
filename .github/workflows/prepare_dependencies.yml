@@ -13,6 +13,10 @@ on:
         value: ${{ jobs.prepare.outputs.megatron_cache_key }}
       te_fl_cache_key:
         value: ${{ jobs.prepare.outputs.te_fl_cache_key }}
+      megatron_artifact_available:
+        value: ${{ jobs.prepare.outputs.megatron_artifact_available }}
+      te_fl_artifact_available:
+        value: ${{ jobs.prepare.outputs.te_fl_artifact_available }}
 
 jobs:
   resolve:
@@ -206,6 +210,8 @@ jobs:
     outputs:
       megatron_cache_key: ${{ steps.megatron_cache_key.outputs.key }}
       te_fl_cache_key: ${{ steps.te_fl_cache_key.outputs.key }}
+      megatron_artifact_available: ${{ steps.runtime_artifacts_available.outputs.megatron_available }}
+      te_fl_artifact_available: ${{ steps.runtime_artifacts_available.outputs.te_fl_available }}
     steps:
       - name: Checkout source (attempt 1)
         id: checkout_1
@@ -491,6 +497,21 @@ jobs:
         with:
           path: megatron-lm-fl-install
           key: ${{ steps.megatron_cache_key.outputs.key }}
+
+      - name: Publish prepared artifact availability
+        id: runtime_artifacts_available
+        if: always() && (needs.resolve.outputs.megatron_enabled == 'true' || needs.resolve.outputs.te_fl_enabled == 'true')
+        run: |
+          if [ "${{ steps.megatron_cache.outputs.cache-hit }}" = "true" ]; then
+            echo "megatron_available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "megatron_available=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ steps.te_fl_cache.outputs.cache-hit }}" = "true" ]; then
+            echo "te_fl_available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "te_fl_available=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Save TE-FL wheel cache
         if: needs.resolve.outputs.te_fl_enabled == 'true' && steps.te_fl_cache.outputs.cache-hit != 'true'

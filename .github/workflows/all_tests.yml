@@ -71,7 +71,9 @@ jobs:
     with:
       platform: cuda
       megatron_cache_key: ${{ needs.cuda_prepare.outputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ needs.cuda_prepare.outputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ needs.cuda_prepare.outputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ needs.cuda_prepare.outputs.te_fl_artifact_available }}
 
   # Ascend Platform
   ascend_prepare:
@@ -89,7 +91,9 @@ jobs:
     with:
       platform: ascend
       megatron_cache_key: ${{ needs.ascend_prepare.outputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ needs.ascend_prepare.outputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ needs.ascend_prepare.outputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ needs.ascend_prepare.outputs.te_fl_artifact_available }}
 
   # Enflame Platform
   enflame_prepare:
@@ -107,7 +111,9 @@ jobs:
     with:
       platform: enflame
       megatron_cache_key: ${{ needs.enflame_prepare.outputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ needs.enflame_prepare.outputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ needs.enflame_prepare.outputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ needs.enflame_prepare.outputs.te_fl_artifact_available }}
 
   # Hygon Platform
   hygon_prepare:
@@ -125,7 +131,9 @@ jobs:
     with:
       platform: hygon
       megatron_cache_key: ${{ needs.hygon_prepare.outputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ needs.hygon_prepare.outputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ needs.hygon_prepare.outputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ needs.hygon_prepare.outputs.te_fl_artifact_available }}
 
   # MetaX Platform
   metax_prepare:
@@ -143,7 +151,9 @@ jobs:
     with:
       platform: metax
       megatron_cache_key: ${{ needs.metax_prepare.outputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ needs.metax_prepare.outputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ needs.metax_prepare.outputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ needs.metax_prepare.outputs.te_fl_artifact_available }}
 
   # MUSA Platform
   musa_prepare:
@@ -161,7 +171,9 @@ jobs:
     with:
       platform: musa
       megatron_cache_key: ${{ needs.musa_prepare.outputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ needs.musa_prepare.outputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ needs.musa_prepare.outputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ needs.musa_prepare.outputs.te_fl_artifact_available }}
 
   # Kunlunxin Platform
   kunlunxin_prepare:
@@ -179,7 +191,9 @@ jobs:
     with:
       platform: kunlunxin
       megatron_cache_key: ${{ needs.kunlunxin_prepare.outputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ needs.kunlunxin_prepare.outputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ needs.kunlunxin_prepare.outputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ needs.kunlunxin_prepare.outputs.te_fl_artifact_available }}
 
   all_tests:
     name: all_tests

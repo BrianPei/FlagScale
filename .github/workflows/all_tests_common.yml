@@ -26,11 +26,21 @@ on:
         type: string
         default: ''
         description: Megatron-LM-FL cache key from prepare_dependencies
+      megatron_artifact_available:
+        required: false
+        type: string
+        default: 'false'
+        description: Whether prepare_dependencies uploaded a same-run Megatron artifact
       te_fl_cache_key:
         required: false
         type: string
         default: ''
         description: TE-FL cache key from prepare_dependencies
+      te_fl_artifact_available:
+        required: false
+        type: string
+        default: 'false'
+        description: Whether prepare_dependencies uploaded a same-run TE-FL artifact
       ci_train_image:
         required: false
         type: string
@@ -291,7 +301,9 @@ jobs:
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
       env_path: ${{ needs.checkout_and_config.outputs.env_path_train }}
       megatron_cache_key: ${{ inputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ inputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ inputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ inputs.te_fl_artifact_available }}
       megatron_lm_fl_enabled: ${{ needs.checkout_and_config.outputs.megatron_lm_fl_enabled }}
       te_fl_enabled: ${{ needs.checkout_and_config.outputs.te_fl_enabled }}
       megatron_runtime_environment: ${{ needs.checkout_and_config.outputs.megatron_runtime_environment }}
@@ -317,7 +329,9 @@ jobs:
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
       env_path: ${{ needs.checkout_and_config.outputs.env_path_train }}
       megatron_cache_key: ${{ inputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ inputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ inputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ inputs.te_fl_artifact_available }}
       megatron_lm_fl_enabled: ${{ needs.checkout_and_config.outputs.megatron_lm_fl_enabled }}
       te_fl_enabled: ${{ needs.checkout_and_config.outputs.te_fl_enabled }}
       megatron_runtime_environment: ${{ needs.checkout_and_config.outputs.megatron_runtime_environment }}
@@ -343,7 +357,9 @@ jobs:
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
       env_path: ${{ needs.checkout_and_config.outputs.env_path_train }}
       megatron_cache_key: ${{ inputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ inputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ inputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ inputs.te_fl_artifact_available }}
       megatron_lm_fl_enabled: ${{ needs.checkout_and_config.outputs.megatron_lm_fl_enabled }}
       te_fl_enabled: ${{ needs.checkout_and_config.outputs.te_fl_enabled }}
       megatron_runtime_environment: ${{ needs.checkout_and_config.outputs.megatron_runtime_environment }}
@@ -427,7 +443,9 @@ jobs:
       env_name: ${{ needs.checkout_and_config.outputs.env_name_train }}
       env_path: ${{ needs.checkout_and_config.outputs.env_path_train }}
       megatron_cache_key: ${{ inputs.megatron_cache_key }}
+      megatron_artifact_available: ${{ inputs.megatron_artifact_available }}
       te_fl_cache_key: ${{ inputs.te_fl_cache_key }}
+      te_fl_artifact_available: ${{ inputs.te_fl_artifact_available }}
       megatron_lm_fl_enabled: ${{ needs.checkout_and_config.outputs.megatron_lm_fl_enabled }}
       te_fl_enabled: ${{ needs.checkout_and_config.outputs.te_fl_enabled }}
       megatron_runtime_environment: ${{ needs.checkout_and_config.outputs.megatron_runtime_environment }}
