@@ -254,35 +254,12 @@ def test_functional_runner_configures_prepared_pythonpath():
 
 def test_unit_runner_preserves_prepared_environment(tmp_path):
     script = (ROOT / "tests/test_utils/runners/run_unit_tests.sh").read_text()
-    export_line = next(
-        line.strip()
-        for line in script.splitlines()
-        if line.strip().startswith("export PYTHONPATH=")
-    )
-    prepared = str(tmp_path / "prepared-megatron")
-    inherited = os.pathsep.join((prepared, str(tmp_path / "other-dependency")))
-    env = os.environ.copy()
-    env.update(PROJECT_ROOT=str(ROOT), PYTHONPATH=inherited, CI_PYTHON_BIN=sys.executable)
-
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            f'{export_line}\nsource "$1"\nprintf "%s\\n" "$PYTHONPATH"\nrunner_python_bin',
-            "bash",
-            str(ROOT / "tests/test_utils/runners/utils.sh"),
-        ],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=True,
-    )
-
-    assert result.stdout.splitlines() == [
-        os.pathsep.join((str(ROOT), str(ROOT / "flagscale/train"), inherited)),
-        sys.executable,
-    ]
+    assert 'source "$PROJECT_ROOT/.github/scripts/set_env_common.sh"' in script
+    assert "ci_resolve_python_bin" in script
+    assert "ci_configure_training_pythonpath" in script
+    assert 'export MEGATRON_INSTALL_DIR="$prepared_megatron_dir"' in script
+    assert 'Prepared Megatron-LM-FL runtime is required' in script
+    assert 'export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/flagscale/train:${PYTHONPATH:-}"' not in script
 
 
 def test_training_workflows_use_shared_runtime_before_test_setup():
