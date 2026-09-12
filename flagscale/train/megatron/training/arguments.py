@@ -1478,7 +1478,7 @@ def validate_args(args, defaults={}):
     # model parallel memory optimization is enabled
     device_arch = get_device_arch_version()
     # Apply CUDA architecture-specific checks only when an architecture is available.
-    if cur_platform.name() == "cuda" \
+    if cur_platform.device_name() == "cuda" \
         and (args.tensor_model_parallel_size > 1 or args.context_parallel_size > 1) \
         and device_arch is not None and device_arch < 10:
         # CUDA_DEVICE_MAX_CONNECTIONS requirement no longer exists since the Blackwell architecture
@@ -1510,7 +1510,7 @@ def validate_args(args, defaults={}):
     # Setting FSDP communication groups for high priority streams for Blackwell and later architectures
     # Assigning high priority to communication streams ensures that communication kernels are scheduled
     # with higher priority, minimizing the exposed communication when it is overlapped with other computation kernels.
-    if cur_platform.name() == "cuda" \
+    if cur_platform.device_name() == "cuda" \
         and (args.use_torch_fsdp2 or args.use_megatron_fsdp) \
         and device_arch is not None and device_arch >= 10:
         if 'dp_cp' not in args.high_priority_stream_groups:
