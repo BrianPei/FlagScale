@@ -31,3 +31,5 @@ s60:
         - tests/unit_tests/test_spiky_loss_detector.py
         # The Enflame training image does not provide the optional VLA stack.
         - tests/unit_tests/models/vla
+        - tests/unit_tests/models/kerv/test_ops.py
+        - tests/unit_tests/models/kerv/test_optimization_runtime.py
