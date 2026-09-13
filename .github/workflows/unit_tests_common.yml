@@ -110,7 +110,7 @@ jobs:
       PROJECT_ROOT: ${{ github.workspace }}/FlagScale
       COVERAGE_REPORT_DIR: /tmp/coverage-report
     runs-on: ${{ fromJson(inputs.runs_on) }}
-    name: unit-${{ inputs.device }}
+    name: ${{ startsWith(inputs.device, 'unit-') && inputs.device || format('unit-{0}', inputs.device) }}
     container:
       image: ${{ inputs.image }}
       ports:
