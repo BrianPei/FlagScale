@@ -22,7 +22,7 @@ p800:
   tests:
     functional:
       train:
-        qwen3: ["kunlunxin0_6b_tp1_pp1"]
+        qwen3: ["0_6b_kunlunxin"]
       benchmark:
         qwen3: ["kunlunxin0_6b_tp1_pp1"]
     unit:

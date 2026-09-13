@@ -22,7 +22,7 @@ s5000:
   tests:
     functional:
       train:
-        qwen3: ["musa0_6b_tp1_pp1"]
+        qwen3: ["0_6b_musa"]
       hetero_train: {}
       benchmark:
         qwen3: ["musa0_6b_tp1_pp1"]

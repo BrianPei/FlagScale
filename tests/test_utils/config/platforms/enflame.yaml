@@ -22,7 +22,7 @@ s60:
   tests:
     functional:
       train:
-        qwen3: ["enflame0_6b_tp1_pp1"]
+        qwen3: ["0_6b_enflame"]
       benchmark:
         qwen3: ["enflame0_6b_tp1_pp1"]
     unit:

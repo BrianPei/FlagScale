@@ -36,7 +36,7 @@ c550:
     functional:
       # Add or remove test cases per model
       train:
-        qwen3: ["metax0_6b_tp1_pp1"]
+        qwen3: ["0_6b_metax"]
       hetero_train: {}
       benchmark:
         qwen3: ["metax0_6b_tp1_pp1"]
