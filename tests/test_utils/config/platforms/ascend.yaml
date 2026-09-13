@@ -35,7 +35,8 @@ ascend910:
       train:
         qwen3: ["0_6b_ascend"]
       hetero_train: {}
-      benchmark: {}
+      benchmark:
+        qwen3: ["0_6b_ascend"]
       inference:
         qwen3: ["4b_tp2_ascend"]
       serve:
