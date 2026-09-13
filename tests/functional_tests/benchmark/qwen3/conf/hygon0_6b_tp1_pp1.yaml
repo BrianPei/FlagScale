@@ -14,32 +14,35 @@
 
 defaults:
   - _self_
-  - train: 0_6b_metax
+  - train: hygon0_6b_tp1_pp1
 
 experiment:
-  exp_name: 0_6b_metax
-  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/0_6b_metax
+  exp_name: hygon0_6b_tp1_pp1
+  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/hygon0_6b_tp1_pp1
   task:
     type: train
     backend: megatron
     entrypoint: flagscale/train/megatron/train_gpt.py
   runner:
-    ssh_port: null
+    backend: torchrun
+    nnodes: 1
+    nproc_per_node: 1
+    rdzv_backend: static
+    no_shared_fs: false
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1
-    CUDA_VISIBLE_DEVICES: "0,1"
+    CUDA_VISIBLE_DEVICES: "0"
     CUDA_DEVICE_MAX_CONNECTIONS: 1
-    CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+    # Override the base image's vendor-specific setting with an algorithm
+    # accepted by the DTK NCCL compatibility layer on BW1000.
     NCCL_ALGO: "Ring"
-    NVTE_APPLY_QK_LAYER_SCALING: 0
+    # Megatron deterministic mode requires Transformer Engine to reject
+    # nondeterministic attention implementations.
     NVTE_ALLOW_NONDETERMINISTIC_ALGO: 0
-    NVTE_FLASH_ATTN: 0
-    NVTE_FUSED_ATTN: 0
-    CUDNN_BENCHMARK: "false"
-    CUDNN_DETERMINISTIC: "true"
+    TORCHINDUCTOR_WORKER_START: spawn
   cmds:
-    before_start: ''
+    before_start: ulimit -n 1048576
 action: run
 
 hydra:

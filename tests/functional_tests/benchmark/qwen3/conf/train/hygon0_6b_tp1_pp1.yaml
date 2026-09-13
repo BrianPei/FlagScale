@@ -15,17 +15,10 @@
 defaults:
   - data
 
-data:
-  data_path: /tmp/qwen3-enflame-data/qwen3_test_text_document
-  tokenizer:
-    tokenizer_path: /data/models/Qwen/Qwen3-0.6B
-
 system:
-  distributed_backend: nccl
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1
   disable_bias_linear: true
-  no_bias_dropout_fusion: true
   reset_position_ids: true
   reset_attention_mask: true
   qk_layernorm: true
@@ -36,6 +29,7 @@ system:
     accumulate_allreduce_grads_in_fp32: true
   logging:
     log_interval: 1
+    log_throughput: true
     no_log_loss_scale_to_tensorboard: true
   checkpoint:
     no_save_optim: true
@@ -47,13 +41,14 @@ system:
     tensorboard_log_interval: 999999
 
 model:
+  deterministic_mode: true
   transformer_impl: transformer_engine
   attention_backend: unfused
-  te_fl_prefer: reference
   no_check_for_nan_in_loss_and_grad: true
   no_gradient_accumulation_fusion: true
-  no_masked_softmax_fusion: true
-  no_persist_layer_norm: true
+  te_fl_prefer: flagos
+  # DTK exposes its RCCL runtime through PyTorch's NCCL-compatible backend.
+  distributed_backend: nccl
   num_layers: 28
   hidden_size: 1024
   ffn_hidden_size: 3072
@@ -79,9 +74,8 @@ model:
   eval_iters: 0
   eval_interval: 1000
   micro_batch_size: 1
-  global_batch_size: 2
+  global_batch_size: 8
   seed: 42
-
   optimizer:
     weight_decay: 0.1
     adam_beta1: 0.9

@@ -13,9 +13,10 @@
 # limitations under the License.
 
 defaults:
-  - data_hygon
+  - data
 
 system:
+  distributed_backend: mccl
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1
   disable_bias_linear: true
@@ -29,6 +30,7 @@ system:
     accumulate_allreduce_grads_in_fp32: true
   logging:
     log_interval: 1
+    log_throughput: true
     no_log_loss_scale_to_tensorboard: true
   checkpoint:
     no_save_optim: true
@@ -40,14 +42,13 @@ system:
     tensorboard_log_interval: 999999
 
 model:
-  deterministic_mode: true
   transformer_impl: transformer_engine
+  te_fl_prefer: reference
   attention_backend: unfused
   no_check_for_nan_in_loss_and_grad: true
   no_gradient_accumulation_fusion: true
-  te_fl_prefer: flagos
-  # DTK exposes its RCCL runtime through PyTorch's NCCL-compatible backend.
-  distributed_backend: nccl
+  no_masked_softmax_fusion: true
+  no_persist_layer_norm: true
   num_layers: 28
   hidden_size: 1024
   ffn_hidden_size: 3072
@@ -55,7 +56,7 @@ model:
   num_attention_heads: 16
   group_query_attention: true
   num_query_groups: 8
-  seq_length: 256
+  seq_length: 128
   max_position_embeddings: 40960
   norm_epsilon: 1e-6
   use_rotary_position_embeddings: true
@@ -69,12 +70,13 @@ model:
   attention_dropout: 0.0
   hidden_dropout: 0.0
   clip_grad: 1.0
-  train_iters: 10
+  train_iters: 3
   eval_iters: 0
   eval_interval: 1000
   micro_batch_size: 1
-  global_batch_size: 8
+  global_batch_size: 2
   seed: 42
+
   optimizer:
     weight_decay: 0.1
     adam_beta1: 0.9

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 defaults:
-  - data_kunlunxin
+  - data
 
 system:
   distributed_backend: nccl
@@ -30,6 +30,7 @@ system:
     accumulate_allreduce_grads_in_fp32: true
   logging:
     log_interval: 1
+    log_throughput: true
     no_log_loss_scale_to_tensorboard: true
   checkpoint:
     no_save_optim: true

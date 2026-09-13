@@ -20,10 +20,10 @@ bw1000:
   tests:
     functional:
       train:
-        qwen3: ["0_6b_hygon"]
+        qwen3: ["hygon0_6b_tp1_pp1"]
       hetero_train: {}
       benchmark:
-        qwen3: ["0_6b_hygon"]
+        qwen3: ["hygon0_6b_tp1_pp1"]
       inference:
         qwen3: ["4b_tp2_hygon"]
       serve:
