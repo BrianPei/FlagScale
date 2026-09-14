@@ -68,7 +68,11 @@ source "$1" --help
     )
     output = next(line for line in result.stdout.splitlines() if line.startswith("RUNNER_ENV="))
     actual = json.loads(output.removeprefix("RUNNER_ENV="))
-    assert actual["PYTHONPATH"].split(os.pathsep) == [str(ROOT), *paths]
+    assert actual["PYTHONPATH"].split(os.pathsep) == [
+        str(ROOT / ".github/scripts"),
+        str(ROOT),
+        *paths,
+    ]
     cache = Path(actual["HF_MODULES_CACHE"])
     assert cache.parent == tmp_path / "hf"
     assert cache.name.startswith("modules_")

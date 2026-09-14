@@ -50,7 +50,9 @@ ci_setup_isolated_hf_modules_cache() {
   export HF_HOME="$hf_home"
   export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/hub}"
   export HF_MODULES_CACHE="$HF_HOME/modules_${run_id}_${job_id}_$$"
+  export HF_MODULES_CACHE_ROOT="$HF_MODULES_CACHE"
   mkdir -p "$HF_MODULES_CACHE"
+  ci_prepend_pythonpath "$CI_SETUP_DIR"
   echo "[INFO] Using isolated transformers cache: $HF_MODULES_CACHE" >&2
 }
 
