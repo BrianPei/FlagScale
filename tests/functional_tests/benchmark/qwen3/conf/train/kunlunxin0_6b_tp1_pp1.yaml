@@ -44,6 +44,7 @@ system:
 model:
   deterministic_mode: true
   transformer_impl: transformer_engine
+  # Use vendor implementations validated on the Kunlunxin XPU runtime.
   te_fl_prefer: vendor
   enable_flag_gems: false
   attention_backend: unfused

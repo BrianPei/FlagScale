@@ -50,6 +50,7 @@ system:
 model:
   transformer_impl: transformer_engine
   attention_backend: unfused
+  # Use the reference path for the validated Enflame benchmark runtime.
   te_fl_prefer: reference
   no_check_for_nan_in_loss_and_grad: true
   no_gradient_accumulation_fusion: true

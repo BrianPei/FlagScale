@@ -44,9 +44,10 @@ model:
   deterministic_mode: true
   transformer_impl: transformer_engine
   attention_backend: unfused
+  # Use FlagOS implementations for the Hygon benchmark runtime.
+  te_fl_prefer: flagos
   no_check_for_nan_in_loss_and_grad: true
   no_gradient_accumulation_fusion: true
-  te_fl_prefer: flagos
   # DTK exposes its RCCL runtime through PyTorch's NCCL-compatible backend.
   distributed_backend: nccl
   num_layers: 28

@@ -51,6 +51,7 @@ model:
   deterministic_mode: true
   transformer_impl: transformer_engine
   attention_backend: unfused
+  # Use the reference path for the validated Ascend benchmark runtime.
   te_fl_prefer: reference
   te_fl_per_op: "rmsnorm_fwd=reference"
   te_fl_allow_vendors: "npu"

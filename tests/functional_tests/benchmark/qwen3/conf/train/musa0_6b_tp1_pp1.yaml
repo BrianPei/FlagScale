@@ -43,6 +43,7 @@ system:
 
 model:
   transformer_impl: transformer_engine
+  # Use the reference path for the validated MUSA benchmark runtime.
   te_fl_prefer: reference
   attention_backend: unfused
   no_check_for_nan_in_loss_and_grad: true
