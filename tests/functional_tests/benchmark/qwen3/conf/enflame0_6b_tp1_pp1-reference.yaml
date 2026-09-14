@@ -14,32 +14,35 @@
 
 defaults:
   - _self_
-  - train: metax0_6b_tp1_pp1
+  - train: enflame0_6b_tp1_pp1-reference
 
 experiment:
-  exp_name: metax0_6b_tp1_pp1
-  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/metax0_6b_tp1_pp1
+  exp_name: enflame0_6b_tp1_pp1-reference
+  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/enflame0_6b_tp1_pp1-reference
   task:
     type: train
     backend: megatron
     entrypoint: flagscale/train/megatron/train_gpt.py
   runner:
-    ssh_port: null
+    backend: torchrun
+    nnodes: 1
+    nproc_per_node: 2
+    rdzv_backend: static
+    no_shared_fs: false
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1
-    CUDA_VISIBLE_DEVICES: "0,1"
-    CUDA_DEVICE_MAX_CONNECTIONS: 1
-    CUBLAS_WORKSPACE_CONFIG: ":4096:8"
-    NCCL_ALGO: "Ring"
-    NVTE_APPLY_QK_LAYER_SCALING: 0
-    NVTE_ALLOW_NONDETERMINISTIC_ALGO: 0
-    NVTE_FLASH_ATTN: 0
-    NVTE_FUSED_ATTN: 0
-    CUDNN_BENCHMARK: "false"
-    CUDNN_DETERMINISTIC: "true"
+    FS_PLATFORM: enflame
+    MG_FL_PREFER: enflame
+    TORCHDYNAMO_DISABLE: "1"
+    TOKENIZERS_PARALLELISM: "false"
+    NVTE_FLASH_ATTN: "0"
+    NVTE_FUSED_ATTN: "0"
+    NVTE_UNFUSED_ATTN: "1"
+    TOPS_VISIBLE_DEVICES: "0,1"
   cmds:
     before_start: ''
+
 action: run
 
 hydra:

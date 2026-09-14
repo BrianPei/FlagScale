@@ -14,11 +14,11 @@
 
 defaults:
   - _self_
-  - train: ascend0_6b_tp1_pp1
+  - train: hygon0_6b_tp1_pp1-flagos
 
 experiment:
-  exp_name: ascend0_6b_tp1_pp1
-  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/ascend0_6b_tp1_pp1
+  exp_name: hygon0_6b_tp1_pp1-flagos
+  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/hygon0_6b_tp1_pp1-flagos
   task:
     type: train
     backend: megatron
@@ -26,20 +26,23 @@ experiment:
   runner:
     backend: torchrun
     nnodes: 1
-    nproc_per_node: 2
+    nproc_per_node: 1
     rdzv_backend: static
     no_shared_fs: false
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1
-    FS_PLATFORM: npu
-    ASCEND_RT_VISIBLE_DEVICES: "0,1"
-    HCCL_CONNECT_TIMEOUT: "1800"
+    CUDA_VISIBLE_DEVICES: "0"
+    CUDA_DEVICE_MAX_CONNECTIONS: 1
+    # Override the base image's vendor-specific setting with an algorithm
+    # accepted by the DTK NCCL compatibility layer on BW1000.
     NCCL_ALGO: "Ring"
-    NVTE_ALLOW_NONDETERMINISTIC_ALGO: "0"
+    # Megatron deterministic mode requires Transformer Engine to reject
+    # nondeterministic attention implementations.
+    NVTE_ALLOW_NONDETERMINISTIC_ALGO: 0
+    TORCHINDUCTOR_WORKER_START: spawn
   cmds:
-    before_start: ''
-
+    before_start: ulimit -n 1048576
 action: run
 
 hydra:

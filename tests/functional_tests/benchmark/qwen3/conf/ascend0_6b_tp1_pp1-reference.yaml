@@ -14,11 +14,11 @@
 
 defaults:
   - _self_
-  - train: enflame0_6b_tp1_pp1
+  - train: ascend0_6b_tp1_pp1-reference
 
 experiment:
-  exp_name: enflame0_6b_tp1_pp1
-  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/enflame0_6b_tp1_pp1
+  exp_name: ascend0_6b_tp1_pp1-reference
+  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/ascend0_6b_tp1_pp1-reference
   task:
     type: train
     backend: megatron
@@ -32,14 +32,11 @@ experiment:
   shell_cmds: null
   envs:
     HYDRA_FULL_ERROR: 1
-    FS_PLATFORM: enflame
-    MG_FL_PREFER: enflame
-    TORCHDYNAMO_DISABLE: "1"
-    TOKENIZERS_PARALLELISM: "false"
-    NVTE_FLASH_ATTN: "0"
-    NVTE_FUSED_ATTN: "0"
-    NVTE_UNFUSED_ATTN: "1"
-    TOPS_VISIBLE_DEVICES: "0,1"
+    FS_PLATFORM: npu
+    ASCEND_RT_VISIBLE_DEVICES: "0,1"
+    HCCL_CONNECT_TIMEOUT: "1800"
+    NCCL_ALGO: "Ring"
+    NVTE_ALLOW_NONDETERMINISTIC_ALGO: "0"
   cmds:
     before_start: ''
 
