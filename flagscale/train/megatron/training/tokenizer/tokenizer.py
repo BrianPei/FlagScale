@@ -9,8 +9,10 @@ megatron.core.tokenizers.utils.build_tokenizer. This module provides:
 """
 
 import os
+from contextlib import contextmanager
 from collections import OrderedDict
 from collections.abc import Mapping
+from hashlib import sha256
 
 from megatron.core.tokenizers.base_tokenizer import MegatronTokenizerBase
 from megatron.core.tokenizers.utils.build_tokenizer import (
@@ -26,6 +28,28 @@ from .rwkv_tokenization import RWKVTokenizer
 # ---------------------------------------------------------------------------
 
 _TOKENIZER_FACTORY_REGISTRY = {}
+
+
+@contextmanager
+def _hf_module_cache_lock(model_path):
+    """Serialize dynamic Hugging Face module loading across torchrun ranks."""
+    cache_dir = os.environ.get("HF_MODULES_CACHE")
+    if not cache_dir:
+        yield
+        return
+
+    from filelock import FileLock
+
+    os.makedirs(cache_dir, exist_ok=True)
+    key = sha256(os.path.abspath(str(model_path)).encode()).hexdigest()[:16]
+    lock = FileLock(os.path.join(cache_dir, f".flagscale-{key}.lock"), timeout=300)
+    with lock:
+        yield
+
+
+def _load_hf_pretrained(loader, model_path, **kwargs):
+    with _hf_module_cache_lock(model_path):
+        return loader.from_pretrained(model_path, **kwargs)
 
 
 def register_tokenizer_factory(tokenizer_type, factory_fn):
@@ -142,7 +166,8 @@ class _HFTokenizerFS(_FlagScaleTokenizerBase):
                     f"Local tokenizer directory does not exist or is not mounted: {tokenizer_path}"
                 )
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = _load_hf_pretrained(
+            AutoTokenizer,
             tokenizer_path,
             trust_remote_code=True,
             use_fast=use_fast,
@@ -267,7 +292,8 @@ class _Qwen2VLTokenizer(_FlagScaleTokenizerBase):
         super().__init__(tokenizer_path)
         from transformers import AutoTokenizer
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = _load_hf_pretrained(
+            AutoTokenizer,
             tokenizer_path,
             padding_side="right",
             use_fast=True,
@@ -287,7 +313,8 @@ class _Qwen2VLTokenizer(_FlagScaleTokenizerBase):
 
         from transformers import AutoProcessor
 
-        self.processor = AutoProcessor.from_pretrained(
+        self.processor = _load_hf_pretrained(
+            AutoProcessor,
             tokenizer_path,
             revision="main",
             token=None,
