@@ -24,7 +24,7 @@ p800:
       train:
         qwen3: ["0_6b_kunlunxin"]
       benchmark:
-        qwen3: ["kunlunxin0_6b_tp1_pp1"]
+        qwen3: ["kunlunxin0_6b_tp1_pp1-vendor"]
     unit:
       nproc_per_node: 2
       include: "*"

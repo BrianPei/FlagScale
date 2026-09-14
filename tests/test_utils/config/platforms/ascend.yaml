@@ -36,7 +36,7 @@ unit-910c:
         qwen3: ["0_6b_ascend"]
       hetero_train: {}
       benchmark:
-        qwen3: ["ascend0_6b_tp1_pp1"]
+        qwen3: ["ascend0_6b_tp1_pp1-reference"]
       inference:
         qwen3: ["4b_tp2_ascend"]
       serve:

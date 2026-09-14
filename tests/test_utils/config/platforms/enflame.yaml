@@ -24,7 +24,7 @@ s60:
       train:
         qwen3: ["0_6b_enflame"]
       benchmark:
-        qwen3: ["enflame0_6b_tp1_pp1"]
+        qwen3: ["enflame0_6b_tp1_pp1-reference"]
     unit:
       nproc_per_node: 2
       include: "*"

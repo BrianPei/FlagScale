@@ -39,7 +39,7 @@ c550:
         qwen3: ["0_6b_metax"]
       hetero_train: {}
       benchmark:
-        qwen3: ["metax0_6b_tp1_pp1"]
+        qwen3: ["metax0_6b_tp1_pp1-flagos"]
     unit:
       nproc_per_node: 2
       # Include patterns: "*" for all, or list specific paths
