@@ -14,11 +14,11 @@
 
 defaults:
   - _self_
-  - train: metax0_6b_tp1_pp1-flagos
+  - train: metax0_6b_tp1_pp1-reference
 
 experiment:
-  exp_name: metax0_6b_tp1_pp1-flagos
-  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/metax0_6b_tp1_pp1-flagos
+  exp_name: metax0_6b_tp1_pp1-reference
+  exp_dir: tests/functional_tests/benchmark/qwen3/test_results/metax0_6b_tp1_pp1-reference
   task:
     type: train
     backend: megatron
