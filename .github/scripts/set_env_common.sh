@@ -41,6 +41,19 @@ ci_resolve_python_bin() {
   export CI_PYTHON_BIN="$python_bin"
 }
 
+ci_setup_isolated_hf_modules_cache() {
+  local hf_home="${HF_HOME:-$HOME/.cache/huggingface}"
+  local run_id="${GITHUB_RUN_ID:-$$}"
+  local job_id="${GITHUB_JOB:-job}"
+  job_id="${job_id//[^A-Za-z0-9_.-]/_}"
+
+  export HF_HOME="$hf_home"
+  export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/hub}"
+  export HF_MODULES_CACHE="$HF_HOME/modules_${run_id}_${job_id}_$$"
+  mkdir -p "$HF_MODULES_CACHE"
+  echo "[INFO] Using isolated transformers cache: $HF_MODULES_CACHE" >&2
+}
+
 ci_prepend_pythonpath() {
   local entry="$1"
   local current="${PYTHONPATH:-}"

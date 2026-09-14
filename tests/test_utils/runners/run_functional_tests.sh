@@ -45,11 +45,7 @@ export PYTHONNOUSERSITE=1
 # trust_remote_code tokenizers are copied into this cache. Train and benchmark
 # jobs can start together on the same runner, so a shared modules directory is
 # unsafe and can produce partial QWenTokenizer imports.
-export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
-export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/hub}"
-export HF_MODULES_CACHE="${HF_HOME}/modules_${GITHUB_RUN_ID:-$$}_$(date +%s)_$$"
-mkdir -p "$HF_MODULES_CACHE"
-log_info "Using isolated transformers cache: $HF_MODULES_CACHE"
+ci_setup_isolated_hf_modules_cache
 
 # Defaults
 PLATFORM="default"
