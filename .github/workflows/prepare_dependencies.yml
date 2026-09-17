@@ -502,16 +502,9 @@ jobs:
         id: runtime_artifacts_available
         if: always() && (needs.resolve.outputs.megatron_enabled == 'true' || needs.resolve.outputs.te_fl_enabled == 'true')
         run: |
-          if [ "${{ steps.megatron_cache.outputs.cache-hit }}" = "true" ]; then
-            echo "megatron_available=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "megatron_available=true" >> "$GITHUB_OUTPUT"
-          fi
-          if [ "${{ steps.te_fl_cache.outputs.cache-hit }}" = "true" ]; then
-            echo "te_fl_available=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "te_fl_available=true" >> "$GITHUB_OUTPUT"
-          fi
+          # Always mark artifacts as available since we always upload them
+          echo "megatron_available=true" >> "$GITHUB_OUTPUT"
+          echo "te_fl_available=true" >> "$GITHUB_OUTPUT"
 
       - name: Save TE-FL wheel cache
         if: needs.resolve.outputs.te_fl_enabled == 'true' && steps.te_fl_cache.outputs.cache-hit != 'true'
@@ -521,10 +514,11 @@ jobs:
           path: te-fl-wheel
           key: ${{ steps.te_fl_cache_key.outputs.key }}
 
-      # Upload artifacts only on cache misses for same-run handoff when a fork
-      # PR cannot read the prepare job's cache.
+      # Upload artifacts for same-run handoff between jobs.
+      # Always upload even on cache hits to support fork PRs that cannot
+      # access the prepare job's cache due to cross-repo isolation.
       - name: Upload prepared Megatron artifact
-        if: needs.resolve.outputs.megatron_enabled == 'true' && steps.megatron_cache.outputs.cache-hit != 'true'
+        if: needs.resolve.outputs.megatron_enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: prepared-megatron-${{ inputs.platform }}-${{ github.run_id }}
@@ -532,7 +526,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload prepared TE-FL artifact
-        if: needs.resolve.outputs.te_fl_enabled == 'true' && steps.te_fl_cache.outputs.cache-hit != 'true'
+        if: needs.resolve.outputs.te_fl_enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: prepared-te-fl-${{ inputs.platform }}-${{ github.run_id }}
