@@ -49,12 +49,21 @@ on:
           - metax
           - musa
           - kunlunxin
+          - ppu
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.actor }}
   cancel-in-progress: true
 
 jobs:
+  ppu_tests:
+    name: PPU training tests
+    # Opt-in until a real PPU image and reviewed loss baseline are promoted.
+    if: github.event_name == 'workflow_dispatch' && inputs.platform == 'ppu'
+    uses: ./.github/workflows/all_tests_common.yml
+    with:
+      platform: ppu
+
   cuda_tests:
     name: CUDA tests
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'cuda'
@@ -114,12 +123,19 @@ jobs:
       - metax_tests
       - musa_tests
       - kunlunxin_tests
+      - ppu_tests
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Verify workflow status
         run: |
           failed=false
+
+          if [ "${{ needs.ppu_tests.result }}" != "success" ] && \
+             [ "${{ needs.ppu_tests.result }}" != "skipped" ]; then
+            echo "PPU training tests failed"
+            failed=true
+          fi
 
           if [ "${{ needs.cuda_tests.result }}" != "success" ] && \
              [ "${{ needs.cuda_tests.result }}" != "skipped" ]; then

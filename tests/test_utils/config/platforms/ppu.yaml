@@ -1,0 +1,18 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+device_types: [ppu]
+ppu:
+  name: ppu
+  tests:
+    functional:
+      train:
+        qwen3: [0_6b_ppu]
+      hetero_train: {}
+      inference: {}
+      serve: {}
+      benchmark: {}
+      rl: {}
+    unit:
+      nproc_per_node: 2
+      include: "*"
+      exclude: []

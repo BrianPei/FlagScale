@@ -1,0 +1,79 @@
+# Copyright 2026 FlagOS Contributors
+# Licensed under the Apache License, Version 2.0.
+name: PPU training image
+on:
+  push:
+    branches: [ppu-test-0917]
+    paths:
+      - .github/workflows/ppu_train.yml
+      - .github/configs/ppu.yml
+      - .github/configs/image_sources.yml
+      - docker/ppu/**
+      - requirements/common.txt
+      - requirements/ppu/**
+      - tests/functional_tests/train/qwen3/conf/0_6b_ppu.yaml
+      - tests/functional_tests/train/qwen3/conf/train/0_6b_ppu.yaml
+      - tests/functional_tests/train/qwen3/gold_values/0_6b_ppu.json
+      - tests/test_utils/config/platforms/ppu.yaml
+      - tools/install/ppu/**
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Inspect base, build candidate, smoke short training, or accept candidate
+        type: choice
+        options: [inspect, build, smoke, accept]
+        default: inspect
+        required: true
+      image:
+        description: Candidate tag for smoke/accept (empty for inspect/build)
+        type: string
+        default: ''
+      push:
+        description: Publish only after accept succeeds
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ppu-training-flagcicd-810e
+  cancel-in-progress: false
+jobs:
+  ppu:
+    if: github.ref == 'refs/heads/ppu-test-0917'
+    runs-on: [flagcicd-810e]
+    timeout-minutes: 180
+    env:
+      OPERATION: ${{ inputs.operation || 'inspect' }}
+      CANDIDATE: ${{ inputs.image }}
+      PUBLISH: ${{ inputs.push || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated YAML reader
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) arch=amd64 ;;
+            aarch64) arch=arm64 ;;
+            *) echo 'Unsupported runner CPU architecture'; exit 1 ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/ppu-tools"
+          curl --fail --location --retry 3 \
+            "https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_$arch" \
+            -o "$RUNNER_TEMP/ppu-tools/yq"
+          chmod +x "$RUNNER_TEMP/ppu-tools/yq"
+          echo "$RUNNER_TEMP/ppu-tools" >> "$GITHUB_PATH"
+      - name: Inspect, build or accept PPU training image
+        shell: bash
+        run: bash tools/install/ppu/image_pipeline.sh
+      - name: Upload inventory and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ppu-training-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ppu-artifacts/
+            tests/functional_tests/train/qwen3/test_results/0_6b_ppu/
+          if-no-files-found: warn
