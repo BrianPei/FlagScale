@@ -19,3 +19,8 @@ ppu:
         # VLA tests require a separate multimodal dependency stack that is not
         # part of the PPU Qwen3 training image.
         - tests/unit_tests/models/vla
+        # This test builds a logical mesh larger than the two-rank PPU CI job.
+        - tests/unit_tests/test_parallel_context.py::test_parallel_config
+        # Qwen3.5 tokenizer tests require the optional Megatron Energon stack;
+        # the initial PPU acceptance matrix supports Qwen3 0.6B only.
+        - tests/unit_tests/train/megatron/test_qwen35_tokenizer.py
