@@ -15,4 +15,7 @@ ppu:
     unit:
       nproc_per_node: 2
       include: "*"
-      exclude: []
+      exclude:
+        # VLA tests require a separate multimodal dependency stack that is not
+        # part of the PPU Qwen3 training image.
+        - tests/unit_tests/models/vla
