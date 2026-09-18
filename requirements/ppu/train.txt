@@ -11,6 +11,7 @@ tiktoken>=0.12.0
 einops>=0.8.1
 tensorboard>=2.19.0
 psutil>=5.9.8
+nvdlfw-inspect==0.2.2
 coverage==7.6.10
 pytest==8.3.5
 pytest-mock==3.14.0
