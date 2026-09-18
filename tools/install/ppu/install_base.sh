@@ -12,6 +12,8 @@ command -v c++
 command -v make
 python -m pip --version
 mkdir -p /opt/flagscale/ppu
+# Preserve the vendor image's pre-existing dependency state as the baseline.
+python -m pip check > /opt/flagscale/ppu/vendor-pip-check.txt 2>&1 || true
 python - <<'PY' > /opt/flagscale/ppu/vendor-constraints.txt
 import importlib.metadata as md
 for dist in md.distributions():

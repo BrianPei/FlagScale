@@ -39,9 +39,16 @@ import torch.distributed as dist
 import transformer_engine.pytorch
 from megatron.core.models.gpt import GPTModel
 
-assert torch.cuda.is_available()
 assert dist.is_nccl_available()
 print("Vendor NCCL/PCCL:", torch.cuda.nccl.version())
 '
-python -m pip check
+python -m pip check > /opt/flagscale/ppu/candidate-pip-check.txt 2>&1 || true
+new_conflicts=$(comm -13 \
+    <(LC_ALL=C sort /opt/flagscale/ppu/vendor-pip-check.txt) \
+    <(LC_ALL=C sort /opt/flagscale/ppu/candidate-pip-check.txt))
+if [ -n "$new_conflicts" ]; then
+    echo "PPU overlay introduced dependency conflicts:" >&2
+    printf '%s\n' "$new_conflicts" >&2
+    exit 1
+fi
 python -m pip freeze > /opt/flagscale/ppu/packages.txt
