@@ -1,45 +1,10 @@
 #!/usr/bin/env python3
-"""PPU inventory (no required imports), or fail-closed device/TE smoke tests."""
+"""Device, collective and TE checks for the shared image-build contract."""
 
 import argparse
-import contextlib
-import importlib
-import importlib.metadata as metadata
-import json
-import io
 import os
-import platform
-import subprocess
-import sys
 from datetime import timedelta
 from pathlib import Path
-
-
-def inventory():
-    report = {"python": sys.version, "executable": sys.executable, "arch": platform.machine()}
-    for name, command in {
-        "os": ["cat", "/etc/os-release"],
-        "cpu": ["lscpu"],
-        "memory": ["free", "-h"],
-        "driver_firmware_devices": ["ppu-smi"],
-        "runtime_libraries": ["ldconfig", "-p"],
-    }.items():
-        try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
-            report[name] = {"returncode": result.returncode, "output": result.stdout + result.stderr}
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            report[name] = {"unavailable": str(exc)}
-    report["packages"] = {d.metadata["Name"]: d.version for d in metadata.distributions()}
-    report["modules"] = {}
-    for name in ("torch", "torch_cpu", "torch_ppu", "flagcx", "megatron.core", "transformer_engine", "transformer_engine_torch"):
-        captured = io.StringIO()
-        try:
-            with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
-                module = importlib.import_module(name)
-            report["modules"][name] = {"path": getattr(module, "__file__", None), "diagnostics": captured.getvalue()}
-        except Exception as exc:
-            report["modules"][name] = {"unavailable": str(exc)}
-    print(json.dumps(report, indent=2, ensure_ascii=False))
 
 
 def smoke(training):
@@ -49,7 +14,10 @@ def smoke(training):
     rank = int(os.environ["LOCAL_RANK"])
     world = int(os.environ["WORLD_SIZE"])
     assert world >= 2, "PPU collective acceptance requires at least two ranks"
-    assert torch.cuda.is_available() and torch.cuda.device_count() >= world
+    expected_devices = int(os.environ["EXPECTED_DEVICE_COUNT"])
+    assert expected_devices >= world
+    assert torch.cuda.is_available() and torch.cuda.device_count() >= expected_devices
+    print("torch:", torch.__version__, "devices:", torch.cuda.device_count(), flush=True)
     torch.cuda.set_device(rank)
     print("PPU device:", rank, torch.cuda.get_device_name(rank), flush=True)
     device = torch.device("cuda", rank)
@@ -63,10 +31,11 @@ def smoke(training):
         dist.all_reduce(value)
         assert value.item() == world * (world + 1) / 2
         if training:
-            from megatron.core.extensions.transformer_engine import HAVE_TE
-            from megatron.core.models.gpt import GPTModel
             from transformer_engine.plugin.core import get_manager
             from transformer_engine.pytorch import Linear
+
+            from megatron.core.extensions.transformer_engine import HAVE_TE
+            from megatron.core.models.gpt import GPTModel
 
             assert HAVE_TE and GPTModel is not None
             selected = get_manager().get_selected_impl_id("generic_gemm")
@@ -78,20 +47,20 @@ def smoke(training):
             assert torch.isfinite(output).all().item()
             assert inputs.grad is not None and torch.isfinite(inputs.grad).all().item()
             assert layer.weight.grad is not None and torch.isfinite(layer.weight.grad).all().item()
-            for package in ("Megatron-LM-FL", "TransformerEngine-FL"):
-                path = Path("/opt/flagscale/deps") / package
-                print(package, subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip())
+            for package in ("megatron-lm-fl", "transformer-engine-fl"):
+                revision_file = Path("/opt/flagscale/deps") / f".{package}.ref"
+                print(package, revision_file.read_text().strip())
         torch.cuda.synchronize()
-        print(f"rank={rank}: collective and {'TE backward' if training else 'device backward'} PASS", flush=True)
+        print(
+            f"rank={rank}: collective and {'TE backward' if training else 'device backward'} PASS",
+            flush=True,
+        )
     finally:
         dist.destroy_process_group()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("inventory", "device", "train"))
+    parser.add_argument("mode", choices=("device", "train"))
     args = parser.parse_args()
-    if args.mode == "inventory":
-        inventory()
-    else:
-        smoke(args.mode == "train")
+    smoke(args.mode == "train")

@@ -15,6 +15,10 @@
 defaults:
   - data
 
+data:
+  # Keep generated indices outside the read-only dataset mount.
+  data_cache_path: /tmp/flagscale-data-cache/qwen3-0_6b_ppu
+
 system:
   distributed_backend: nccl
   tensor_model_parallel_size: 1

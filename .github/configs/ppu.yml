@@ -4,7 +4,7 @@ hardware_name: ppu
 display_name: "T-Head PPU training"
 runner_labels: [flagcicd-810e]
 # Intentionally unpublished: fill only after PPU acceptance and digest verification.
-# Use ppu_train.yml to inspect/build/test candidates before promotion.
+# Build candidates through the shared build_image.yml workflow.
 ci_train_image: ""
 pkg_mgr: pip
 env_path: ""
