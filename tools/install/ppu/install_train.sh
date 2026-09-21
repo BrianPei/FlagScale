@@ -50,8 +50,6 @@ for package in TransformerEngine-FL Megatron-LM-FL; do
         "$pip_cmd install --no-build-isolation --no-deps '$deps/$package'"
 done
 [ "$DEBUG" = true ] && exit 0
-printf '%s\n' "$FLAGSCALE_TE_REF" > "$deps/.transformer-engine-fl.ref"
-printf '%s\n' "$FLAGSCALE_MEGATRON_REF" > "$deps/.megatron-lm-fl.ref"
 # The vendor torch exposes PPU through CUDA-compatible APIs and routes the
 # PyTorch NCCL backend to PCCL. Never replace it with a public torch wheel.
 python -c '

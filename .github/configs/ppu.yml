@@ -11,6 +11,37 @@ env_path: ""
 env_names:
   train: ""
 
+setup_script: .github/scripts/set_env_ppu.sh
+test_matrix:
+  unit:
+    nproc_per_node: 2
+
+dependencies:
+  megatron_lm_fl:
+    enabled: true
+    repository: flagos-ai/Megatron-LM-FL
+    ref: main
+    runtime:
+      install_mode: pythonpath
+      environment: {}
+  te_fl:
+    enabled: true
+    repository: flagos-ai/TransformerEngine-FL
+    ref: main
+    build_mode: python
+    build_environment:
+      TE_FL_SKIP_CUDA: "1"
+      NVTE_WITH_NCCL_EP: "0"
+    runtime:
+      environment:
+        TE_FL_SKIP_CUDA: "1"
+        TE_FL_PREFER: reference
+        NVTE_FLASH_ATTN: "0"
+        NVTE_FUSED_ATTN: "0"
+        NVTE_UNFUSED_ATTN: "1"
+      install_pip_args: []
+      pip_packages: []
+
 image_build:
   enabled: true
   registry: harbor.baai.ac.cn

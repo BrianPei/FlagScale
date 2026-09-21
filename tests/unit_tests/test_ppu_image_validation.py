@@ -1,12 +1,14 @@
 # Copyright 2026 FlagOS Contributors
 # Licensed under the Apache License, Version 2.0.
 
+import ast
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 @pytest.mark.parametrize("phase", ["base", "train"])
@@ -44,6 +46,28 @@ def test_ppu_dockerfile_uses_common_installer():
     assert "COPY flagscale" not in dockerfile
 
 
+def test_ppu_uses_shared_prepared_runtime():
+    root = Path(__file__).parents[2]
+    config = yaml.safe_load((root / ".github/configs/ppu.yml").read_text())
+    jobs = yaml.safe_load((root / ".github/workflows/all_tests.yml").read_text())["jobs"]
+    assert (root / config["setup_script"]).is_file()
+    assert config["test_matrix"]["unit"]["nproc_per_node"] == 2
+    assert config["dependencies"]["megatron_lm_fl"]["enabled"] is True
+    assert config["dependencies"]["te_fl"]["enabled"] is True
+    assert config["dependencies"]["te_fl"]["build_mode"] == "python"
+    assert jobs["ppu_prepare"]["uses"] == "./.github/workflows/prepare_dependencies.yml"
+    assert jobs["ppu_tests"]["needs"] == "ppu_prepare"
+    for field in (
+        "megatron_cache_key",
+        "megatron_artifact_available",
+        "te_fl_cache_key",
+        "te_fl_artifact_available",
+    ):
+        assert jobs["ppu_tests"]["with"][field] == f"${{{{ needs.ppu_prepare.outputs.{field} }}}}"
+    for name in ("probe.py", "run_container.sh", "image_pipeline.sh", "accept_train.sh"):
+        assert not (root / "tools/install/ppu" / name).exists()
+
+
 @pytest.mark.parametrize(
     "phase,nproc,devices,probe_status,expected_status",
     [
@@ -65,9 +89,13 @@ def test_ppu_image_validation_contract(
     shutil.copyfile(root / "tools/install/ppu/validate_image_build.sh", script)
     # Stub the external processes, leaving the actual hook's dispatch and validation intact.
     for name, body in {
-        "docker": 'printf "docker:%s\\n" "$*"\n',
+        "docker": (
+            'printf "%s\\n" "$1" >> "$DOCKER_CALLS"\n'
+            'printf "docker:%s\\n" "$*"\n'
+            'if [ "$1" = run ]; then cat > "$SMOKE_FILE"; exit "$PROBE_STATUS"; fi\n'
+        ),
         "timeout": 'shift\nexec "$@"\n',
-        "run_container.sh": 'printf "container:%s\\n" "$*"\nexit "$PROBE_STATUS"\n',
+        "yq": 'printf "%s\\n" "--device=/dev/test-ppu"\n',
     }.items():
         stub = tmp_path / name
         stub.write_text("#!/bin/bash\n" + body)
@@ -84,6 +112,9 @@ def test_ppu_image_validation_contract(
             "IMAGE_BUILD_RUNTIME_SMOKE_NPROC": nproc,
             "IMAGE_BUILD_RUNTIME_DEVICE_COUNT": devices,
             "PROBE_STATUS": str(probe_status),
+            "YQ_BIN": str(tmp_path / "yq"),
+            "SMOKE_FILE": str(tmp_path / "smoke.py"),
+            "DOCKER_CALLS": str(tmp_path / "docker-calls"),
         },
         capture_output=True,
         text=True,
@@ -91,10 +122,13 @@ def test_ppu_image_validation_contract(
     )
     assert result.returncode == expected_status, result.stderr
     if expected_status == 2:
-        assert "container:" not in result.stdout
         assert "docker:" not in result.stdout
     else:
         image, mode = ("base:test", "device") if phase == "pre" else ("candidate:test", "train")
-        assert f"container:{image} env EXPECTED_DEVICE_COUNT={devices}" in result.stdout
-        assert f"--nproc-per-node={nproc} tools/install/ppu/probe.py {mode}" in result.stdout
+        assert f"--entrypoint bash {image}" in result.stdout
+        assert f"--env EXPECTED_DEVICE_COUNT={devices}" in result.stdout
+        assert f"--env SMOKE_NPROC={nproc} --env SMOKE_MODE={mode}" in result.stdout
+        assert "--device=/dev/test-ppu" in result.stdout
         assert ("docker:pull base:test" in result.stdout) == (phase == "pre")
+        assert (tmp_path / "docker-calls").read_text().splitlines()[-1] == "rm"
+        ast.parse((tmp_path / "smoke.py").read_text())
