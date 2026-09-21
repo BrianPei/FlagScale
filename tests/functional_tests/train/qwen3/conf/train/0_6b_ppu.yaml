@@ -14,6 +14,7 @@
 
 defaults:
   - data
+  - _self_
 
 data:
   # Keep generated indices outside the read-only dataset mount.
@@ -47,6 +48,7 @@ system:
 model:
   deterministic_mode: true
   transformer_impl: transformer_engine
+  te_fl_prefer: reference
   attention_backend: unfused
   no_check_for_nan_in_loss_and_grad: true
   no_gradient_accumulation_fusion: true

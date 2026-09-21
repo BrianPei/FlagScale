@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0.
 
 import ast
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -9,6 +10,101 @@ from pathlib import Path
 
 import pytest
 import yaml
+
+
+@pytest.mark.parametrize(
+    "phase,overrides,required,absent",
+    [
+        ("base", {"FLAGSCALE_INSTALL_BASE": "false"}, [], ["pip install"]),
+        (
+            "base",
+            {"FLAGSCALE_INSTALL_BASE": "false", "FLAGSCALE_PIP_DEPS": "hydra-core"},
+            ["install --root-user-action=ignore hydra-core"],
+            ["base.txt", "git"],
+        ),
+        ("train", {"FLAGSCALE_ONLY_PIP": "true"}, ["train.txt"], ["git", "--no-deps"]),
+        ("train", {"FLAGSCALE_INSTALL_TASK": "false"}, [], ["pip install", "git"]),
+        (
+            "train",
+            {"FLAGSCALE_INSTALL_TASK": "false", "FLAGSCALE_SRC_DEPS": "megatron-lm"},
+            ["Megatron-LM-FL.git", "--no-deps"],
+            ["TransformerEngine-FL.git", "train.txt"],
+        ),
+        (
+            "train",
+            {"FLAGSCALE_INSTALL_TASK": "false", "FLAGSCALE_SRC_DEPS": "transformer-engine"},
+            ["TransformerEngine-FL.git", "--no-deps"],
+            ["Megatron-LM-FL.git", "train.txt"],
+        ),
+        (
+            "train",
+            {"FLAGSCALE_INSTALL_TASK": "false", "FLAGSCALE_PIP_DEPS": "sentencepiece"},
+            ["install --root-user-action=ignore sentencepiece"],
+            ["train.txt", "git"],
+        ),
+    ],
+)
+def test_ppu_installer_respects_common_phase_controls(tmp_path, phase, overrides, required, absent):
+    root = Path(__file__).parents[2]
+    result = subprocess.run(
+        ["bash", str(root / f"tools/install/ppu/install_{phase}.sh"), "--debug"],
+        env={
+            **os.environ,
+            "FLAGSCALE_PKG_MGR": "pip",
+            "FLAGSCALE_DEPS": str(tmp_path / "deps"),
+            "FLAGSCALE_MEGATRON_REF": "a" * 40
+            if overrides.get("FLAGSCALE_SRC_DEPS") == "megatron-lm"
+            else "",
+            "FLAGSCALE_TE_REF": "b" * 40
+            if overrides.get("FLAGSCALE_SRC_DEPS") == "transformer-engine"
+            else "",
+            **overrides,
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    for text in required:
+        assert text in result.stderr
+    for text in absent:
+        assert text not in result.stderr
+    assert not (tmp_path / "deps").exists()
+
+
+def test_ppu_runner_selection_and_training_config():
+    from hydra import compose, initialize_config_dir
+
+    root = Path(__file__).parents[2]
+    spec = importlib.util.spec_from_file_location(
+        "parse_ppu_config", root / "tests/test_utils/runners/parse_config.py"
+    )
+    parser = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(parser)
+    assert parser.get_device_types("ppu") == ["ppu"]
+    cases = parser.get_functional_tests("ppu", task="train")["train"]["qwen3"]
+    unit = parser.get_unit_tests_config("ppu")
+    platform = yaml.safe_load((root / ".github/configs/ppu.yml").read_text())
+    assert unit["nproc_per_node"] == platform["test_matrix"]["unit"]["nproc_per_node"]
+    assert "tests/unit_tests/train/megatron/test_qwen35_tokenizer.py" not in unit["exclude"]
+    runtime = platform["dependencies"]["te_fl"]["runtime"]
+    assert "megatron-energon[av_decode]~=7.0" in runtime["pip_packages"]
+    with initialize_config_dir(
+        config_dir=str(root / "tests/functional_tests/train/qwen3/conf"), version_base=None
+    ):
+        for case in cases:
+            config = compose(config_name=case)
+            assert (
+                config.train.model.te_fl_prefer
+                == runtime["environment"]["TE_FL_PREFER"]
+                == "reference"
+            )
+            assert config.train.data.data_cache_path.startswith("/tmp/")
+            assert config.train.data.data_path.endswith("pile_wikipedia_demo/pile_wikipedia_demo")
+            assert config.experiment.exp_dir.endswith(case)
+            assert config.train.model.attention_backend == "unfused"
+            assert config.train.system.distributed_backend == "nccl"
+            assert "TE_FL_PREFER" not in config.experiment.envs
 
 
 @pytest.mark.parametrize("phase", ["base", "train"])

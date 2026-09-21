@@ -15,3 +15,4 @@ nvdlfw-inspect==0.2.2
 coverage==7.6.10
 pytest==8.3.5
 pytest-mock==3.14.0
+megatron-energon[av_decode]~=7.0
