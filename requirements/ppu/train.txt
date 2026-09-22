@@ -16,3 +16,5 @@ coverage==7.6.10
 pytest==8.3.5
 pytest-mock==3.14.0
 megatron-energon[av_decode]~=7.0
+# Preserve compatibility with the vendor image's aliyun-python-sdk-core.
+jmespath>=0.10.0,<1.0.0

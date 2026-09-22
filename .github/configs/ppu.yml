@@ -41,7 +41,7 @@ dependencies:
         NVTE_FUSED_ATTN: "0"
         NVTE_UNFUSED_ATTN: "1"
       install_pip_args: []
-      pip_packages: ["megatron-energon[av_decode]~=7.0"]
+      pip_packages: ["megatron-energon[av_decode]~=7.0", "jmespath>=0.10.0,<1.0.0"]
 
 image_build:
   enabled: true
