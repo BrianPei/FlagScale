@@ -3,9 +3,9 @@
 hardware_name: ppu
 display_name: "T-Head PPU training"
 runner_labels: [flagcicd-810e]
-# Intentionally unpublished: fill only after PPU acceptance and digest verification.
+# Validated PPU image: 066dc31baa9c-ppu-final-20260922-dev.
 # Build candidates through the shared build_image.yml workflow.
-ci_train_image: ""
+ci_train_image: harbor.baai.ac.cn/flagos-dev/flagscale-train@sha256:ffc2826053f7eb5b2764a65b91b86f4da0f2c233ae726acee1c6826ba5509940
 pkg_mgr: pip
 env_path: ""
 env_names:
