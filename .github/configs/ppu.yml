@@ -67,8 +67,8 @@ image_build:
 # Provision these host directories before running acceptance.
 # Their contents are not inferred from the FlagCX base image.
 container_volumes:
-  - /mnt/flagscale/data:/home/gitlab-runner/data:ro
-  - /mnt/flagscale/tokenizers:/home/gitlab-runner/tokenizers:ro
+  - /home/gitlab-runner/baai_datasets:/home/gitlab-runner/data:ro
+  - /home/gitlab-runner/baai_tokenizers:/home/gitlab-runner/tokenizers:ro
 # Device layout from flagos-ai/FlagCX de5e09d62008c659c6e43d25225fc7ff207f89cd.
 # No --network=host here: GitHub container jobs supply their own network.
 container_options: >-
