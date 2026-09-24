@@ -7,6 +7,8 @@ ppu:
     functional:
       train:
         qwen3: [0_6b_ppu]
+      benchmark:
+        qwen3: [ppu0_6b_tp1_pp1-reference]
     unit:
       nproc_per_node: 2
       include: "*"
