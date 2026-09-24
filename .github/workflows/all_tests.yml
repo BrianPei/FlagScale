@@ -56,17 +56,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # PPU stays opt-in until its image and training baseline are validated.
+  # PPU Platform
   ppu_prepare:
     name: PPU / prepare-deps
-    if: github.event_name == 'workflow_dispatch' && inputs.platform == 'ppu'
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ppu'
     uses: ./.github/workflows/prepare_dependencies.yml
     with:
       platform: ppu
 
   ppu_tests:
     name: PPU / tests
-    if: github.event_name == 'workflow_dispatch' && inputs.platform == 'ppu'
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ppu'
     needs: ppu_prepare
     uses: ./.github/workflows/all_tests_common.yml
     with:
