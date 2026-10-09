@@ -204,18 +204,36 @@ jobs:
           fail-on-cache-miss: false
 
       - name: Restore prepared Megatron artifact
-        if: inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != '' && steps.megatron_cache_restore.outputs.cache-hit != 'true' && inputs.megatron_artifact_available == 'true'
+        if: inputs.platform != 'cuda' && inputs.megatron_lm_fl_enabled == 'true' && inputs.megatron_cache_key != '' && steps.megatron_cache_restore.outputs.cache-hit != 'true' && inputs.megatron_artifact_available == 'true'
         uses: actions/download-artifact@v4
         with:
           name: prepared-megatron-${{ inputs.platform }}-${{ github.run_id }}
           path: megatron-lm-fl-install
 
       - name: Restore prepared TE-FL artifact
-        if: inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != '' && steps.te_fl_cache_restore.outputs.cache-hit != 'true' && inputs.te_fl_artifact_available == 'true'
+        if: inputs.platform != 'cuda' && inputs.te_fl_enabled == 'true' && inputs.te_fl_cache_key != '' && steps.te_fl_cache_restore.outputs.cache-hit != 'true' && inputs.te_fl_artifact_available == 'true'
         uses: actions/download-artifact@v4
         with:
           name: prepared-te-fl-${{ inputs.platform }}-${{ github.run_id }}
           path: te-fl-wheel
+
+      - name: Recover and validate CUDA megatron runtime
+        if: inputs.platform == 'cuda' && inputs.megatron_lm_fl_enabled == 'true'
+        timeout-minutes: 15
+        uses: ./FlagScale/.github/actions/restore-cuda-runtime
+        with:
+          kind: megatron
+          artifact-name: prepared-megatron-cuda-${{ github.run_id }}
+          artifact-available: ${{ inputs.megatron_artifact_available }}
+
+      - name: Recover and validate CUDA te runtime
+        if: inputs.platform == 'cuda' && inputs.te_fl_enabled == 'true'
+        timeout-minutes: 15
+        uses: ./FlagScale/.github/actions/restore-cuda-runtime
+        with:
+          kind: te
+          artifact-name: prepared-te-fl-cuda-${{ github.run_id }}
+          artifact-available: ${{ inputs.te_fl_artifact_available }}
 
       - name: Validate prepared training runtime
         if: inputs.megatron_lm_fl_enabled == 'true' || inputs.te_fl_enabled == 'true'
