@@ -536,6 +536,26 @@ def test_probe_reports_invalid_and_strict_mode_fails(tmp_path):
     assert result.returncode == 1
 
 
+def evaluate_action_condition(condition, context):
+    """Evaluate only the comparison subset used here; reject all other syntax."""
+    comparisons = []
+    for clause in condition.split("&&"):
+        match = re.fullmatch(
+            r"\s*((?:inputs\.[\w-]+|steps\.[\w-]+\.outputs\.[\w-]+))"
+            r"\s*(==|!=)\s*'([^']*)'\s*",
+            clause,
+        )
+        if match is None:
+            pytest.fail(f"Unsupported action condition: {condition!r}")
+        comparisons.append(match.groups())
+    # Validate every clause before evaluating: short-circuiting must not hide
+    # unsupported syntax in a later clause.
+    return all(
+        (context.get(key, "") == value) if operator == "==" else (context.get(key, "") != value)
+        for key, operator, value in comparisons
+    )
+
+
 @pytest.mark.parametrize(
     "cached,available,success_at,expected_downloads,passed",
     [
@@ -566,14 +586,7 @@ def test_action_recovery(tmp_path, cached, available, success_at, expected_downl
     action = yaml.safe_load(ACTION.read_text())
     for index, step in enumerate(action["runs"]["steps"]):
         if "if" in step:
-            clauses = step["if"].split(" && ")
-
-            def matches(clause):
-                key, operator, value = clause.split()
-                equal = context.get(key, "") == value.strip("'")
-                return equal if operator == "==" else not equal
-
-            if not all(matches(clause) for clause in clauses):
+            if not evaluate_action_condition(step["if"], context):
                 continue
         if "uses" in step:
             downloads += 1
@@ -620,3 +633,66 @@ def test_installed_bytecode_without_hash_is_allowed(tmp_path):
     with record.open("a") as output:
         output.write("megatron/core/__pycache__/__init__.cpython-312.pyc,,\n")
     validator.validate("megatron", tmp_path)
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "inputs.kind != 'te' && contains(inputs.kind, 'te')",
+        "inputs.kind == 'te' || inputs.kind == 'megatron'",
+        "!(inputs.kind == 'te')",
+        "inputs.kind >= 'te'",
+        "${{ inputs.kind == 'te' }}",
+        "inputs.kind == 'te' &&",
+    ],
+)
+def test_action_condition_rejects_unsupported_syntax(condition):
+    with pytest.raises(pytest.fail.Exception, match="Unsupported action condition"):
+        evaluate_action_condition(condition, {"inputs.kind": "te"})
+
+
+@pytest.mark.parametrize("missing_interpreter", [False, True])
+def test_action_validation_uses_selected_interpreter(tmp_path, missing_interpreter):
+    runtime = tmp_path / "runtime"
+    make_runtime(runtime, "te")
+    interpreter = tmp_path / "selected python"
+    marker = tmp_path / "interpreter-used"
+    if not missing_interpreter:
+        interpreter.write_text(
+            '#!/bin/bash\nprintf "used\\n" >> "$INTERPRETER_MARKER"\nexec "$TEST_PYTHON" "$@"\n'
+        )
+        interpreter.chmod(0o755)
+    action = yaml.safe_load(ACTION.read_text())
+    validation_steps = [
+        step
+        for step in action["runs"]["steps"]
+        if "validate_prepared_runtime.py" in step.get("run", "")
+    ]
+    assert len(validation_steps) == 5
+    env = {
+        **os.environ,
+        "CI_PYTHON_BIN": str(interpreter),
+        "KIND": "te",
+        "RUNTIME_DIR": str(runtime),
+        "GITHUB_ACTION_PATH": str(ACTION.parent),
+        "GITHUB_OUTPUT": str(tmp_path / "output"),
+        "INTERPRETER_MARKER": str(marker),
+        "TEST_PYTHON": sys.executable,
+    }
+    for step in validation_steps:
+        result = subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", step["run"]],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if missing_interpreter:
+            assert result.returncode != 0
+            assert "Python executable not found" in result.stdout + result.stderr
+        else:
+            assert result.returncode == 0, result.stdout + result.stderr
+    if missing_interpreter:
+        assert not marker.exists()
+    else:
+        assert marker.read_text().splitlines() == ["used"] * 5
