@@ -1,6 +1,6 @@
 # Copyright 2026 FlagOS Contributors
 # Licensed under the Apache License, Version 2.0.
-name: Restore CUDA prepared runtime
+name: Restore prepared runtime
 description: Validate cached packages and retry artifact recovery in clean directories.
 inputs:
   kind:

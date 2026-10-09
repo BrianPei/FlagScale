@@ -220,7 +220,7 @@ jobs:
       - name: Recover and validate CUDA megatron runtime
         if: inputs.platform == 'cuda' && inputs.megatron_lm_fl_enabled == 'true'
         timeout-minutes: 15
-        uses: ./FlagScale/.github/actions/restore-cuda-runtime
+        uses: ./FlagScale/.github/actions/restore-prepared-runtime
         with:
           kind: megatron
           artifact-name: prepared-megatron-cuda-${{ github.run_id }}
@@ -229,7 +229,7 @@ jobs:
       - name: Recover and validate CUDA te runtime
         if: inputs.platform == 'cuda' && inputs.te_fl_enabled == 'true'
         timeout-minutes: 15
-        uses: ./FlagScale/.github/actions/restore-cuda-runtime
+        uses: ./FlagScale/.github/actions/restore-prepared-runtime
         with:
           kind: te
           artifact-name: prepared-te-fl-cuda-${{ github.run_id }}
