@@ -2,7 +2,7 @@ name: Daily Dependencies Sync
 
 on:
   schedule:
-    - cron: '57 17 * * *'
+    - cron: '0 16 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -45,3 +45,9 @@ jobs:
     uses: ./.github/workflows/prepare_dependencies.yml
     with:
       platform: kunlunxin
+
+  prepare-cuda:
+    name: prepare-cuda
+    uses: ./.github/workflows/prepare_dependencies.yml
+    with:
+      platform: cuda
