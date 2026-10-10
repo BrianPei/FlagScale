@@ -182,3 +182,10 @@ dependencies:
       install_pip_args: []
       pip_packages:
         - "megatron-energon[av_decode]~=7.0"
+        # Resolve Energon and datasets together. The CI image uses NumPy 1.x;
+        # PyArrow 26 requires NumPy 2, and datasets bounds fsspec to 2025.10.
+        - "datasets==4.5.0"
+        - "pyarrow==21.0.0"
+        - "s3fs==2025.10.0"
+        # TE-FL is installed with --no-deps; include its inspection dependency.
+        - "nvdlfw-inspect==0.2.2"
