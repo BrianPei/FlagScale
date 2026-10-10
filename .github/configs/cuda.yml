@@ -172,6 +172,9 @@ dependencies:
       # NCCL-EP requires the internal nccl_device.h header, which is not
       # shipped by the system NCCL installation in the CUDA CI image.
       NVTE_WITH_NCCL_EP: "0"
+      # Restrict CUDA arch compilation to the GPUs present on CI runners
+      # (A100 = sm80, H100 = sm90). Avoids building unused archs sm70/89/100/120.
+      NVTE_CUDA_ARCHS: "80;90"
     runtime:
       environment:
         NVTE_WITH_NCCL_EP: "0"
