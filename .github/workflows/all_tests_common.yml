@@ -550,6 +550,13 @@ jobs:
       - name: Install plan validation dependency
         if: inputs.test_plan != ''
         run: python -m pip install --quiet PyYAML==6.0.2
+      - name: Download platform execution evidence
+        if: inputs.test_plan != ''
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ci-evidence-${{ inputs.platform }}-*
+          path: ${{ runner.temp }}/ci-evidence
+          merge-multiple: true
       - name: Verify all tests passed
         env:
           TEST_PLAN: ${{ inputs.test_plan }}
@@ -559,7 +566,10 @@ jobs:
           if [ -n "$TEST_PLAN" ]; then
             printf '%s\n' "$TEST_PLAN" > "$RUNNER_TEMP/plan.json"
             python .github/scripts/ci/flagcicd_plan.py check \
-              --file "$RUNNER_TEMP/plan.json" --platform "$PLATFORM"
+              --file "$RUNNER_TEMP/plan.json" --platform "$PLATFORM" || exit $?
+            python .github/scripts/ci/flagcicd_evidence.py verify \
+              --plan-file "$RUNNER_TEMP/plan.json" --platform "$PLATFORM" \
+              --output-root "$RUNNER_TEMP/ci-evidence"
             exit $?
           fi
           # Check all test jobs (skip if not run)

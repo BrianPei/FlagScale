@@ -1,124 +1,120 @@
-# FlagScale test capabilities and rollout
+# FlagScale test policy and execution contract
 
-This adapter describes FlagScale; it does not vendor Torch-FL or TE-FL's
-execution framework. The existing dependency preparation, reusable workflows,
-platform images, test exclusions, launchers and coverage calculation remain
-authoritative. No Weekly or release workflow is introduced.
+`.flagcicd/project.yaml` is the only manually edited repository test-policy file.
+Platform images, runner labels, runtime installation, devices, process counts,
+include/exclude rules and model parameters remain in their existing platform
+and case YAML. Runtime JSON/XML files are generated evidence, not policy.
 
-## Capability levels
+## Profiles
 
-| Level | Meaning | Existing evidence and limitations |
-| --- | --- | --- |
-| L0 | Static/configuration/plan checks | pre-commit, platform routing and inventory validation |
-| L1 | Hardware-free isolated tests and package validation | `tests/ci/` Python and Node tests; a dedicated package acceptance lane is not implemented |
-| L2 | Single-device runtime and short functional tests | Classify actual configured training topology; no universal device smoke suite exists |
-| L3 | Distributed, multi-device and component integration | Existing torchrun unit envelope, multi-device train and hetero-train cases |
-| L4 | Performance, model quality, endurance and release acceptance | Existing benchmark cases only; complete release/endurance acceptance is not implemented |
+- `pr`: select affected platforms, unit files and functional cases.
+- `branch` and `nightly`: run every enabled configured unit/functional case.
+- `requested`: run the configured scope of explicitly requested platforms.
 
-Levels are capabilities, not schedules. Nightly runs **all currently enabled
-configured tests**, including benchmark (L4), rather than stopping at L3.
-Inference and serving remain disabled; RL remains disconnected. Their presence
-on disk is not evidence of execution. Missing required capabilities must not be
-reported as passed. Time budgets remain in existing platform/workflow settings.
+There is no rollout switch or repository variable required to enable routing.
+Unknown/shared code and unavailable diffs conservatively use configured full
+regression. An unknown test is different: without an ownership/execution rule,
+planning fails even if another changed file requests a full regression.
 
-The legacy unit job mixes isolated and device-dependent tests. Its execution
-envelope is L3 because it retains configured multi-process torchrun. Individual
-test semantics are not inferred from a directory or a name containing GPU.
-Splitting verified CPU tests into a separate pytest lane is future work.
+## Test ownership and source impact
 
-## What "smoke" means here
+`test_groups` contains test-path ownership, source ownership, explicit affected
+unit groups, functional selectors and recorded E2E gaps. New ordinary test files
+under an existing test directory are discovered automatically. Only helpers,
+placeholders and new ownership/execution boundaries need policy edits.
 
-Smoke means a bounded check that a particular operation can start and produce a
-basic valid result. It does not establish convergence, stability or performance.
-There is no unified `smoke/` suite in this repository. In particular:
+- A test path has exactly one group, or one explicit helper/placeholder exception.
+- More specific source paths override parent paths; equal-specificity conflicts
+  fail validation. Directory rules end with `/`; other rules are relative globs.
+- `affects` means additional tests required when THIS group's source changes.
+  It is one-hop impact, not a recursive module dependency graph: selecting a
+  consumer's tests does not pretend that consumer's source changed too.
+- Functional selectors match configured `task`, and optionally `backend`,
+  `model`, or `case`. No case absent from platform support is invented.
+- Functional config consumers are indexed from platform case support and local
+  Hydra defaults. Shared model configuration conservatively expands consumers.
+- Platform labels add platforms; explicitly requested platforms run their full
+  configured workload. Ordinary labels do not affect selection.
+- `examples/` Python/YAML are runtime inputs, not documentation. Markdown/RST
+  and `docs/` remain documentation inputs.
 
-- `tests/unit_tests/test_basic.py::test_import` contains only `pass`; it is a
-  placeholder, **not** an import or device smoke check.
-- `tests/functional_tests/train/qwen3/conf/train/0_6b_ascend.yaml` sets
-  `model.train_iters: 10`. Its launcher configuration at
-  `tests/functional_tests/train/qwen3/conf/0_6b_ascend.yaml` uses **two** processes,
-  so this is an L3 short distributed training check, not single-device L2.
-- `tests/functional_tests/train/qwen3/conf/0_6b_hygon.yaml` declares one process
-  on one node. It is a single-device functional candidate (L2), still requiring
-  its real image, data, runtime and metric comparison; local CPU tests do not
-  prove that it passes on hardware.
-- `tests/unit_tests/models/kerv/test_ops.py` mixes CPU fallback checks and other
-  runtime tests. It cannot be relabeled wholesale as a generic device smoke.
-- `tests/unit_tests/train/megatron/test_distributed_backends.py` contains mocked
-  backend selection checks; its name alone does not prove a real collective ran.
+The generated catalog distinguishes `ci-control` from the existing accelerator
+unit suite. Mixed-environment unit files are not moved into a CPU job. The
+legacy torchrun process count, platform exclusions and launch command are kept.
+A new test excluded on every platform fails planning; no full fallback can make
+an unwired test appear validated.
 
-These paths explain existing tests. This change does not invent new smoke tests
-or claim that a placeholder satisfies a capability.
+## Plan and evidence
 
-## Ownership and migration
+`flagcicd_plan.py plan` generates a `flagcicd.plan/v2` document containing source,
+control and base SHAs, changed paths, configuration identity (including selected
+case/default YAML), selection reasons/gaps, expected unit files/ranks and cases,
+gate requirements and a canonical content hash. `slice` validates checkout and
+configuration identity before producing existing workflow inputs.
 
-`project.yaml` references existing platform configuration, `test-tiers.json`
-declares capability semantics and routing groups, and `test-inventory.json`
-classifies tracked test files (including helpers and placeholders). CI validates
-the inventory, so adding/removing a test requires updating its classification.
-Use `git add` for new tests before local inventory validation: CI sees committed
-files, and the validator deliberately ignores unrelated untracked files.
+Unit workers write one JUnit and collection manifest per rank. The runner writes
+`result.json` with the exact plan-bound execution specification and report
+hashes. Collection manifests record actual pytest targets, files, node IDs and
+collection-time skips. Functional jobs use the original CLI and numerical
+comparator; the comparator JUnit records its actual platform/device/task/model/
+case arguments. A wrapper records command outcome and bound functional evidence.
 
-Source-to-group routes are deliberately small. Unknown/shared dependencies,
-platform/build/CI changes, missing diffs and unsupported selection fall back to
-full execution. Platform labels only add coverage. Retained platform exclusions
-are applied to both full and affected selection; no routing policy enables an
-excluded test. Changes to excluded tests require review of that platform's gap.
+Platform and top-level gates download `ci-evidence-*` artifacts and require:
 
-The default PR rollout is **shadow**: record the proposed affected selection but
-execute the legacy full test set on selected platforms. After hardware review,
-repository variable `CI_AFFECTED_TESTS_ENABLED=true` enables affected execution.
-This variable cannot be enabled by a PR label or a workflow input.
+- Every planned execution identity, with no unexpected or duplicate result.
+- Matching plan hash, source SHA, platform/device and current workflow run.
+- Valid rank topology and target/file collection for units.
+- Valid JUnit, consistent testcase counts, no failures/errors and a passing test.
+- Matching functional comparator identity; successful numerical comparison.
+- Unchanged report/collection digests after result recording.
 
-## Execution and evidence
+Missing or all-skipped evidence fails even if the job status is green. A later
+failed attempt cannot use an earlier passing result. Successful jobs from older
+attempts of the same run can satisfy a failed-jobs rerun only with identical
+source/plan identity. Evidence is execution accounting, not a signed attestation
+or a proof of complete semantic source dependency coverage.
 
-Both entry workflows call the existing `_platform_pipeline.yml` dependency/test
-chain. The `test_plan` input is optional; empty preserves legacy callers such as
-image validation and authorized comment requests. Ordinary CI continues using
-the immutable event SHA fallback, so explicitly requested PR source retains its
-existing cache-write isolation. Plan consumers compare the source SHA and
-configuration fingerprint with their checkout before executing selected tests.
+## Entrypoints and compatibility
 
-The planner's hash identifies content; it is **not** a signature or a replacement
-for GitHub's workflow trust and fork-approval boundaries. This adapter does not
-introduce `pull_request_target`, privileged candidate execution, a central
-trusted Core distribution, or a cross-repository release acceptance gate.
+Automatic PR, branch, Nightly and `ci-request.yml` use the same planner,
+`_platform_pipeline.yml`, dependency producer, runners and evidence gates.
+Requested planning uses controller code with the exact candidate checkout read
+as data; test jobs keep read-only permissions and receive no report secrets.
+Requested results remain supplemental to `CI Complete`. PR source is rechecked
+before completing the requested workflow. Comment commands become active only
+when their workflow/controller reaches the default branch.
 
-Planned unit tests retain the same torchrun process count and coverage setup.
-They emit JUnit per rank, and empty/all-skipped runs fail. Functional cases use
-the existing matrix, launcher and result comparator; the platform gate requires
-each planned job category to succeed and permits only deliberately empty
-functional matrices to skip. This is job/matrix completion evidence, **not** the
-future cross-repository group/platform report protocol. Existing functional
-exit codes remain authoritative; their result validation is not replaced.
+Legacy manual platform wrappers, image validation and dependency-triggered
+callers may still omit `test_plan`. Empty plan/selection inputs explicitly mean
+**legacy full diagnostic execution**, not a planned/evidence-gated run. Those
+callers are compatibility consumers; their job success must not be described as
+passing the new plan/evidence contract. No automatic PR/Nightly/request entry
+uses this exception.
 
-The daily 02:00 Asia/Shanghai schedule moves from `CI` to `Nightly`, avoiding
-duplicate schedules. Nightly always selects all enabled configured cases;
-main pushes and manual `CI` runs retain full execution. Nightly has independent
-non-cancelling concurrency and a `Nightly Complete` check, while PRs retain
-`CI Complete`. Notifications and the default-disabled infrastructure retry
-controller recognize the new scheduled entry without admitting PRs/dispatches.
+Coverage generation/upload and numerical comparators are unchanged. A partial
+PR's coverage is not a full-regression coverage measurement. Kunlunxin benchmark
+keeps the existing relaxed provisional baseline unchanged, as requested. Its
+metadata and tolerance remain intact. A green run against this provisional
+baseline does not establish a performance fix; performance is reviewed separately.
 
-No resource parallelism is added: unit topology and existing workflow ordering
-remain unchanged. This does not claim cross-run physical-device reservation;
-runner scheduling and explicit shared-resource locks still require hardware
-validation. Coverage source roots, calculation, thresholds and upload endpoints
-are unchanged. Consult the plan's profile/mode/unit_mode before interpreting a
-partial PR coverage sample as a full-regression measurement.
-
-## Local inspection
-
-From the repository root, with PyYAML installed:
+## Validation and capability boundaries
 
 ```bash
 python .github/scripts/ci/flagcicd_contract.py
-python .github/scripts/ci/flagcicd_plan.py plan --profile nightly --file /tmp/flagscale-plan.json
-python .github/scripts/ci/flagcicd_plan.py slice --file /tmp/flagscale-plan.json --platform ascend
 python -m pytest --confcutdir=tests/ci tests/ci -q
 node --test tests/ci/*.test.cjs
+python .github/scripts/ci/flagcicd_plan.py plan --profile nightly --file /tmp/nightly-plan.json
 ```
 
-Before enabling affected execution, review proposed routes on real platform
-runs, including fork approval, cached dependency recovery, retained exclusions,
-rank-specific reports, benchmark baselines and the platform's short training
-case. CPU planner tests cannot certify those hardware paths.
+Local inventory discovery includes nonignored new tests without requiring git
+staging. CI checks the committed checkout. A deleted/renamed test uses both old
+and new diff paths; exceptions and execution support must remain consistent.
+
+L0–L4 were capability descriptions, not implemented level-selection interfaces.
+They are removed from executable policy rather than advertising nonexistent
+level inheritance or release gates. Existing tests still include static/control,
+single-process, distributed and benchmark validation. Complete package-install,
+universal device smoke, inference/serve E2E, convergence, endurance and release
+acceptance remain gaps. No group matrix, scheduler, resource lock or retry-policy
+change is introduced by this refactor. Real accelerator and GitHub artifact /
+requested-workflow integration still require remote verification.

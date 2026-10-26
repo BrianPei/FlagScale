@@ -181,6 +181,8 @@ EOF
         fi
         export FLAGSCALE_CI_JUNIT_DIR="$PROJECT_ROOT/test-results/unit/$device"
         mkdir -p "$FLAGSCALE_CI_JUNIT_DIR"
+        # Remove only this job's previous report files before collecting evidence.
+        rm -f "$FLAGSCALE_CI_JUNIT_DIR"/junit-rank-*.xml "$FLAGSCALE_CI_JUNIT_DIR"/collection-rank-*.json
         cp "$SELECTION_FILE" "$FLAGSCALE_CI_JUNIT_DIR/selection.json"
         export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$PROJECT_ROOT/.github/scripts/ci"
         RUNNER_CMD+=(-p flagcicd_pytest)
@@ -202,6 +204,12 @@ EOF
     "${PYTEST_CMD[@]}"
     local test_exit=$?
     set -e
+
+    if [ -n "$SELECTION_FILE" ]; then
+        run_config_python "$PLATFORM" "$PROJECT_ROOT/.github/scripts/ci/flagcicd_evidence.py" unit \
+            --selection-file "$SELECTION_FILE" --device "$device" \
+            --report-dir "$FLAGSCALE_CI_JUNIT_DIR" --exit-code "$test_exit" || test_exit=1
+    fi
 
     # All ranks have exited — safe to combine fragment files and generate report
     if [ "$USE_COVERAGE" = true ]; then

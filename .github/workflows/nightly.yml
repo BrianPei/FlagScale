@@ -80,11 +80,10 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.sha || 'origin/main' }}
           HEAD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
           PROFILE: nightly
-          ROLLOUT_MODE: enforce
           CONTROL_SHA: ${{ github.workflow_sha }}
         run: |
           python .github/scripts/ci/flagcicd_plan.py plan \
-            --profile "$PROFILE" --mode "$ROLLOUT_MODE" \
+            --profile "$PROFILE" \
             --base-ref "$BASE_REF" --head-ref "$HEAD_REF" \
             --control-sha "$CONTROL_SHA" --file "$RUNNER_TEMP/plan.json" \
             --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
@@ -127,8 +126,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet PyYAML==6.0.2
+      - name: Download execution evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ci-evidence-*
+          path: ${{ runner.temp }}/ci-evidence
+          merge-multiple: true
       - name: Verify required checks
         env:
+          EVIDENCE_ROOT: ${{ runner.temp }}/ci-evidence
           PLAN_JSON: ${{ needs.generate-matrix.outputs.plan }}
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           JOB_RESULTS: ${{ toJSON(needs) }}

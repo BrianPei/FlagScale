@@ -26,7 +26,6 @@ def selection():
     plan = planner.build_plan(
         ROOT,
         profile="pr",
-        mode="enforce",
         labels=[],
         changed=["tests/unit_tests/checkpoint/test_qwen35_converter.py"],
     )
@@ -172,7 +171,7 @@ def test_pr_and_nightly_share_execution_but_not_trigger_or_cancellation():
         step for step in nightly["jobs"]["generate-matrix"]["steps"] if step.get("id") == "matrix"
     )
     assert nightly_compute["env"]["PROFILE"] == "nightly"
-    assert nightly_compute["env"]["ROLLOUT_MODE"] == "enforce"
+    assert "ROLLOUT_MODE" not in nightly_compute["env"]
     assert nightly["jobs"]["ci-complete"]["name"] == "Nightly Complete"
     assert "Nightly" in workflow("notify-feishu")["on"]["workflow_run"]["workflows"]
     assert "Nightly" in workflow("ci-infra-retry")["on"]["workflow_run"]["workflows"]
@@ -202,7 +201,8 @@ def test_real_shell_runner_retains_topology_and_exclusions(
     (scripts / "ci").mkdir(parents=True)
     for filename in ("run_unit_tests.sh", "helpers.py"):
         shutil.copy(ROOT / "tests/test_utils/runners" / filename, runner_dir / filename)
-    shutil.copy(SCRIPTS / "flagcicd_unit.py", scripts / "ci/flagcicd_unit.py")
+    for helper in ("flagcicd_unit.py", "flagcicd_evidence.py"):
+        shutil.copy(SCRIPTS / helper, scripts / "ci" / helper)
     (scripts / "set_env_common.sh").write_text("""
 ci_resolve_python_bin() { export CI_PYTHON_BIN="$CHECK_PYTHON"; }
 ci_configure_training_pythonpath() { export PYTHONPATH="$PROJECT_ROOT"; }
@@ -311,3 +311,39 @@ print(json.dumps({"include": "*", "exclude": ["tests/unit_tests/ignored.py"], "n
     assert "CUDA" not in argv
     if planned:
         assert (root / f"test-results/unit/{device}/selection.json").is_file()
+
+
+def test_all_planned_entrypoints_and_gates_consume_execution_evidence():
+    def workflow(name):
+        return yaml.load(
+            (ROOT / f".github/workflows/{name}.yml").read_text(), Loader=yaml.BaseLoader
+        )
+
+    requested = workflow("ci-request")
+    assert (
+        requested["jobs"]["platform-pipeline"]["with"]["test_plan"]
+        == "${{ needs.resolve.outputs.plan }}"
+    )
+    controller = next(s for s in requested["jobs"]["resolve"]["steps"] if s.get("id") == "matrix")
+    assert (
+        "--profile requested" in controller["run"]
+        and '--root "$GITHUB_WORKSPACE/candidate"' in controller["run"]
+    )
+    assert "secrets" not in requested["jobs"]["platform-pipeline"]
+    for name in ("ci", "nightly", "ci-request"):
+        entry = workflow(name)
+        gate_job = entry["jobs"]["requested-complete" if name == "ci-request" else "ci-complete"]
+        assert gate_job["if"].startswith("always()")
+        assert any(s.get("uses") == "actions/download-artifact@v4" for s in gate_job["steps"])
+        assert any("check_results.py" in s.get("run", "") for s in gate_job["steps"])
+        assert "CI_AFFECTED_TESTS_ENABLED" not in json.dumps(entry)
+    common = workflow("all_tests_common")["jobs"]["all_tests_complete"]
+    assert any("flagcicd_evidence.py verify" in s.get("run", "") for s in common["steps"])
+    for task in ("train", "hetero_train", "benchmark"):
+        steps = next(iter(workflow("functional_tests_" + task)["jobs"].values()))["steps"]
+        assert any("flagcicd_evidence.py" in s.get("run", "") for s in steps)
+        assert any(
+            s.get("uses") == "actions/upload-artifact@v4"
+            and s.get("with", {}).get("name", "").startswith("ci-evidence-")
+            for s in steps
+        )

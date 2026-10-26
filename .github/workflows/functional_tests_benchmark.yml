@@ -301,6 +301,8 @@ jobs:
 
       - name: Run benchmark tests
         id: benchmark_test
+        env:
+          EXECUTION_SPEC: ${{ matrix.test_config.execution_spec || '' }}
         run: |
           set -euo pipefail
           cd $PROJECT_ROOT
@@ -357,14 +359,18 @@ jobs:
           echo "=========================================="
 
           # Run benchmark tests using run_tests.sh
-          bash "$PROJECT_ROOT/tests/test_utils/runners/run_tests.sh" \
-            --platform "$PLATFORM" \
-            --device "$DEVICE" \
-            --type functional \
-            --task "$TASK" \
-            --model "$MODEL" \
-            --list "$CASE"
+          command=(bash "$PROJECT_ROOT/tests/test_utils/runners/run_tests.sh"
+            --platform "$PLATFORM" --device "$DEVICE" --type functional
+            --task "$TASK" --model "$MODEL" --list "$CASE")
+          if [ -n "$EXECUTION_SPEC" ]; then
+            printf '%s\n' "$EXECUTION_SPEC" > "$RUNNER_TEMP/execution-spec.json"
+            command=("${CI_PYTHON_BIN:-python3}" -S "$PROJECT_ROOT/.github/scripts/ci/flagcicd_evidence.py"
+              functional --spec-file "$RUNNER_TEMP/execution-spec.json" -- "${command[@]}")
+          fi
+          set +e
+          "${command[@]}"
           exit_code=$?
+          set -e
 
           if [ $exit_code -eq 0 ]; then
             echo "Benchmark tests passed for $PLATFORM/$DEVICE/$TASK/$MODEL/$CASE"
@@ -466,3 +472,12 @@ jobs:
           path: ${{ env.PROJECT_ROOT }}/tests/functional_tests/${{ matrix.test_config.task }}/${{ matrix.test_config.model }}/test_results
           retention-days: 7
           if-no-files-found: warn
+
+      - name: Upload functional execution evidence
+        if: ${{ !cancelled() && matrix.test_config.execution_spec != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-evidence-${{ inputs.platform }}-functional-${{ matrix.test_config.device }}-${{ matrix.test_config.task }}-${{ matrix.test_config.model }}-${{ matrix.test_config.case }}-${{ github.run_attempt }}
+          path: ${{ env.PROJECT_ROOT }}/test-results/evidence
+          if-no-files-found: error
+          retention-days: 7

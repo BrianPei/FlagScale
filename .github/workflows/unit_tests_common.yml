@@ -381,8 +381,8 @@ jobs:
         if: ${{ !cancelled() && inputs.unit_selection != '' && steps.unit_test.outcome != 'skipped' }}
         uses: actions/upload-artifact@v4
         with:
-          name: unit-evidence-${{ inputs.platform }}-${{ inputs.device }}-${{ github.run_attempt }}
-          path: ${{ env.PROJECT_ROOT }}/test-results/unit
+          name: ci-evidence-${{ inputs.platform }}-${{ inputs.device }}-${{ github.run_attempt }}
+          path: ${{ env.PROJECT_ROOT }}/test-results/evidence
           if-no-files-found: error
           retention-days: 7
 
