@@ -79,6 +79,17 @@ def validate_collection(directory: Path, spec: dict) -> list[dict]:
             raise ValueError("Unit rank/topology mismatch")
         if data["args"] != spec["command_targets"]:
             raise ValueError("Executed pytest targets differ from plan")
+        collected = set(data["collected_nodeids"])
+        selected = set(data["nodeids"])
+        deselected = set(data["deselected_nodeids"])
+        for key in ("collected_nodeids", "nodeids", "deselected_nodeids"):
+            if len(data[key]) != len(set(data[key])):
+                raise ValueError("Duplicate collected or deselected testcase")
+        if selected & deselected or collected != selected | deselected:
+            raise ValueError("Collected testcases are not accounted for by selection/deselection")
+        # pytest --deselect matches nodeid prefixes, not filesystem globs.
+        if any(not node.startswith(tuple(spec["deselect"])) for node in deselected):
+            raise ValueError("Unit testcase deselected without plan authorization")
         passed = data.get("passed_nodeids", [])
         if not set(passed) <= set(data["nodeids"]) or not any(
             node.split("::")[0] in spec["expected_files"] for node in passed
@@ -86,19 +97,20 @@ def validate_collection(directory: Path, spec: dict) -> list[dict]:
             raise ValueError("No planned automated unit testcase passed")
         files = set(data["files"])
         skipped = set(data["collection_skips"])
-        if not set(spec["expected_files"]) <= files | skipped:
+        if files != {node.split("::")[0] for node in selected}:
+            raise ValueError("Unit files differ from selected testcases")
+        deselected_files = {node.split("::")[0] for node in deselected}
+        if not set(spec["expected_files"]) <= files | skipped | deselected_files:
             raise ValueError(
-                "Planned unit files were not collected or explicitly collection-skipped"
+                "Planned unit files were not collected, collection-skipped or explicitly deselected"
             )
-        if not files | skipped <= set(spec["allowed_files"]):
+        if not files | skipped | deselected_files <= set(spec["allowed_files"]):
             raise ValueError("Unexpected unit file executed")
         reported = len(
             ET.parse(directory / f"junit-rank-{rank}.xml").getroot().findall(".//testcase")
         )
         if reported != len(data["nodeids"]) + len(skipped):
             raise ValueError("JUnit does not account for every collected/skipped testcase")
-        if len(data["nodeids"]) != len(set(data["nodeids"])):
-            raise ValueError("Duplicate collected testcase")
         result.append({"file": name, "sha256": digest(directory / name)})
     return result
 

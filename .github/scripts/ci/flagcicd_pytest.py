@@ -41,6 +41,16 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 _collection_skips = set()
+_collected_nodeids = []
+_deselected_nodeids = []
+
+
+def pytest_itemcollected(item):
+    _collected_nodeids.append(item.nodeid)
+
+
+def pytest_deselected(items):
+    _deselected_nodeids.extend(item.nodeid for item in items)
 
 
 def pytest_collectreport(report):
@@ -56,6 +66,8 @@ def pytest_collection_finish(session):
         "world_size": int(os.environ.get("WORLD_SIZE", "1")),
         "args": session.config.args,
         "nodeids": sorted(item.nodeid for item in session.items),
+        "collected_nodeids": sorted(_collected_nodeids),
+        "deselected_nodeids": sorted(_deselected_nodeids),
         "files": sorted({str(item.path.relative_to(Path.cwd())) for item in session.items}),
         "collection_skips": sorted(_collection_skips),
     }

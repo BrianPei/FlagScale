@@ -206,6 +206,7 @@ def proof(tmp_path):
         "allowed_files": ["tests/unit_tests/test_a.py"],
         "command_targets": ["tests/unit_tests/test_a.py"],
         "ranks": 2,
+        "deselect": [],
     }
     for rank in range(2):
         (directory / f"junit-rank-{rank}.xml").write_text(
@@ -220,6 +221,8 @@ def proof(tmp_path):
                     "files": spec["expected_files"],
                     "collection_skips": [],
                     "nodeids": ["tests/unit_tests/test_a.py::test_a"],
+                    "collected_nodeids": ["tests/unit_tests/test_a.py::test_a"],
+                    "deselected_nodeids": [],
                     "passed_nodeids": ["tests/unit_tests/test_a.py::test_a"],
                 }
             )
@@ -333,6 +336,7 @@ def small_plan(spec):
                 "unit_files": {"d": spec["expected_files"]},
                 "unit_allowed_files": {"d": spec["allowed_files"]},
                 "unit_ranks": {"d": 2},
+                "unit_deselect": {"d": spec["deselect"]},
                 "unit_command_targets": {"d": spec["command_targets"]},
                 "cases": [],
             }

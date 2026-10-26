@@ -96,6 +96,7 @@ def unit_spec(plan: dict, platform: str, device: str) -> dict:
         "allowed_files": s["unit_allowed_files"][device],
         "ranks": s["unit_ranks"][device],
         "command_targets": s["unit_command_targets"][device],
+        "deselect": s["unit_deselect"][device],
     }
 
 
@@ -307,6 +308,10 @@ def build_plan(
                 for d in devices
             },
             "unit_ranks": ranks,
+            "unit_deselect": {
+                d: [p for p in config[d]["tests"]["unit"].get("exclude", []) if "::" in p]
+                for d in devices
+            },
             "unit_command_targets": {
                 d: (
                     ["tests/unit_tests/"]
