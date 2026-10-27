@@ -110,7 +110,7 @@ on:
 
 jobs:
   functional_test_train:
-    name: ${{ matrix.test_config.device }} / ${{ matrix.test_config.task }} / ${{ matrix.test_config.model }} / ${{ matrix.test_config.case }}
+    name: functional_test_train (${{ matrix.test_config.device }}, ${{ matrix.test_config.task }}, ${{ matrix.test_config.model }}, ${{ matrix.test_config.case }})
     defaults:
       run:
         shell: bash

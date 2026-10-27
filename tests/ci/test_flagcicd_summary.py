@@ -44,9 +44,11 @@ def test_functional_names_do_not_expand_execution_spec():
             (ROOT / f".github/workflows/functional_tests_{task}.yml").read_text()
         )
         for job in workflow["jobs"].values():
-            assert "execution_spec" not in job["name"]
-            assert "matrix.test_config.case" in job["name"]
-            assert "matrix.test_config.model" in job["name"]
+            assert job["name"] == (
+                f"functional_test_{task} ("
+                "${{ matrix.test_config.device }}, ${{ matrix.test_config.task }}, "
+                "${{ matrix.test_config.model }}, ${{ matrix.test_config.case }})"
+            )
         assert (
             "matrix.test_config.execution_spec"
             in (ROOT / f".github/workflows/functional_tests_{task}.yml").read_text()
