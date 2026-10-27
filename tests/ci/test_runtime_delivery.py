@@ -67,10 +67,20 @@ def test_every_platform_reaches_fallback_after_failed_cache_restore(name):
         assert "continue-on-error" not in step
 
 
-def test_privileged_controller_is_opt_in_and_never_checks_out_failed_source():
+def test_privileged_controller_has_bounded_code_policy_and_trusted_source():
     data = workflow("ci-infra-retry")
     job = data["jobs"]["inspect"]
-    assert "CI_INFRA_RETRY_ENABLED == 'true'" in job["if"]
+    assert "vars." not in job["if"]
+    assert "github.event.workflow_run.conclusion == 'failure'" in job["if"]
+    assert "github.event.workflow_run.run_attempt == 1" in job["if"]
+    assert "github.event.workflow_run.repository.full_name == github.repository" in job["if"]
+    assert (
+        "github.event.workflow_run.head_branch == github.event.repository.default_branch"
+        in job["if"]
+    )
+    assert "github.event.workflow_run.event == 'push'" in job["if"]
+    assert "github.event.workflow_run.event == 'schedule'" in job["if"]
+    assert "CI_INFRA_RETRY_ENABLED" not in str(job)
     checkout = job["steps"][0]
     assert checkout["with"]["ref"] == "${{ github.event.repository.default_branch }}"
     assert checkout["with"]["persist-credentials"] is False

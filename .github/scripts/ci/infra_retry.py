@@ -1,6 +1,6 @@
 # Copyright 2026 FlagOS Contributors
 # Licensed under the Apache License, Version 2.0.
-"""Opt-in, one-attempt default-branch dependency-transfer recovery."""
+"""Code-reviewed, one-attempt default-branch dependency-transfer recovery."""
 
 import json
 import os
@@ -121,9 +121,6 @@ def retry(api, event):
 
 
 def main():
-    if os.environ.get("CI_INFRA_RETRY_ENABLED") != "true":
-        print("No retry: disabled")
-        return
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     if event["repository"]["full_name"] != os.environ["GITHUB_REPOSITORY"]:
         raise ValueError("Unexpected workflow_run repository")

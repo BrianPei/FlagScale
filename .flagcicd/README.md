@@ -139,9 +139,22 @@ redirects, limits response size/time, and never automatically retries a POST.
 Controllers are checked out from the default branch; candidate code is data only.
 Planner, runner, comparator and evidence contracts are unchanged by this migration.
 
-`infra_retry.py` retains the separate default-disabled `CI_INFRA_RETRY_ENABLED`
-opt-in. Only first-attempt default-branch push/scheduled CI with proven exhausted
-runtime artifact transfer failures can request one failed-jobs retry. Timestamp
-scoping, corruption/authorization rejection, mixed-failure rejection and final
+`infra_retry.py` applies a code-reviewed recovery policy without a repository
+variable. Once this workflow and controller are merged into the default branch,
+only first-attempt default-branch push/scheduled CI with proven exhausted runtime
+artifact transfer failures can request one failed-jobs retry. The workflow filters
+out ineligible events before starting a runner; the controller independently
+revalidates fresh API state before any mutation. Timestamp scoping,
+corruption/authorization rejection, mixed-failure rejection and final
 attempt/default-branch SHA checks are retained. PRs, dispatches and test/performance
-failures are ineligible. This is unrelated to the removed affected-test shadow flag.
+failures are ineligible. The existing prepare, test and evidence gates still run
+on the retried attempt; failure is never converted to success by the controller.
+
+No `CI_INFRA_RETRY_ENABLED` setting, custom token or extra dependency installation
+is required. Any previously configured value of that variable is ignored. GitHub
+provides the workflow token under the declared `actions: write` permission;
+repository/organization policy must still permit that permission. This policy
+becomes active through normal default-branch code review and merge, not merely by
+updating a fork PR. To suspend it, disable the retry workflow or review a code
+change to its eligibility conditions. The bounded retries already inside runtime
+recovery remain unchanged and run before this final, at-most-once workflow retry.

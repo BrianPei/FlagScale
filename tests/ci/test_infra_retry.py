@@ -1,6 +1,7 @@
 # Copyright 2026 FlagOS Contributors
 # Licensed under the Apache License, Version 2.0.
 import copy
+import json
 import sys
 from pathlib import Path
 
@@ -195,8 +196,34 @@ def test_nightly():
     assert len(api.calls) == 1
 
 
-def test_disabled_controller_does_not_read_token(monkeypatch, capsys):
-    monkeypatch.delenv("GH_TOKEN", raising=False)
-    monkeypatch.delenv("CI_INFRA_RETRY_ENABLED", raising=False)
+@pytest.mark.parametrize("old_setting", [None, "false", "true"])
+def test_main_needs_no_repository_variable(monkeypatch, tmp_path, capsys, old_setting):
+    api = API()
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps(api.event))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "org/repo")
+    if old_setting is None:
+        monkeypatch.delenv("CI_INFRA_RETRY_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("CI_INFRA_RETRY_ENABLED", old_setting)
+    monkeypatch.setattr("infra_retry.GitHubAPI", lambda: api)
     main()
-    assert "disabled" in capsys.readouterr().out
+    assert api.calls == ["/repos/org/repo/actions/runs/1/rerun-failed-jobs"]
+    assert "Requested one failed-jobs retry" in capsys.readouterr().out
+
+
+def test_main_rejects_unexpected_repository_before_api(monkeypatch, tmp_path):
+    api = API()
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps(api.event))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "other/repo")
+
+    def unexpected_client():
+        pytest.fail("API client must not be created for an unexpected repository")
+
+    monkeypatch.setattr("infra_retry.GitHubAPI", unexpected_client)
+    with pytest.raises(ValueError, match="Unexpected workflow_run repository"):
+        main()
+    assert not api.calls
