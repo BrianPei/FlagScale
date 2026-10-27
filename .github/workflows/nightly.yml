@@ -42,11 +42,6 @@ jobs:
           python-version: '3.12'
       - name: Install CI validation dependencies
         run: pip install --quiet pre-commit==4.2.0 PyYAML==6.0.2 pytest==8.3.5
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Test CI comment authorization
-        run: node --test tests/ci/*.test.cjs
       - name: Test CI control logic (no accelerators required)
         run: python -m pytest --confcutdir=tests/ci tests/ci -q
       - name: pre-commit (changed files)
@@ -94,12 +89,6 @@ jobs:
           path: ${{ runner.temp }}/plan.json
           if-no-files-found: error
           retention-days: 7
-      - name: Explain selection
-        env:
-          PLATFORMS: ${{ steps.matrix.outputs.platforms }}
-          REASON: ${{ steps.matrix.outputs.reason }}
-        run: |
-          printf 'Platforms: `%s`\n\nReason: %s\n' "$PLATFORMS" "$REASON" >> "$GITHUB_STEP_SUMMARY"
 
   platform-pipeline:
     name: Platform pipeline (${{ matrix.platform }})

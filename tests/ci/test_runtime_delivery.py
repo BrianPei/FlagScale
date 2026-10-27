@@ -72,7 +72,7 @@ def test_privileged_controller_is_opt_in_and_never_checks_out_failed_source():
     job = data["jobs"]["inspect"]
     assert "CI_INFRA_RETRY_ENABLED == 'true'" in job["if"]
     checkout = job["steps"][0]
-    assert checkout["with"]["ref"] == "${{ github.workflow_sha }}"
+    assert checkout["with"]["ref"] == "${{ github.event.repository.default_branch }}"
     assert checkout["with"]["persist-credentials"] is False
     assert data["permissions"] == {"contents": "read", "actions": "write"}
     assert data["concurrency"]["cancel-in-progress"] is False

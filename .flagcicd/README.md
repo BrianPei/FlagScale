@@ -102,7 +102,6 @@ baseline does not establish a performance fix; performance is reviewed separatel
 ```bash
 python .github/scripts/ci/flagcicd_contract.py
 python -m pytest --confcutdir=tests/ci tests/ci -q
-node --test tests/ci/*.test.cjs
 python .github/scripts/ci/flagcicd_plan.py plan --profile nightly --file /tmp/nightly-plan.json
 ```
 
@@ -118,3 +117,31 @@ universal device smoke, inference/serve E2E, convergence, endurance and release
 acceptance remain gaps. No group matrix, scheduler, resource lock or retry-policy
 change is introduced by this refactor. Real accelerator and GitHub artifact /
 requested-workflow integration still require remote verification.
+
+## CI summary and trusted controllers
+
+The plan summary starts with stage, selection and per-device execution counts.
+Counts describe test files and configured functional cases, not pytest test counts.
+Selection reasons, validation gaps, full identity and JSON are expandable below;
+the unchanged `ci-plan` artifact remains the machine-readable source. Functional
+job display names omit execution specs; those specs still bind evidence to the plan.
+
+`commands.py` handles `/ci run <platform>`, `/ci run all` and
+`/ci rerun-job <job-id>`. Repository writers and human PR authors are authorized.
+Authors must have an approved, completed current-head platform CI before dispatch;
+a selected rerun must identify a latest-attempt failed job from that exact PR source.
+PR head and run attempt are rechecked before mutation. Requested CI retains its
+own identity and does not replace the ordinary required CI gate.
+
+`github_api.py` uses only Python's standard library. It reads `GH_TOKEN` and
+`GITHUB_API_URL`, paginates REST lists, strips authentication on cross-origin log
+redirects, limits response size/time, and never automatically retries a POST.
+Controllers are checked out from the default branch; candidate code is data only.
+Planner, runner, comparator and evidence contracts are unchanged by this migration.
+
+`infra_retry.py` retains the separate default-disabled `CI_INFRA_RETRY_ENABLED`
+opt-in. Only first-attempt default-branch push/scheduled CI with proven exhausted
+runtime artifact transfer failures can request one failed-jobs retry. Timestamp
+scoping, corruption/authorization rejection, mixed-failure rejection and final
+attempt/default-branch SHA checks are retained. PRs, dispatches and test/performance
+failures are ineligible. This is unrelated to the removed affected-test shadow flag.

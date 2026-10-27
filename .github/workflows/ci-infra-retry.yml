@@ -27,12 +27,15 @@ jobs:
       # workflow_run has write permissions. Never check out the failed run's code.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           sparse-checkout: .github/scripts/ci
-      - name: Inspect trusted CI and retry eligible failed jobs once
-        uses: actions/github-script@v7
+      - uses: actions/setup-python@v5
         with:
-          script: |
-            const retry = require('./.github/scripts/ci/infra_retry.cjs');
-            await retry({ github, context, core });
+          python-version: '3.12'
+      - name: Inspect trusted CI and retry eligible failed jobs once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          CI_INFRA_RETRY_ENABLED: ${{ vars.CI_INFRA_RETRY_ENABLED }}
+        run: python .github/scripts/ci/infra_retry.py
