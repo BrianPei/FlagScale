@@ -456,9 +456,9 @@ def main():
         }
         if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(summary, "a") as f:
-                f.write(
-                    f"Plan `{plan['plan_hash']}`: {plan['profile']} / {plan['selection']}\n\n```json\n{json.dumps(plan, indent=2)}\n```\n"
-                )
+                from flagcicd_summary import render_summary
+
+                f.write(render_summary(plan))
     else:
         plan = json.loads(args.file.read_text())
         verify_plan(root, plan)
